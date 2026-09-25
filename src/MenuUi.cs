@@ -47,6 +47,8 @@ namespace NewBeginnings
         private Transform back;
         private StartMenuButton nativeConfirm;
         private bool continueAvailable = true;
+        private bool catalogUnavailable;
+        private bool catalogFaultLogged;
         private TextMesh portValue;
         private TextMesh boatValue;
         private TextMesh status;
@@ -154,7 +156,11 @@ namespace NewBeginnings
 
         private void OnEnable()
         {
-            if (built && settings != null) RefreshCatalog();
+            if (built && settings != null)
+            {
+                HideNativeRegionChoice();
+                RefreshCatalog();
+            }
         }
 
         private void OnDisable()
@@ -179,9 +185,55 @@ namespace NewBeginnings
         internal void RefreshCatalog()
         {
             if (!built || settings == null) return;
-            catalog = SelectionCatalog.Discover(overrides);
-            RefreshDisplay();
-            if (editing) RefreshEditor();
+            try
+            {
+                catalog = SelectionCatalog.Discover(overrides);
+                if (catalog.Ports.Count == 0 || catalog.Boats.Count == 0)
+                {
+                    var reason = catalog.Rejections.FirstOrDefault() ??
+                        "No playable ports or boats were available.";
+                    ShowCatalogUnavailable();
+                    if (!catalogFaultLogged)
+                    {
+                        catalogFaultLogged = true;
+                        Plugin.Instance?.Warn("New Beginnings catalog has no usable start; Sailwind's normal start remains available. " + reason);
+                    }
+                    return;
+                }
+                RefreshDisplay();
+                if (editing) RefreshEditor();
+                catalogUnavailable = false;
+            }
+            catch (Exception exception)
+            {
+                ShowCatalogUnavailable();
+                if (catalogFaultLogged) return;
+                catalogFaultLogged = true;
+                Plugin.Instance?.Error("New Beginnings catalog is unavailable; Sailwind's normal start remains available.", exception);
+            }
+        }
+
+        internal bool CatalogUnavailable => catalogUnavailable;
+
+        internal void ShowCatalogUnavailable()
+        {
+            catalog = null;
+            catalogUnavailable = true;
+            continueAvailable = true;
+            try
+            {
+                if (portValue != null) portValue.text = "Unavailable";
+                if (boatValue != null) boatValue.text = "Unavailable";
+                if (status != null) status.text = "New Beginnings unavailable; Sailwind start";
+                ApplyContinueState();
+            }
+            catch (Exception exception)
+            {
+                // Keep the native button path available even if a changed menu
+                // no longer accepts one of these optional display updates.
+                Plugin.Instance?.Warn("New Beginnings fallback display could not be updated: " +
+                    exception.Message);
+            }
         }
 
         internal bool CanStart(out string reason)
@@ -193,6 +245,7 @@ namespace NewBeginnings
                 return false;
             }
             RefreshCatalog();
+            if (catalogUnavailable) return true;
             if (catalog != null && catalog.TryChoose(settings, individualExclusions,
                     new System.Random(1), out _, out reason)) return true;
             if (catalog == null) reason = "The start catalog is not ready.";
@@ -236,7 +289,11 @@ namespace NewBeginnings
             Hide(root.Find("start deco Al'Ankh"));
             Hide(root.Find("start deco Emerald"));
             Hide(root.Find("start deco Medi"));
-            Hide(root.Find("bg (1)"));
+            var regionNameScroll = root.Find("bg (1)");
+            var hasSaveNameInput = SaveSlotsPlusIntegration.TryLayoutNameInput(regionNameScroll, !editing);
+            if (!hasSaveNameInput)
+                Hide(regionNameScroll);
+            var actionOffset = hasSaveNameInput ? .12f : 0f;
             // The parchment mesh is rotated: its local Y is screen horizontal,
             // local Z is screen vertical, and local X is depth. The wider,
             // shorter sheet backs the selectors, leaving native actions below.
@@ -253,7 +310,7 @@ namespace NewBeginnings
             if (confirm != null)
             {
                 confirm.localPosition = new Vector3(0f,
-                    .10f,
+                    .10f - actionOffset,
                     confirm.localPosition.z);
                 var text = confirm.Find("text")?.GetComponent<TextMesh>();
                 if (text != null)
@@ -265,7 +322,7 @@ namespace NewBeginnings
             if (back != null)
             {
                 back.localPosition = new Vector3(0f,
-                    -.23f,
+                    -.23f - actionOffset,
                     back.localPosition.z);
                 foreach (var text in back.GetComponentsInChildren<TextMesh>(true))
                     text.color = Ink;
@@ -404,6 +461,7 @@ namespace NewBeginnings
             // including the first opening and every reopening of this page.
             RefreshEditor();
             editorRoot.SetActive(true);
+            HideNativeRegionChoice();
         }
 
         private void CloseEditor(bool save)
@@ -420,6 +478,7 @@ namespace NewBeginnings
             if (confirm != null) confirm.gameObject.SetActive(confirmWasActive);
             if (back != null) back.gameObject.SetActive(backWasActive);
             if (titleTemplate != null) titleTemplate.gameObject.SetActive(titleWasActive);
+            HideNativeRegionChoice();
             RefreshDisplay();
             if (save) changed?.Invoke();
         }

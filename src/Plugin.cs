@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.0.0")]
+    [BepInPlugin(Id, "New Beginnings", "1.0.1")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -98,11 +98,30 @@ namespace NewBeginnings
         private void Awake()
         {
             Instance = this;
-            selection = new SelectionConfig(Config);
-            harmony = new Harmony(Id);
-            harmony.PatchAll(typeof(Plugin).Assembly);
-            ScrambledSeasIntegration.Initialize(harmony);
-            Logger.LogInfo("New Beginnings loaded with port and boat selection.");
+            try
+            {
+                selection = new SelectionConfig(Config);
+                harmony = new Harmony(Id);
+                harmony.PatchAll(typeof(Plugin).Assembly);
+                ScrambledSeasIntegration.Initialize(harmony);
+                Logger.LogInfo("New Beginnings loaded with port and boat selection.");
+            }
+            catch (Exception exception)
+            {
+                // PatchAll may have installed earlier patches before a changed
+                // Sailwind method causes a later one to fail. Leave the native
+                // start path alone instead of running with an incomplete set.
+                Instance = null;
+                enabled = false;
+                try { harmony?.UnpatchSelf(); }
+                catch (Exception unpatchException)
+                {
+                    Logger.LogError("New Beginnings could not remove its partial patches: " +
+                        unpatchException);
+                }
+                Logger.LogError("New Beginnings disabled after initialization failed; " +
+                    "check game/mod compatibility and configuration: " + exception);
+            }
         }
 
         [HarmonyPatch(typeof(StartMenu), "Awake")]

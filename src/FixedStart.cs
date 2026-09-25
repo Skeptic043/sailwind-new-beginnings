@@ -96,6 +96,7 @@ namespace NewBeginnings
         private static StartMenu pendingMenu;
         private static StartPair acceptedButtonPair;
         private static StartMenu acceptedButtonMenu;
+        private static StartMenu nativeFallbackButtonMenu;
         private static GameObject nativeTweenObserver;
         private static Transform nativeTweenTarget;
         private static bool nativeTweenSeamReady;
@@ -116,19 +117,30 @@ namespace NewBeginnings
             {
                 if (button != StartMenuButtonType.RegionConfirm) return true;
                 ClearAcceptedButtonChoice();
+                nativeFallbackButtonMenu = null;
                 var plugin = Plugin.Instance;
                 if (plugin == null || !ScrambledSeasIntegration.CanSelect) return true;
-                var activeUi = MenuUi.ActiveFor(__instance);
-                if (activeUi == null) return true;
-
+                MenuUi activeUi = null;
                 try
                 {
+                    activeUi = MenuUi.ActiveFor(__instance);
+                    if (activeUi == null) return true;
                     // Native ButtonClick returns before StartNewGame while a
                     // menu animation is running. Do not retain a choice then.
                     if (MenuAnimationsField?.GetValue(__instance) is int animations &&
                         animations > 0) return true;
-                    if (!activeUi.CanStart(out var reason) ||
-                        !plugin.TryChooseStart(out var pair, out reason))
+                    if (!activeUi.CanStart(out var reason))
+                    {
+                        activeUi.ShowBlockedStart(reason);
+                        plugin.Warn("New game blocked by New Beginnings selection: " + reason);
+                        return false;
+                    }
+                    if (activeUi.CatalogUnavailable)
+                    {
+                        nativeFallbackButtonMenu = __instance;
+                        return true;
+                    }
+                    if (!plugin.TryChooseStart(out var pair, out reason))
                     {
                         activeUi.ShowBlockedStart(reason);
                         plugin.Warn("New game blocked by New Beginnings selection: " + reason);
@@ -141,9 +153,10 @@ namespace NewBeginnings
                 catch (Exception exception)
                 {
                     ClearAcceptedButtonChoice();
-                    activeUi.ShowBlockedStart("Start selection failed; check the log before continuing.");
-                    plugin.Error("New Beginnings selection failed; new game was blocked.", exception);
-                    return false;
+                    nativeFallbackButtonMenu = __instance;
+                    activeUi?.ShowCatalogUnavailable();
+                    plugin.Error("New Beginnings selection failed; Sailwind's normal start will run.", exception);
+                    return true;
                 }
             }
 
@@ -153,6 +166,8 @@ namespace NewBeginnings
                 // temporary choice must not leak into a later menu action.
                 if (ReferenceEquals(acceptedButtonMenu, __instance))
                     ClearAcceptedButtonChoice();
+                if (ReferenceEquals(nativeFallbackButtonMenu, __instance))
+                    nativeFallbackButtonMenu = null;
             }
         }
 
@@ -164,6 +179,8 @@ namespace NewBeginnings
             {
                 var buttonPair = ReferenceEquals(acceptedButtonMenu, __instance)
                     ? acceptedButtonPair : null;
+                var useNativeStart = ReferenceEquals(nativeFallbackButtonMenu, __instance);
+                nativeFallbackButtonMenu = null;
                 ClearAcceptedButtonChoice();
                 pending = null;
                 pendingMenu = null;
@@ -175,8 +192,10 @@ namespace NewBeginnings
                 Plugin.Instance?.ClearDocksideSurface();
                 StarterCargo.Disarm();
                 var plugin = Plugin.Instance;
-                if (plugin == null || !ScrambledSeasIntegration.CanSelect) return;
+                if (plugin == null || !ScrambledSeasIntegration.CanSelect || useNativeStart) return;
 
+                object previousRegion = null;
+                var regionUpdated = false;
                 try
                 {
                     var pair = buttonPair;
@@ -188,7 +207,9 @@ namespace NewBeginnings
                     // Scrambled Seas may move every island, recovery marker and boat
                     // in its own prefix. Keep identities here; resolve coordinates and
                     // mutate the boat only in the selected coroutine factory.
+                    previousRegion = CurrentRegionField.GetValue(__instance);
                     CurrentRegionField.SetValue(__instance, (int)pair.Port.Port.region);
+                    regionUpdated = true;
                     pending = pair;
                     pendingMenu = __instance;
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
@@ -197,6 +218,14 @@ namespace NewBeginnings
                 {
                     pending = null;
                     pendingMenu = null;
+                    if (regionUpdated)
+                    {
+                        try { CurrentRegionField.SetValue(__instance, previousRegion); }
+                        catch (Exception restoreException)
+                        {
+                            plugin.Error("Native start region could not be restored after selection failed.", restoreException);
+                        }
+                    }
                     plugin.Error("New Beginnings selection failed; vanilla new game will run.", exception);
                 }
             }
@@ -265,12 +294,30 @@ namespace NewBeginnings
         [HarmonyPatch]
         private static class NativeStartTweenPatch
         {
-            private static MethodBase TargetMethod()
+            private static MethodBase targetMethod;
+
+            private static bool Prepare()
             {
-                var factory = AccessTools.Method(typeof(StartMenu), "MovePlayerToStartPos",
-                    new[] { typeof(Transform) });
-                return factory != null ? AccessTools.EnumeratorMoveNext(factory) : null;
+                nativeTweenSeamReady = false;
+                try
+                {
+                    var factory = AccessTools.Method(typeof(StartMenu), "MovePlayerToStartPos",
+                        new[] { typeof(Transform) });
+                    targetMethod = factory != null ? AccessTools.EnumeratorMoveNext(factory) : null;
+                }
+                catch (Exception exception)
+                {
+                    targetMethod = null;
+                    Plugin.Instance?.Warn("Native player-start iterator could not be inspected: " +
+                        exception.Message);
+                }
+                if (targetMethod != null) return true;
+                Plugin.Instance?.Warn("Native player-start iterator is unavailable; " +
+                    "the selected-port camera seam is disabled for this Sailwind build.");
+                return false;
             }
+
+            private static MethodBase TargetMethod() => targetMethod;
 
             private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> source)
             {
@@ -462,9 +509,10 @@ namespace NewBeginnings
             }
             var matches = Resources.FindObjectsOfTypeAll<PurchasableBoat>()
                 .Where(item => item != null && item.enabled && item.gameObject.scene.isLoaded &&
-                    item.gameObject.activeInHierarchy && !item.isHouse)
+                    item.gameObject.activeInHierarchy)
                 .Select(item => new { Boat = item, Saveable = SaveableField.GetValue(item) as SaveableObject })
-                .Where(item => item.Saveable != null && item.Saveable.sceneIndex == boatSceneIndex)
+                .Where(item => item.Saveable != null && item.Saveable.sceneIndex == boatSceneIndex &&
+                    SelectionCatalog.IsBoatLike(item.Saveable))
                 .ToArray();
             if (matches.Length != 1)
             {

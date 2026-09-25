@@ -1,5 +1,18 @@
 # Release notes
 
+## Version 1.0.1
+
+### Fixed
+
+- Fixed an error that prevented starting a new game on Sailwind’s stable branch.
+- Fixed incompatibility with Save Slots Plus.
+- Improved handling of incompatible boat entries so other valid starts remain available.
+
+### Changed
+
+- Moved Continue and Back slightly lower when Save Slots Plus is installed to leave more room for its save-name field.
+- Added startup error handling to keep unexpected compatibility failures from leaving the new-game menu blocked.
+
 ## Version 1.0.0
 
 New Beginnings adds port and boat selection to Sailwind's new-game menu. Choose both, randomize either one, or roll the dice on both.

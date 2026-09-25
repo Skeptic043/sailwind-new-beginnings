@@ -1,6 +1,6 @@
 {
   "name": "New_Beginnings",
-  "version_number": "1.0.0",
+  "version_number": "1.0.1",
   "website_url": "https://github.com/Skeptic043/sailwind-new-beginnings",
   "description": "Choose or randomize a Sailwind starting port and boat, with optional Scrambled Seas integration.",
   "dependencies": [

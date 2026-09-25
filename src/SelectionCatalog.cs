@@ -46,6 +46,17 @@ namespace NewBeginnings
         private static readonly FieldInfo RecoveryPortsField = AccessTools.Field(typeof(Recovery), "ports");
         private static readonly FieldInfo SaveableField = AccessTools.Field(typeof(PurchasableBoat), "saveable");
         private static readonly FieldInfo PurchaseUiField = AccessTools.Field(typeof(PurchasableBoat), "purchaseUI");
+        private static readonly HashSet<string> LoggedBoatInspectionFailures = new HashSet<string>();
+
+        // PurchasableBoat also backs beta houses. Identify a hull by its native
+        // boat components instead of a version-specific house flag. One component
+        // is enough here so a damaged or incomplete boat still reserves its save
+        // index before the full placement checks below.
+        internal static bool IsBoatLike(SaveableObject saveable) =>
+            saveable != null && (saveable.GetComponent<Rigidbody>() != null ||
+                saveable.GetComponent<BoatDamage>() != null ||
+                saveable.GetComponent("BoatProbes") != null ||
+                saveable.GetComponent<BoatMooringRopes>() != null);
 
         // These names and indexes came from the installed level24. A name check protects
         // geography and sizing if another mod reuses an index for a different object.
@@ -210,44 +221,57 @@ namespace NewBeginnings
             var seenBoatIndexes = new HashSet<int>();
             foreach (var boat in Resources.FindObjectsOfTypeAll<PurchasableBoat>())
             {
-                if (boat == null || boat.isHouse || !boat.gameObject.scene.IsValid() ||
-                    !boat.gameObject.scene.isLoaded || !boat.gameObject.activeInHierarchy || !boat.enabled)
-                    continue;
-                var saveable = SaveableField.GetValue(boat) as SaveableObject;
-                var index = saveable != null ? saveable.sceneIndex : -1;
-                // Reserve every active boat identity before component validation. A second
-                // object with the same index makes native save ownership ambiguous even if
-                // only one of the two would otherwise pass this catalog's checks.
-                if (index >= 0 && !seenBoatIndexes.Add(index))
+                try
                 {
-                    result.Rejections.Add($"Boat scene index {index} is ambiguous.");
-                    result.Boats.RemoveAll(item => item.Index == index);
-                    continue;
+                    if (boat == null || !boat.gameObject.scene.IsValid() ||
+                        !boat.gameObject.scene.isLoaded || !boat.gameObject.activeInHierarchy || !boat.enabled)
+                        continue;
+                    var saveable = SaveableField.GetValue(boat) as SaveableObject;
+                    if (!IsBoatLike(saveable)) continue;
+                    var index = saveable.sceneIndex;
+                    // Reserve every active boat identity before component validation. A second
+                    // object with the same index makes native save ownership ambiguous even if
+                    // only one of the two would otherwise pass this catalog's checks.
+                    if (index >= 0 && !seenBoatIndexes.Add(index))
+                    {
+                        result.Rejections.Add($"Boat scene index {index} is ambiguous.");
+                        result.Boats.RemoveAll(item => item.Index == index);
+                        continue;
+                    }
+                    if (index < 0 || saveable.gameObject != boat.gameObject ||
+                        PurchaseUiField.GetValue(boat) as GameObject == null || boat.isPurchased())
+                    {
+                        result.Rejections.Add($"Boat {boat.gameObject.name} ({index}) lacks normal unowned purchase state.");
+                        continue;
+                    }
+                    var body = saveable.GetComponent<Rigidbody>();
+                    var ropes = saveable.GetComponent<BoatMooringRopes>();
+                    if (body == null || !ProbeVelocityGuard.CanGuard(saveable) ||
+                        saveable.GetComponent<BoatDamage>() == null ||
+                        saveable.GetComponent<BoatLocalItems>() == null ||
+                        ropes == null || ropes.ropes == null || ropes.ropes.Length == 0 ||
+                        ropes.ropes.Any(item => item == null) || ropes.GetAnchorController() == null)
+                    {
+                        result.Rejections.Add($"Boat {boat.gameObject.name} ({index}) lacks placement, mooring, or save components.");
+                        continue;
+                    }
+                    var size = FindSize(index, boat.gameObject.name, overrides);
+                    result.Boats.Add(new BoatChoice
+                    {
+                        Boat = boat, Saveable = saveable, Size = size,
+                        DisplayName = FindBoatName(index, boat.gameObject.name),
+                        OriginGroup = FindBoatOrigin(index, boat.gameObject.name)
+                    });
                 }
-                if (saveable == null || index < 0 || saveable.gameObject != boat.gameObject ||
-                    PurchaseUiField.GetValue(boat) as GameObject == null || boat.isPurchased())
+                catch (Exception exception)
                 {
-                    result.Rejections.Add($"Boat {boat.gameObject.name} ({index}) lacks normal unowned purchase state.");
-                    continue;
+                    // A broken optional candidate must not hide other playable boats.
+                    // A boat-like candidate already reserved its index above.
+                    var failure = exception.GetType().Name + ": " + exception.Message;
+                    result.Rejections.Add("A purchasable boat candidate could not be inspected: " + failure);
+                    if (LoggedBoatInspectionFailures.Add(failure))
+                        Plugin.Instance?.Warn("A purchasable boat candidate was skipped: " + failure);
                 }
-                var body = saveable.GetComponent<Rigidbody>();
-                var ropes = saveable.GetComponent<BoatMooringRopes>();
-                if (body == null || !ProbeVelocityGuard.CanGuard(saveable) ||
-                    saveable.GetComponent<BoatDamage>() == null ||
-                    saveable.GetComponent<BoatLocalItems>() == null ||
-                    ropes == null || ropes.ropes == null || ropes.ropes.Length == 0 ||
-                    ropes.ropes.Any(item => item == null) || ropes.GetAnchorController() == null)
-                {
-                    result.Rejections.Add($"Boat {boat.gameObject.name} ({index}) lacks placement, mooring, or save components.");
-                    continue;
-                }
-                var size = FindSize(index, boat.gameObject.name, overrides);
-                result.Boats.Add(new BoatChoice
-                {
-                    Boat = boat, Saveable = saveable, Size = size,
-                    DisplayName = FindBoatName(index, boat.gameObject.name),
-                    OriginGroup = FindBoatOrigin(index, boat.gameObject.name)
-                });
             }
             // Keep the manual selectors in geographic groups. A port with no
             // classified pool (including Chronos) remains selectable at the end.
