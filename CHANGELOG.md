@@ -1,5 +1,20 @@
 # Release notes
 
+## Version 1.1.0
+
+### New
+
+Starting Options:
+
+- A starting-money multiplier from 0x to 100x, with optional custom amounts for each of the four currencies.
+- A starting-region reputation slider and separate overrides for all three regions.
+- A paged equipment checklist that adds one of each selected item alongside your normal supplies.
+- Automatic discovery of eligible small mod equipment items.
+
+### Changed
+
+- Eligible starting supplies and selected equipment are packed into crates beside the player.
+
 ## Version 1.0.1
 
 ### Fixed

@@ -30,6 +30,6 @@ To package an already built Release DLL without rebuilding it:
 pwsh -File ./Package.ps1 -SkipBuild
 ```
 
-The plugin package contains the DLL, manifest, icon, README, release notes and license. The source package contains an explicit list of source files and build documentation. Local evidence, logs, build references and agent records are excluded. Package verification checks plugin identity and version, PNG dimensions, exact entry lists and extracted file hashes.
+The plugin package contains the DLL, manifest, icon, README, release notes and license. The source package contains an explicit list of source files and build documentation. Local development files, logs and build references are excluded. Package verification checks plugin identity and version, PNG dimensions, exact entry lists and extracted file hashes.
 
 These scripts create local artifacts. They do not install the mod, push source code or publish a release.

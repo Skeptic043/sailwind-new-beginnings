@@ -82,10 +82,7 @@ namespace NewBeginnings
         private static bool wrapperObserved;
         private static bool placementClaimed;
         private static bool fallbackScheduled;
-        private static bool scrambledSeasMapSkipped;
         private static string placementStage;
-        private static float nextProgressReport;
-        private static int layoutAttempts;
         internal static void Arm(ResolvedStart selected)
         {
             Disarm();
@@ -94,24 +91,21 @@ namespace NewBeginnings
             placementStage = "waiting for native gameplay";
             foreach (var item in CollectItems(selected.StarterSet.transform))
                 Capture(item);
-            Plugin.Instance?.Report($"Dockside starter supplies armed for region {selected.Region}: {Captured.Count} native items captured.");
-            Plugin.Instance?.Report("Native starter objects: " + CapturedNames());
+            Plugin.Instance?.DebugLog($"Dockside starter supplies armed for region {selected.Region}: {Captured.Count} native items captured.");
         }
 
         internal static void Disarm()
         {
             if (armed != null && placementStage != null)
-                Plugin.Instance?.Report("Dockside supply setup released at stage: " + placementStage + ".");
+                Plugin.Instance?.DebugLog("Dockside supply setup released at stage: " + placementStage + ".");
             armed = null;
             placementStage = null;
-            nextProgressReport = 0f;
-            layoutAttempts = 0;
             readyAt = -1f;
             cupProtectionEndsAt = 0f;
             wrapperObserved = false;
             placementClaimed = false;
             fallbackScheduled = false;
-            scrambledSeasMapSkipped = false;
+            AdditionalEquipment.Reset();
             Captured.Clear();
             DifficultyRemovalRequests.Clear();
             difficultyAdjustmentScope = null;
@@ -169,19 +163,13 @@ namespace NewBeginnings
                 FailAndDisarm($"setup timed out with {CountLive()}/{Captured.Count} captured native items");
                 return;
             }
-            if (readyAt >= 0f && Time.realtimeSinceStartup >= nextProgressReport)
-            {
-                Plugin.Instance?.Report($"Dockside supply setup at {Time.realtimeSinceStartup - readyAt:F1}s: " +
-                    $"{placementStage}; layout attempts {layoutAttempts}, live items {CountLive()}/{Captured.Count}.");
-                nextProgressReport = Time.realtimeSinceStartup + 5f;
-            }
             if (placementClaimed || fallbackScheduled || !GameState.playing) return;
             // A different mod can wrap StarterSet's IEnumerator and never
             // return from its own tail. The placement coroutine itself waits
             // for the native items' sale and registration before moving them.
             if (Time.realtimeSinceStartup - readyAt < 0.75f) return;
             fallbackScheduled = true;
-            Plugin.Instance?.Report($"Dockside supply fallback scheduled (starter coroutine observed: {wrapperObserved}).");
+            Plugin.Instance?.DebugLog($"Dockside supply fallback scheduled (starter coroutine observed: {wrapperObserved}).");
             Plugin.Instance?.StartCoroutine(PlaceCaptured(selected));
         }
 
@@ -229,7 +217,7 @@ namespace NewBeginnings
                         {
                             difficultyAdjustmentCompleted = true;
                             foreach (var item in CollectItems(armed.StarterSet.transform)) Capture(item);
-                            Plugin.Instance?.Report($"Observed Sailwind Difficulty starter adjustment: {DifficultyRemovalRequests.Count} exact removal requests; current native additions captured.");
+                            Plugin.Instance?.DebugLog($"Observed Sailwind Difficulty starter adjustment: {DifficultyRemovalRequests.Count} exact removal requests; current native additions captured.");
                         }
                     }
                 }
@@ -260,11 +248,17 @@ namespace NewBeginnings
                     return;
                 try
                 {
+                    // Prefix observers identify removals before any new crate
+                    // changes the native set's direct-child order.
+                    var survivors = CollectItems(__instance.transform).Where(item =>
+                        !DifficultyRemovalRequests.Contains(item) &&
+                        !IsIntentionalScrambledSeasMap(item)).ToArray();
+                    AdditionalEquipment.Append(armed, survivors);
                     foreach (var item in CollectItems(__instance.transform))
                         Capture(item);
                     wrapperObserved = true;
                     __result = FollowNativeStarterSet(__result, __instance, armed);
-                    Plugin.Instance?.Report($"Native regional starter coroutine wrapped with {Captured.Count} captured supply identities.");
+                    Plugin.Instance?.DebugLog($"Native regional starter coroutine wrapped with {Captured.Count} captured supply identities.");
                 }
                 catch (Exception exception)
                 {
@@ -337,6 +331,8 @@ namespace NewBeginnings
                 foreach (var item in CollectItems(selected.StarterSet.transform))
                     Capture(item);
                 var nativeReady = NativeItemsReady(out lastReason);
+                if (nativeReady)
+                    nativeReady = AdditionalEquipment.TryPack(selected, PreparePackedItem, out lastReason);
                 if (nativeReady && Captured.Count == 0)
                 {
                     Plugin.Instance?.Report("Dockside starter supplies: the observed difficulty adjustment left an intentionally empty native set; no items were added.");
@@ -356,7 +352,6 @@ namespace NewBeginnings
                         continue;
                     }
                     placementAttempted = true;
-                    layoutAttempts++;
                     placementStage = "planning a complete dockside layout";
                     if (TryPlaceAll(selected, ground, groundCollider, out lastReason))
                     {
@@ -372,7 +367,6 @@ namespace NewBeginnings
                             out lastReason))
                         {
                             Plugin.Instance?.Report($"Dockside starter supplies initialized: {Captured.Count}/{Captured.Count} native items near the player. Sailwind now owns their physics and saves.");
-                            ReportStarterCups();
                             placementStage = "completed";
                             Disarm();
                             yield break;
@@ -383,7 +377,7 @@ namespace NewBeginnings
                             PlannedGround.TryGetValue(failedItem, out var priorGround))
                             avoidGround = GroundToWorld(selected, priorGround);
                         if (avoidGround.HasValue)
-                            Plugin.Instance?.Report("Trying alternate dockside ground for " +
+                            Plugin.Instance?.DebugLog("Trying alternate dockside ground for " +
                                 AuthoredName(failedItem) + " away from " +
                                 avoidGround.Value + ".");
                         var retryPlaced = TryPlaceAll(selected, ground,
@@ -413,7 +407,6 @@ namespace NewBeginnings
                             if (TryConfirmAll(ground, out _, out lastReason))
                             {
                                 Plugin.Instance?.Report($"Dockside starter supplies initialized after retry: {Captured.Count}/{Captured.Count} native items near the player. Sailwind now owns their physics and saves.");
-                                ReportStarterCups();
                                 placementStage = "completed after retry";
                                 Disarm();
                                 yield break;
@@ -469,8 +462,15 @@ namespace NewBeginnings
             private static void Prefix(ShipItem __instance)
             {
                 if (armed != null && __instance != null &&
-                    Captured.Contains(__instance) && IsNativeCup(__instance))
-                    ReleaseForCupPickup();
+                    Captured.Contains(__instance))
+                {
+                    if (IsNativeCup(__instance)) ReleaseForCupPickup();
+                    else if (AdditionalEquipment.IsAdditional(__instance) || AdditionalEquipment.IsPacked(__instance))
+                    {
+                        placementStage = "player picked up a packed starter item or additional equipment; native item control restored";
+                        Disarm();
+                    }
+                }
             }
         }
 
@@ -480,6 +480,27 @@ namespace NewBeginnings
             // after the player has claimed it, even if it is dropped again.
             placementStage = "player picked up a starter cup; native item control restored";
             Disarm();
+        }
+
+        [HarmonyPatch]
+        private static class ReleaseEquipmentCrateOnOpenPatch
+        {
+            private static readonly Type InventoryType = typeof(ShipItem).Assembly.GetType("CrateInventory");
+            private static readonly MethodInfo OpenMethod = InventoryType == null ? null :
+                AccessTools.Method(InventoryType, "OpenCrate");
+
+            private static bool Prepare() => OpenMethod != null;
+            private static MethodBase TargetMethod() => OpenMethod;
+
+            private static void Prefix(Component __instance)
+            {
+                if (armed == null || __instance == null ||
+                    !AdditionalEquipment.IsCarrier(__instance.GetComponent<ShipItem>())) return;
+                // Native inventory UI takes over the item transforms while open.
+                // A pending startup retry must not move that carrier or its gear.
+                placementStage = "player opened additional equipment crate; native item control restored";
+                Disarm();
+            }
         }
 
         private static bool ShouldProtectCupLiquid(bool active, bool captured,
@@ -493,9 +514,7 @@ namespace NewBeginnings
 
         private static Quaternion CupUprightRotation(Quaternion authored)
         {
-            // Keep the authored heading, but remove pitch and roll. Pure
-            // quaternion components also make this startup pose testable
-            // without requiring a running Unity engine.
+            // Keep the authored heading, but remove pitch and roll.
             var yaw = Math.Atan2(2d * (authored.w * authored.y + authored.x * authored.z),
                 1d - 2d * (authored.x * authored.x + authored.y * authored.y));
             return new Quaternion(0f, (float)Math.Sin(yaw * 0.5d), 0f,
@@ -508,13 +527,6 @@ namespace NewBeginnings
                 rotation : item.transform.rotation;
             if (IsNativeCup(item)) return CupUprightRotation(authored);
             return IsNativeOar(item) ? authored : item.transform.rotation;
-        }
-
-        private static void ReportStarterCups()
-        {
-            foreach (var item in Captured.Where(IsNativeCup))
-                Plugin.Instance?.Report("Native starter cup settled upright: " +
-                    AuthoredName(item) + $"; up {item.transform.up.y:F3}, remaining native liquid level {item.health}, liquid type {item.amount}.");
         }
 
         [HarmonyPatch(typeof(ShipItem), "DestroyItem")]
@@ -549,14 +561,7 @@ namespace NewBeginnings
         {
             if (rosterFinalized || ReferenceEquals(item, null) || item == null) return;
             if (IsIntentionalScrambledSeasMap(item))
-            {
-                if (!scrambledSeasMapSkipped)
-                {
-                    Plugin.Instance?.Report("Scrambled Seas will remove this region's starter map; excluding that one native object from the dockside supply count.");
-                    scrambledSeasMapSkipped = true;
-                }
                 return;
-            }
             if (!Captured.Add(item)) return;
             if (item != null)
             {
@@ -585,6 +590,7 @@ namespace NewBeginnings
 
         private static bool IsIntentionalScrambledSeasMap(ShipItem item)
         {
+            if (AdditionalEquipment.IsExtra(item)) return false;
             var set = armed?.StarterSet?.transform;
             if (set == null || item.transform.parent != set ||
                 !IsScrambledSeasEnabled()) return false;
@@ -594,6 +600,7 @@ namespace NewBeginnings
             for (var index = set.childCount - 1; index >= 0; index--)
             {
                 var child = set.GetChild(index);
+                if (AdditionalEquipment.IsExtra(child.GetComponent<ShipItem>())) continue;
                 if (child.name.IndexOf("map",
                     StringComparison.OrdinalIgnoreCase) < 0) continue;
                 return child == item.transform;
@@ -693,7 +700,6 @@ namespace NewBeginnings
                 item => item == null, difficultyAdjustmentCompleted && !difficultyAdjustmentFailed,
                 rosterFinalized);
             if (removed.Length == 0) return;
-            var names = removed.Select(AuthoredName).ToArray();
             foreach (var item in removed)
             {
                 Captured.Remove(item);
@@ -703,8 +709,7 @@ namespace NewBeginnings
                 DifficultyRemovalRequests.Remove(item);
                 difficultyRemovalsApplied++;
             }
-            Plugin.Instance?.Report("Sailwind Difficulty intentionally removed " +
-                string.Join(", ", names) + $"; remaining starter roster {Captured.Count} native items.");
+            Plugin.Instance?.DebugLog($"Sailwind Difficulty intentionally removed {removed.Length} native items; remaining starter roster {Captured.Count} native items.");
         }
 
         private static T[] ConfirmedIntentionalRemovals<T>(IEnumerable<T> captured,
@@ -722,7 +727,7 @@ namespace NewBeginnings
         private static void RemoveIntentionalScrambledSeasMap()
         {
             if (rosterFinalized || !wrapperObserved || !IsScrambledSeasEnabled()) return;
-            var removedMaps = Captured.Where(item => item == null &&
+            var removedMaps = Captured.Where(item => item == null && !AdditionalEquipment.IsExtra(item) &&
                 AuthoredNames.TryGetValue(item, out var name) &&
                 name.IndexOf("map", StringComparison.OrdinalIgnoreCase) >= 0)
                 .ToArray();
@@ -735,7 +740,7 @@ namespace NewBeginnings
             AuthoredPositions.Remove(map);
             AuthoredRotations.Remove(map);
             AuthoredNames.Remove(map);
-            Plugin.Instance?.Report("Scrambled Seas intentionally removed the native regional starter map; the remaining starter set is intact.");
+            Plugin.Instance?.DebugLog("Scrambled Seas intentionally removed the native regional starter map; the remaining starter set is intact.");
         }
 
         private static bool IsScrambledSeasEnabled()
@@ -773,7 +778,7 @@ namespace NewBeginnings
                 reason = "the player's resolved dockside surface changed before starter items moved";
                 return false;
             }
-            var items = Captured.ToArray();
+            var items = Captured.Where(item => !AdditionalEquipment.IsPacked(item)).ToArray();
             var barrel = items.FirstOrDefault(item => AuthoredNameContains(item, "barrel"));
             // Another mod can replace the region's starter set. Use its first
             // native item as the layout anchor when there is no water barrel.
@@ -932,19 +937,15 @@ namespace NewBeginnings
                     BodyDistanceTimerField.SetValue(move.Body, 0f);
                 }
                 Physics.SyncTransforms();
+                AdditionalEquipment.MovePacked(ResetPackedDistance);
                 RejectedAnchorGround.Clear();
                 PlannedGround.Clear();
                 foreach (var plannedItem in planned)
                     PlannedGround[plannedItem.Key] = selected.Recovery.transform.InverseTransformPoint(plannedItem.Value);
-                Plugin.Instance?.Report($"Dockside supply layout: {AuthoredName(anchor)} at {anchorGround}, " +
+                Plugin.Instance?.DebugLog($"Dockside supply layout: {AuthoredName(anchor)} at {anchorGround}, " +
                     (foodSupport == null ? "no food support" :
                         $"food support {AuthoredName(foodSupport)} at {foodGround}") +
                     $", {moves.Count} registered items placed on ground from region {selected.Region}.");
-                foreach (var move in moves.Where(move => IsNativeOar(move.Item)))
-                    Plugin.Instance?.Report("Native oar placed on dockside ground at " +
-                        planned[move.Item] + "; native rotation " +
-                        move.Item.transform.rotation + ", item position " +
-                        move.Item.transform.position + ".");
                 return true;
             }
             catch (Exception exception)
@@ -965,6 +966,25 @@ namespace NewBeginnings
             var foodDistance = new Vector2(original.x - food.x,
                 original.z - food.z).sqrMagnitude;
             return foodDistance < barrelDistance;
+        }
+
+        private static void PreparePackedItem(ShipItem item)
+        {
+            if (item.currentActualBoat != null) ExitBoatMethod.Invoke(item, null);
+            var world = FloatingOriginManager.instance.transform;
+            item.transform.SetParent(world, true);
+            item.GetItemRigidbody().transform.SetParent(world, true);
+            item.GetComponent<SaveablePrefab>().SetParentObject(-1);
+            StayedEmbarkField.SetValue(item, null);
+            ResetPackedDistance(item);
+        }
+
+        private static void ResetPackedDistance(ShipItem item)
+        {
+            var body = item.GetItemRigidbody();
+            BodyOutOfRangeField.SetValue(body, false);
+            BodyDestroyFramesField.SetValue(body, 0);
+            BodyDistanceTimerField.SetValue(body, 0f);
         }
 
         private static Vector3 PutBottomOnSurface(ShipItem item, Vector3 surface,
@@ -1311,6 +1331,15 @@ namespace NewBeginnings
                     failedItem = item;
                     reason = "a starter item disappeared after placement";
                     return false;
+                }
+                if (AdditionalEquipment.IsPacked(item))
+                {
+                    if (!AdditionalEquipment.TryConfirmPacked(item, out reason))
+                    {
+                        failedItem = item;
+                        return false;
+                    }
+                    continue;
                 }
                 if (IsNativeCup(item) && !IsCupUpright(item.transform.up.y))
                 {

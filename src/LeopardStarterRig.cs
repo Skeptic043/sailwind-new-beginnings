@@ -8,7 +8,7 @@ using UnityEngine;
 namespace NewBeginnings
 {
     // The inspected Leopard 1.6.0 has no shipped default sails. Supply the
-    // requested single medium lateen only for our successfully selected new start.
+    // single medium lateen only for a successfully selected new start.
     internal static class LeopardStarterRig
     {
         private const int BoatIndex = 207;
@@ -22,8 +22,6 @@ namespace NewBeginnings
             "UpdateSailUnroll", Type.EmptyTypes);
         private static readonly FieldInfo VisualAnimator = AccessTools.Field(typeof(ReefEffectAnimUniversal), "anim");
         private static readonly FieldInfo VisualRefreshing = AccessTools.Field(typeof(ReefEffectAnimUniversal), "refreshing");
-        private static readonly FieldInfo VisualFurled = AccessTools.Field(typeof(ReefEffectAnimUniversal), "isFurled");
-        private static readonly FieldInfo VisualUnfurledMaterial = AccessTools.Field(typeof(ReefEffectAnimUniversal), "unfurledMaterial");
         private static readonly FieldInfo WinchClicked = AccessTools.Field(typeof(GoPointerButton), "isClicked");
         private static readonly FieldInfo WinchStickyClickedBy = AccessTools.Field(typeof(GoPointerButton), "stickyClickedBy");
         private static GPButtonRopeWinch pendingWinch;
@@ -31,9 +29,6 @@ namespace NewBeginnings
         private static StartMenu pendingMenu;
         private static ResolvedStart pendingStart;
         private static int pendingRefreshGeneration;
-        private static GPButtonRopeWinch diagnosticWinch;
-        private static RopeControllerSailReef diagnosticReef;
-        private static float diagnosticExpiresAt;
         private static int generation;
 
         internal static void Cancel()
@@ -41,7 +36,6 @@ namespace NewBeginnings
             ++generation;
             pendingWinch = null;
             ClearClothRestart();
-            ClearControlDiagnostic();
         }
 
         private static void ClearClothRestart()
@@ -75,7 +69,7 @@ namespace NewBeginnings
                     !GameState.playing || GameState.currentlyLoading || pendingWinch == null) return;
                 if (WinchInUse(pendingWinch))
                 {
-                    ObserveWinchInput(pendingWinch);
+                    ReleaseForWinchInput(pendingWinch);
                     return;
                 }
                 var reef = pendingWinch.rope as RopeControllerSailReef;
@@ -90,7 +84,7 @@ namespace NewBeginnings
                 // Restart its own finite refresh after that exact transition.
                 // If Start has not run, it remains responsible for initialization.
                 visual.RefreshCloth();
-                Plugin.Instance.Report("Leopard starter sail: resumed native cloth refresh after initial collision-checker reparenting.");
+                Plugin.Instance.DebugLog("Leopard starter sail: resumed native cloth refresh after initial collision-checker reparenting.");
             }
             catch (Exception exception)
             {
@@ -103,7 +97,7 @@ namespace NewBeginnings
         {
             private static void Prefix(GPButtonRopeWinch __instance)
             {
-                ObserveWinchInput(__instance);
+                ReleaseForWinchInput(__instance);
             }
         }
 
@@ -112,10 +106,8 @@ namespace NewBeginnings
         {
             private static void Prefix(GPButtonRopeWinch __instance)
             {
-                if (diagnosticWinch != null && Time.realtimeSinceStartup >= diagnosticExpiresAt)
-                    ClearControlDiagnostic();
-                if ((ReferenceEquals(__instance, pendingWinch) || ReferenceEquals(__instance, diagnosticWinch)) &&
-                    WinchInUse(__instance)) ObserveWinchInput(__instance);
+                if (ReferenceEquals(__instance, pendingWinch) && WinchInUse(__instance))
+                    ReleaseForWinchInput(__instance);
             }
         }
 
@@ -124,51 +116,23 @@ namespace NewBeginnings
             WinchStickyClickedBy.GetValue(winch) is GoPointer pointer && pointer != null ||
             winch.rotHandle != null && winch.rotHandle.IsGrabbed();
 
-        private static void ClearControlDiagnostic()
+        private static void ReleaseForWinchInput(GPButtonRopeWinch winch)
         {
-            diagnosticWinch = null;
-            diagnosticReef = null;
-            diagnosticExpiresAt = 0f;
-        }
-
-        private static void ObserveWinchInput(GPButtonRopeWinch winch)
-        {
-            // Diagnostics must never prevent the native winch from handling input.
+            // Startup release must never prevent the native winch from handling input.
             try
             {
-                var observe = ReferenceEquals(winch, diagnosticWinch) &&
-                    Time.realtimeSinceStartup < diagnosticExpiresAt ? diagnosticReef : null;
-                if (observe != null) ClearControlDiagnostic();
                 if (ReferenceEquals(winch, pendingWinch)) ReleaseToPlayer();
-                if (observe != null && Plugin.Instance != null)
-                    Plugin.Instance.StartCoroutine(ObserveControlChange(observe, generation));
             }
             catch (Exception exception)
             {
                 if (ReferenceEquals(winch, pendingWinch)) Cancel();
-                ClearControlDiagnostic();
-                Plugin.Instance?.Warn("Leopard first-input diagnostic unavailable: " + exception.Message);
+                Plugin.Instance?.Warn("Leopard starter furl release needed fallback cancellation: " + exception.Message);
             }
-        }
-
-        private static IEnumerator ObserveControlChange(RopeControllerSailReef reef, int token)
-        {
-            if (reef == null || token != generation || GameState.currentlyLoading) yield break;
-            var deadline = Time.realtimeSinceStartup + 3f;
-            var original = reef.currentLength;
-            while (token == generation && reef != null &&
-                reef.currentLength == original && Time.realtimeSinceStartup < deadline)
-                yield return null;
-            // Observe after native reef/visual Update have consumed the input.
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            if (token == generation && !GameState.currentlyLoading && reef != null)
-                ReportVisualState(reef, "first player reef input (read-only)");
         }
 
         private static void ReleaseToPlayer()
         {
-            Plugin.Instance?.Report("Leopard starter furl initialization released to player winch input.");
+            Plugin.Instance?.DebugLog("Leopard starter furl initialization released to player winch input.");
             Cancel();
         }
 
@@ -251,7 +215,7 @@ namespace NewBeginnings
                     {
                         if (WinchInUse(pendingWinch))
                         {
-                            ObserveWinchInput(pendingWinch);
+                            ReleaseForWinchInput(pendingWinch);
                             failed = true;
                         }
                         else if (!HasInitialFurlLength(reef.reverseReefing, reef.currentLength))
@@ -269,11 +233,8 @@ namespace NewBeginnings
                             lastState = $"reef {reef.currentLength:F3}, unroll {reef.sail.currentUnroll:F3}, animator ready {initialized}, refreshing {refreshing}, native visual update {visual != null && visual.debugToggleCloth}";
                             if (frames >= 2 && initialized && !refreshing && visual.debugToggleCloth)
                             {
-                                // Native animation alone owns the visuals. Flags
-                                // and a hidden material did not establish actual
-                                // movement of the sail's animated geometry.
-                                ReportVisualState(reef, "native initialization (read-only)");
-                                Plugin.Instance.Report("Leopard native sail initialization observed; visible furl and animation remain unconfirmed. First reef input within 60 seconds will record one diagnostic.");
+                                // Native animation alone owns the visuals.
+                                Plugin.Instance.DebugLog("Leopard native sail initialization readiness observed.");
                                 complete = true;
                             }
                         }
@@ -287,7 +248,6 @@ namespace NewBeginnings
                     ++frames;
                     yield return null;
                 }
-                ReportVisualState(reef, "native initialization timeout (read-only)");
                 Plugin.Instance.Warn("Leopard starter sail installed, but native visual readiness was not observed within the bounded initialization window: " + lastState + ".");
             }
             finally
@@ -302,42 +262,6 @@ namespace NewBeginnings
 
         private static bool HasInitialFurlLength(bool reverse, float length) =>
             length == (reverse ? 1f : 0f);
-
-        private static void ReportVisualState(RopeControllerSailReef reef, string phase)
-        {
-            try
-            {
-                if (reef == null || reef.sail == null) return;
-                var sail = reef.sail;
-                var visual = sail.GetComponent<ReefEffectAnimUniversal>();
-                var animator = visual == null ? null : VisualAnimator.GetValue(visual) as Animator;
-                var cloth = sail.cloth == null ? null : sail.cloth.GetComponent<SkinnedMeshRenderer>();
-                var cached = visual == null ? null : VisualUnfurledMaterial.GetValue(visual) as Material;
-                var animation = animator == null ? "missing" :
-                    $"enabled {animator.enabled}, initialized {animator.isInitialized}, speed {animator.speed:F3}, culling {animator.cullingMode}, controller {animator.runtimeAnimatorController?.name}";
-                if (animator != null && animator.isInitialized && visual != null)
-                {
-                    var state = animator.GetCurrentAnimatorStateInfo(visual.layer);
-                    animation += $", state {state.shortNameHash}, expected {Animator.StringToHash(visual.clipName)}, time {state.normalizedTime:F3}";
-                }
-                var bones = cloth == null ? "<missing cloth>" : string.Join("; ",
-                    (cloth.bones ?? new Transform[0]).Where(bone => bone != null).Take(4).Select(bone =>
-                        $"{bone.name}: position {bone.localPosition.ToString("F3")}, rotation {bone.localRotation.ToString("F3")}, scale {bone.localScale.ToString("F3")}"));
-                Plugin.Instance.Report($"Leopard sail diagnostic [{phase}]: reef {reef.currentLength:F3}, unroll {sail.currentUnroll:F3}; animator {animation}; " +
-                    $"refreshing {(visual == null ? "missing" : VisualRefreshing.GetValue(visual))}, isFurled {(visual == null ? "missing" : VisualFurled.GetValue(visual))}; cached deployed material {MaterialLabel(cached)}; " +
-                    $"cloth {RendererLabel(cloth)}; furled {RendererLabel(visual?.furledSail)}; bones {bones}.");
-            }
-            catch (Exception exception)
-            {
-                Plugin.Instance?.Warn("Leopard sail diagnostic unavailable: " + exception.Message);
-            }
-        }
-
-        private static string MaterialLabel(Material material) => material == null ? "<none>" :
-            $"{material.name} [shader {material.shader?.name}, native empty {material == Refs.emptyMaterial}]";
-
-        private static string RendererLabel(Renderer renderer) => renderer == null ? "<none>" :
-            $"{renderer.name} [enabled {renderer.enabled}, visible {renderer.isVisible}, bounds {renderer.bounds.center.ToString("F3")}/{renderer.bounds.size.ToString("F3")}, material {MaterialLabel(renderer.sharedMaterial)}]";
 
         private static RopeControllerSailReef Install(ResolvedStart selected)
         {
@@ -361,8 +285,7 @@ namespace NewBeginnings
             var connections = prefab != null ? prefab.GetComponent<SailConnections>() : null;
             var prefabReef = connections != null ? connections.reefController as RopeControllerSailReef : null;
             if (AttachInitialSail == null || UpdateSailUnroll == null ||
-                VisualAnimator == null || VisualRefreshing == null || VisualFurled == null ||
-                VisualUnfurledMaterial == null ||
+                VisualAnimator == null || VisualRefreshing == null ||
                 WinchClicked == null || WinchStickyClickedBy == null || mast == null || !mast.isActiveAndEnabled ||
                 mast.orderIndex != 7 || mast.shipRigidbody != selected.Body ||
                 refs == null || refs.masts == null || refs.masts.Length <= 7 || refs.masts[7] != mast ||
@@ -390,10 +313,7 @@ namespace NewBeginnings
                 throw new InvalidOperationException("Native medium lateen reef control was not attached to the mainmast winch.");
             FurlInstalledSail(reef);
             pendingWinch = mast.reefWinch[0];
-            diagnosticWinch = pendingWinch;
-            diagnosticReef = reef;
-            diagnosticExpiresAt = Time.realtimeSinceStartup + 60f;
-            Plugin.Instance.Report($"Leopard starter sail: installed one medium lateen (prefab {SailIndex}) on mainmast 7 at {sail.installHeight:F2}m; initial reef value set, native visual initialization pending.");
+            Plugin.Instance.DebugLog($"Leopard starter sail: installed one medium lateen (prefab {SailIndex}) on mainmast 7 at {sail.installHeight:F2}m; initial reef value set, native visual initialization pending.");
             return reef;
         }
 

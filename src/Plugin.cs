@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.0.1")]
+    [BepInPlugin(Id, "New Beginnings", "1.1.0")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -16,6 +16,7 @@ namespace NewBeginnings
         public const string Id = "com.skeptic043.sailwind.newbeginnings";
         private Harmony harmony;
         private SelectionConfig selection;
+        private StartingOptionsConfig startingOptions;
         private readonly System.Random random = new System.Random();
         private Transform temporaryStart;
         private StartMenu trackedStartMenu;
@@ -46,7 +47,6 @@ namespace NewBeginnings
         private float distantSurfaceSeenAt = -1f;
         private IslandHorizon docksideIsland;
         private bool searchOasisPierExtension;
-        private bool oasisPierExtensionReported;
         private int sceneryLoadedFrame = -1;
         private readonly List<Transform> boatWalkRoots = new List<Transform>();
         private int boatWalkRootsFrame = -1;
@@ -94,6 +94,7 @@ namespace NewBeginnings
         internal static Plugin Instance { get; private set; }
         internal SelectionSettings Settings => selection.Settings;
         internal SelectionOverrides Overrides => selection.Overrides;
+        internal StartingOptionsSettings StartOptions => startingOptions.Settings;
 
         private void Awake()
         {
@@ -101,6 +102,7 @@ namespace NewBeginnings
             try
             {
                 selection = new SelectionConfig(Config);
+                startingOptions = new StartingOptionsConfig(Config);
                 harmony = new Harmony(Id);
                 harmony.PatchAll(typeof(Plugin).Assembly);
                 ScrambledSeasIntegration.Initialize(harmony);
@@ -150,6 +152,7 @@ namespace NewBeginnings
         }
 
         private void SaveSelection() => selection.Save();
+        internal void SaveStartingOptions() => startingOptions.Save();
 
         internal bool TryChooseStart(out StartPair pair, out string reason)
         {
@@ -299,7 +302,7 @@ namespace NewBeginnings
                     ReleasePlayerControl();
                     unresolvedPlayingAt = -1f;
                     startPlayingAt = Time.realtimeSinceStartup;
-                    Report($"Player start finalized on loaded dock/shore at {targetPosition}.");
+                    DebugLog($"Player start finalized on loaded dock/shore at {targetPosition}.");
                     // Freeze this chosen point. Only its parent's common
                     // world displacement may be followed during the existing
                     // brief handoff; never choose another surface after control.
@@ -327,7 +330,7 @@ namespace NewBeginnings
                     startController.position += displacement;
                     startObserver.position += displacement;
                     Physics.SyncTransforms();
-                    Report($"Player start followed a late dock-marker shift by {displacement}.");
+                    DebugLog($"Player start followed a late dock-marker shift by {displacement}.");
                 }
             }
             else
@@ -459,12 +462,6 @@ namespace NewBeginnings
                     return ProbeDocksideSurface(sample, out var point, out var surface, probeSummary)
                         ? Tuple.Create(point, surface) : null;
                 }, IsTerrainCollider);
-                if (!oasisPierExtensionReported && best != null &&
-                    (previousBest == null || best.Item1 != previousBest.Item1))
-                {
-                    oasisPierExtensionReported = true;
-                    Report($"Oasis dock extension offers validated ground {Vector3.ProjectOnPlane(best.Item1 - center, Vector3.up).magnitude:F1}m from the recovery marker; nearby berth candidates were unavailable.");
-                }
             }
             var bestPoint = best == null ? Vector3.zero : best.Item1;
             var bestSurface = best == null ? null : best.Item2;
@@ -484,7 +481,7 @@ namespace NewBeginnings
                 if (distantSurfaceSeenAt < 0f)
                 {
                     distantSurfaceSeenAt = Time.realtimeSinceStartup;
-                    Report($"Distant shore candidate {horizontalDistanceToBest:F1}m from the dock; waiting within the existing player hold for nearby scenery ({sceneryState}). " + lastSurfaceProbeSummary);
+                    DebugLog($"Distant shore candidate {horizontalDistanceToBest:F1}m from the dock; waiting within the existing player hold for nearby scenery ({sceneryState}). " + lastSurfaceProbeSummary);
                 }
                 // Stay inside the existing five-second player hold. A distant
                 // fallback is re-probed each scan, never held as a stale hit.
@@ -504,12 +501,12 @@ namespace NewBeginnings
                 (temporaryStart.position - destination).sqrMagnitude < 0.01f)
                 return;
             if (horizontalDistanceToBest > 8f)
-                Report($"Distant shore fallback selected at {horizontalDistanceToBest:F1}m ({sceneryState}); " + lastSurfaceProbeSummary);
+                DebugLog($"Distant shore fallback selected at {horizontalDistanceToBest:F1}m ({sceneryState}); " + lastSurfaceProbeSummary);
             temporaryStart.position = destination;
             docksideSurfaceCollider = bestSurface;
             docksideSurfaceLocal = dockMarker.InverseTransformPoint(bestPoint);
             hasDocksideSurfacePoint = true;
-            Report($"Player dockside surface resolved on {TransformPath(bestSurface.transform)} ({bestSurface.GetType().Name}) at {bestPoint}; target {destination}, marker {center}.");
+            DebugLog($"Player dockside surface resolved on {TransformPath(bestSurface.transform)} ({bestSurface.GetType().Name}) at {bestPoint}; target {destination}, marker {center}.");
         }
 
         internal bool TryGetDocksideSurface(out Vector3 surface, out Collider collider)
@@ -585,14 +582,14 @@ namespace NewBeginnings
             surface = found.Item1;
             collider = found.Item2;
             RememberCargoSurface(surface, collider);
-            Report($"Cargo dock/shore support reacquired on {TransformPath(collider.transform)} at {surface}; player position unchanged.");
+            DebugLog($"Cargo dock/shore support reacquired on {TransformPath(collider.transform)} at {surface}; player position unchanged.");
             return true;
         }
 
         private void RememberCargoSurface(Vector3 surface, Collider collider)
         {
             if (hasCargoSurfacePoint && cargoSurfaceCollider != collider)
-                Report($"Cargo support changed to {TransformPath(collider.transform)} at {surface}; player position unchanged.");
+                DebugLog($"Cargo support changed to {TransformPath(collider.transform)} at {surface}; player position unchanged.");
             cargoSurfaceCollider = collider;
             cargoSurfaceLocal = docksideMarker.InverseTransformPoint(surface);
             hasCargoSurfacePoint = true;
@@ -608,7 +605,7 @@ namespace NewBeginnings
             CargoSurfaceStatus = "waiting for loaded dockside ground";
         }
 
-        // Shared pure selection math; the caller supplies the same validated
+        // The caller supplies the same validated
         // live-physics probe used elsewhere. This never writes actor transforms.
         private static Tuple<Vector3, T> FindClosestSurface<T>(IEnumerable<Vector3> samples,
             Vector3 reference, Func<Vector3, Tuple<Vector3, T>> probe, Func<T, bool> isTerrain)
@@ -1233,7 +1230,7 @@ namespace NewBeginnings
             lastStartControllerPosition = startController.position;
             startTrackingAt = Time.realtimeSinceStartup;
             startPlayingAt = -1f;
-            Report($"Player start target anchored to {target.parent.name} at {target.position}; observer {observer.position}, controller {startController.position}.");
+            DebugLog($"Player start target anchored to {target.parent.name} at {target.position}; observer {observer.position}, controller {startController.position}.");
         }
 
         internal void CancelPlayerStartTracking()
@@ -1313,7 +1310,6 @@ namespace NewBeginnings
             distantSurfaceSeenAt = -1f;
             docksideIsland = null;
             searchOasisPierExtension = false;
-            oasisPierExtensionReported = false;
             sceneryLoadedFrame = -1;
             lastSurfaceProbeSummary = null;
         }
@@ -1395,7 +1391,7 @@ namespace NewBeginnings
                         Warn("Boat settling stopped because a port, berth or player target became non-finite after world movement.");
                         yield break;
                     }
-                    Report($"Start settle coordinates: port {selected.Port.transform.position}, berth {position}, hull {selected.Body.position}, player target {(temporaryStart != null ? temporaryStart.position.ToString() : "gone")}.");
+                    DebugLog($"Start settle coordinates: port {selected.Port.transform.position}, berth {position}, hull {selected.Body.position}, player target {(temporaryStart != null ? temporaryStart.position.ToString() : "gone")}.");
                     selected.Saveable.transform.SetPositionAndRotation(position, rotation);
                     selected.Body.position = position;
                     selected.Body.rotation = rotation;
@@ -1437,11 +1433,13 @@ namespace NewBeginnings
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         internal void Report(string message) => Logger.LogInfo(message);
+        internal void DebugLog(string message) => Logger.LogDebug(message);
         internal void Warn(string message) => Logger.LogWarning(message);
         internal void Error(string message, Exception exception) => Logger.LogError(message + " " + exception);
 
         private void OnDestroy()
         {
+            StartingValues.Cancel();
             CancelBoatSettle();
             CancelPlayerStartTracking();
             ClearDocksideSurface();

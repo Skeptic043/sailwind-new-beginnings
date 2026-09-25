@@ -62,7 +62,7 @@ namespace NewBeginnings
                 throw new InvalidOperationException("Crab Beach hull clearance found no space within 12m sideways and 4m rearward; neighboring boats were left unchanged.");
             var result = nativePosition + new Vector3(delta.x, 0f, delta.y);
             if (!Finite(result)) throw new InvalidOperationException("Crab Beach hull clearance produced an invalid position.");
-            Plugin.Instance?.Report($"Crab Beach hull clearance: moved {side:F2}m away from dock and {back:F2}m rearward; blocker {names[blocker]}, capsule gap {baseline:F2}m -> {gap:F2}m. Dock and terrain clearance still require an in-game check.");
+            Plugin.Instance?.DebugLog($"Crab Beach hull clearance: moved {side:F2}m away from dock and {back:F2}m rearward; blocker {names[blocker]}, capsule gap {baseline:F2}m -> {gap:F2}m. Dock and terrain clearance still require an in-game check.");
             return result;
         }
 

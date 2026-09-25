@@ -95,8 +95,8 @@ namespace NewBeginnings
                             else if (!ready) stop = true;
                             else if (now >= repairAt)
                             {
-                                // Consume this operation before the native-state
-                                // write, including when logging or a future hook fails.
+                                // Consume before the native-state write so a
+                                // later exception cannot repeat the repair.
                                 Cancel();
                                 // Native Shipyard.ConfirmOrder repairs hullDamage
                                 // directly. Do only that write: no fee, bilge drain,

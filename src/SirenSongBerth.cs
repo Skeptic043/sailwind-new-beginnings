@@ -95,7 +95,7 @@ namespace NewBeginnings
                 ShorePosition = new Vector3(shore.x, selected.Recovery.transform.position.y, shore.y),
                 Front = front, Back = back
             };
-            Plugin.Instance?.Report($"Siren Song alternate berth: {front.name} / {back.name}; outward adjustment {extraOutward:F2}m beyond hull clearance; nearest boat gap {gap:F2}m; native recovery berth left unchanged.");
+            Plugin.Instance?.DebugLog($"Siren Song alternate berth: {front.name} / {back.name}; outward adjustment {extraOutward:F2}m beyond hull clearance; nearest boat gap {gap:F2}m; native recovery berth left unchanged.");
             return true;
         }
 

@@ -13,6 +13,7 @@ namespace NewBeginnings
     {
         private static readonly FieldInfo OutlineField = AccessTools.Field(typeof(GoPointerButton), "outline");
         internal Action Clicked;
+        internal Action<RaycastHit> Hit;
 
         public override void Start()
         {
@@ -22,6 +23,11 @@ namespace NewBeginnings
             var existing = GetComponent("Outline");
             if (existing == null) base.Start();
             else OutlineField?.SetValue(this, existing);
+        }
+
+        public override void OnActivateHit(RaycastHit hit)
+        {
+            if (!unclickable) Hit?.Invoke(hit);
         }
 
         public override void OnActivate()
@@ -71,6 +77,8 @@ namespace NewBeginnings
         private MenuUiButton[] editorRows;
         private MenuUiButton editorPrevious;
         private MenuUiButton editorNext;
+        private StartingOptionsUi startingOptions;
+        private bool EditingAny => editing || startingOptions != null && startingOptions.IsOpen;
         private bool editing;
         private bool editingBoats;
         private bool confirmWasActive;
@@ -79,6 +87,7 @@ namespace NewBeginnings
         private int editorPage;
         private bool built;
         private bool seasLayout;
+        internal const float StartingOptionsOffsetY = .35f;
         private const float VerticalOffset = 1.15f;
         private const float SeasMenuOffsetX = 1.12f;
         private const float StandaloneMenuOffsetX = .18f;
@@ -148,6 +157,7 @@ namespace NewBeginnings
                     if (child.name.StartsWith("New Beginnings ", StringComparison.Ordinal))
                         mainControls.Add(child.gameObject);
                 BuildEditor(choiceRoot);
+                startingOptions = StartingOptionsUi.Create(this, choiceRoot);
                 built = true;
             }
             HideNativeRegionChoice();
@@ -166,6 +176,7 @@ namespace NewBeginnings
         private void OnDisable()
         {
             if (editing) CloseEditor(false);
+            startingOptions?.Close(false);
         }
 
         private void Update()
@@ -173,7 +184,7 @@ namespace NewBeginnings
             if (!built) return;
             HideNativeRegionChoice();
             ApplyContinueState();
-            if (editing)
+            if (EditingAny)
             {
                 if (confirm != null) Hide(confirm);
                 if (back != null) Hide(back);
@@ -239,11 +250,13 @@ namespace NewBeginnings
         internal bool CanStart(out string reason)
         {
             reason = null;
-            if (editing)
+            if (EditingAny)
             {
-                reason = "Finish editing random exclusions before continuing.";
+                reason = "Finish editing your starting options before continuing.";
                 return false;
             }
+            if (Plugin.Instance?.StartOptions != null &&
+                !AdditionalEquipment.TryValidateSelection(Plugin.Instance.StartOptions.AdditionalEquipment, out reason)) return false;
             RefreshCatalog();
             if (catalogUnavailable) return true;
             if (catalog != null && catalog.TryChoose(settings, individualExclusions,
@@ -290,7 +303,7 @@ namespace NewBeginnings
             Hide(root.Find("start deco Emerald"));
             Hide(root.Find("start deco Medi"));
             var regionNameScroll = root.Find("bg (1)");
-            var hasSaveNameInput = SaveSlotsPlusIntegration.TryLayoutNameInput(regionNameScroll, !editing);
+            var hasSaveNameInput = SaveSlotsPlusIntegration.TryLayoutNameInput(regionNameScroll, !EditingAny);
             if (!hasSaveNameInput)
                 Hide(regionNameScroll);
             var actionOffset = hasSaveNameInput ? .12f : 0f;
@@ -299,11 +312,14 @@ namespace NewBeginnings
             // shorter sheet backs the selectors, leaving native actions below.
             if (panel != null)
             {
+                var optionsOpen = startingOptions != null && startingOptions.IsOpen;
+                // Reassert the backing on every refresh, including first open
+                // after other menu initialization has changed its transform.
                 panel.localPosition = new Vector3(MenuX(0f),
-                    .30f + VerticalOffset, panel.localPosition.z);
+                    (optionsOpen ? StartingOptionsOffsetY : .30f) + VerticalOffset, panel.localPosition.z);
                 panel.localScale = seasLayout
-                    ? new Vector3(1.32f, 2.50f, 2.75f)
-                    : new Vector3(1.32f, 3.45f, 2.75f);
+                    ? new Vector3(1.32f, 2.50f, optionsOpen ? 3.4f : 2.75f)
+                    : new Vector3(1.32f, 3.45f, optionsOpen ? 3.4f : 2.75f);
             }
             // Keep the native button and StartMenuButton intact: it still calls
             // StartNewGame, whose prefix chooses the selected/random port pair.
@@ -404,7 +420,10 @@ namespace NewBeginnings
                 1.55f, .44f, () => OpenEditor(true));
             portExclusions.description = "Choose which islands can be selected by Random Port.";
             boatExclusions.description = "Choose which boats can be selected by Random Boat.";
-            status = MakeLabel(root, "Selection status", "", 0f, -.53f, .009f);
+            var options = MakeButton(root, "Starting options", 0f, -.53f, 1.65f, .44f,
+                () => startingOptions?.Open());
+            SetButtonText(options, "Starting options...");
+            status = MakeLabel(root, "Selection status", "", 0f, -.64f, .009f);
             status.color = WarningInk;
         }
 
@@ -438,12 +457,28 @@ namespace NewBeginnings
             done.description = "Save individual island and boat exclusions.";
         }
 
+        internal void ShowStartingOptions(bool visible)
+        {
+            if (visible)
+            {
+                confirmWasActive = confirm != null && confirm.gameObject.activeSelf;
+                backWasActive = back != null && back.gameObject.activeSelf;
+                titleWasActive = titleTemplate != null && titleTemplate.gameObject.activeSelf;
+            }
+            foreach (var control in mainControls) control.SetActive(!visible);
+            if (confirm != null) confirm.gameObject.SetActive(!visible && confirmWasActive);
+            if (back != null) back.gameObject.SetActive(!visible && backWasActive);
+            if (titleTemplate != null) titleTemplate.gameObject.SetActive(!visible && titleWasActive);
+            HideNativeRegionChoice();
+            if (!visible) RefreshDisplay();
+        }
+
         private bool CanEditExclusions(bool boats) => settings != null &&
             (boats ? settings.RandomBoat : settings.RandomPort);
 
         private void OpenEditor(bool boats)
         {
-            if (editing || !CanEditExclusions(boats) ||
+            if (EditingAny || !CanEditExclusions(boats) ||
                 individualExclusions == null || editorRoot == null) return;
             RefreshCatalog();
             editorSnapshot = individualExclusions.Copy();
@@ -594,7 +629,7 @@ namespace NewBeginnings
             SetEnabled(editorNext, pages > 1);
         }
 
-        private MenuUiButton MakeButton(Transform root, string name, float x, float y,
+        internal MenuUiButton MakeButton(Transform root, string name, float x, float y,
             float width, float height, Action onClick)
         {
             var visual = MakeButtonVisual(root, name, x, y, width, height, out var surface);
@@ -660,7 +695,7 @@ namespace NewBeginnings
             return visual;
         }
 
-        private TextMesh MakeLabel(Transform root, string name, string value,
+        internal TextMesh MakeLabel(Transform root, string name, string value,
             float x, float y, float scale)
         {
             var visual = Instantiate(titleTemplate.gameObject, root, false);
@@ -681,12 +716,12 @@ namespace NewBeginnings
             ? x * SeasContentWidth + SeasMenuOffsetX
             : x + StandaloneMenuOffsetX;
 
-        private static TextMesh ButtonText(MenuUiButton button)
+        internal static TextMesh ButtonText(MenuUiButton button)
         {
             return button != null ? button.transform.parent.GetComponentInChildren<TextMesh>(true) : null;
         }
 
-        private static void SetButtonText(MenuUiButton button, string value)
+        internal static void SetButtonText(MenuUiButton button, string value)
         {
             var text = ButtonText(button);
             if (text == null) return;
@@ -699,7 +734,7 @@ namespace NewBeginnings
             text.transform.localScale = Vector3.one * size;
         }
 
-        private static void SetEnabled(MenuUiButton button, bool enabled)
+        internal static void SetEnabled(MenuUiButton button, bool enabled)
         {
             if (button == null) return;
             button.unclickable = !enabled;
@@ -786,8 +821,8 @@ namespace NewBeginnings
             SetButtonText(boatExclusions, "Boat exclusions...");
             // RefreshCatalog can also run with the editor open. Keep these
             // controls hidden then, including their native pointer colliders.
-            SetButtonVisible(portExclusions, !editing && settings.RandomPort);
-            SetButtonVisible(boatExclusions, !editing && settings.RandomBoat);
+            SetButtonVisible(portExclusions, !EditingAny && settings.RandomPort);
+            SetButtonVisible(boatExclusions, !EditingAny && settings.RandomBoat);
             SetEnabled(portExclusions, settings.RandomPort && individualExclusions != null);
             SetEnabled(boatExclusions, settings.RandomBoat && individualExclusions != null);
 

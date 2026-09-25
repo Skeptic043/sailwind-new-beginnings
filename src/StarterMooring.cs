@@ -150,7 +150,7 @@ namespace NewBeginnings
                                 LengthField.SetValue(line.Rope, lengthSquared);
                                 line.Dock.spring.maxDistance = (float)Math.Sqrt(lengthSquared);
                                 line.LengthApplied = true;
-                                Plugin.Instance.Report($"Starter mooring slack: {line.Rope.name}, distance {Math.Sqrt(distanceSquared):F2} m, length {Math.Sqrt(lengthSquared):F2} m (up to {addedSlack:F1} m extra).");
+                                Plugin.Instance.DebugLog($"Starter mooring slack: {line.Rope.name}, distance {Math.Sqrt(distanceSquared):F2} m, length {Math.Sqrt(lengthSquared):F2} m (up to {addedSlack:F1} m extra).");
                             }
                         }
                         // Physics readiness can precede the observer mirror's

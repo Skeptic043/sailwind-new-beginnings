@@ -15,7 +15,6 @@ namespace NewBeginnings
         private static readonly FieldInfo EmbarkedField = AccessTools.Field(typeof(PlayerEmbarkerNew), "embarked");
         private static readonly MethodInfo DisembarkMethod = AccessTools.Method(typeof(PlayerEmbarkerNew), "PlayerDisembark");
         private static PlayerEmbarkerNew guarded;
-        private static bool reported;
 
         internal static void Begin(Transform observer, Transform controller)
         {
@@ -40,26 +39,17 @@ namespace NewBeginnings
                 // Native disembark restores actor parents and observer-to-controller
                 // world pose, and clears GameState.currentBoat and the embark flag.
                 DisembarkMethod.Invoke(guarded, null);
-                Plugin.Instance?.Report("Selected shore start restored native world-space player parenting before arrival.");
+                Plugin.Instance?.DebugLog("Selected shore start restored native world-space player parenting before arrival.");
             }
         }
 
         internal static void Release()
         {
             guarded = null;
-            reported = false;
         }
 
-        private static bool Blocks(PlayerEmbarkerNew instance)
-        {
-            if (guarded == null || instance != guarded) return false;
-            if (!reported)
-            {
-                reported = true;
-                Plugin.Instance?.Report("Deferred native boat embark while resolving the selected shore start.");
-            }
-            return true;
-        }
+        private static bool Blocks(PlayerEmbarkerNew instance) =>
+            guarded != null && instance == guarded;
 
         [HarmonyPatch(typeof(PlayerEmbarkerNew), "ObserverTriggerEnter")]
         private static class ObserverEntryPatch

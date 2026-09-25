@@ -22,6 +22,7 @@ namespace NewBeginnings
         public StartMenu Menu;
         public int Region;
         public BoatSize? Size;
+        internal StartingOptionsSettings Options;
     }
 
     internal sealed class ProbeVelocityGuard
@@ -94,6 +95,7 @@ namespace NewBeginnings
         private static readonly FieldInfo MenuAnimationsField = AccessTools.Field(typeof(StartMenu), "animsPlaying");
         private static StartPair pending;
         private static StartMenu pendingMenu;
+        private static StartingOptionsSettings pendingOptions;
         private static StartPair acceptedButtonPair;
         private static StartMenu acceptedButtonMenu;
         private static StartMenu nativeFallbackButtonMenu;
@@ -184,6 +186,8 @@ namespace NewBeginnings
                 ClearAcceptedButtonChoice();
                 pending = null;
                 pendingMenu = null;
+                pendingOptions = null;
+                StartingValues.Cancel();
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
                 Plugin.Instance?.CancelBoatSettle();
@@ -212,12 +216,16 @@ namespace NewBeginnings
                     regionUpdated = true;
                     pending = pair;
                     pendingMenu = __instance;
+                    pendingOptions = plugin.StartOptions.Copy();
+                    if (!pendingOptions.TryValidate(out var optionsReason))
+                        throw new InvalidOperationException(optionsReason);
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
                 }
                 catch (Exception exception)
                 {
                     pending = null;
                     pendingMenu = null;
+                    pendingOptions = null;
                     if (regionUpdated)
                     {
                         try { CurrentRegionField.SetValue(__instance, previousRegion); }
@@ -228,6 +236,18 @@ namespace NewBeginnings
                     }
                     plugin.Error("New Beginnings selection failed; vanilla new game will run.", exception);
                 }
+            }
+
+            private static Exception Finalizer(Exception __exception)
+            {
+                if (__exception != null)
+                {
+                    pending = null;
+                    pendingMenu = null;
+                    pendingOptions = null;
+                    StartingValues.Cancel();
+                }
+                return __exception;
             }
         }
 
@@ -241,6 +261,7 @@ namespace NewBeginnings
                 if (!ReferenceEquals(pendingMenu, __instance)) return;
                 pending = null;
                 pendingMenu = null;
+                pendingOptions = null;
                 Plugin.Instance?.Warn("New Beginnings selection was cleared because no player-start coroutine was created.");
             }
         }
@@ -256,6 +277,7 @@ namespace NewBeginnings
                     {
                         pending = null;
                         pendingMenu = null;
+                        pendingOptions = null;
                         Plugin.Instance?.Warn("New Beginnings skipped this native start because its camera tween seam was not verified; the regional game start will run.");
                     }
                     return;
@@ -265,6 +287,7 @@ namespace NewBeginnings
                 {
                     pending = null;
                     pendingMenu = null;
+                    pendingOptions = null;
                     Plugin.Instance?.Warn("New Beginnings skipped this native start because its observer or controller is unavailable; the regional game start will run.");
                     return;
                 }
@@ -372,7 +395,7 @@ namespace NewBeginnings
                         nativeTweenTarget.rotation);
                 else
                     Plugin.Instance?.Warn("Selected player marker disappeared before the native camera tween; preserving the already teleported observer position.");
-                Plugin.Instance?.Report("Suppressed native new-game camera tween for the selected port.");
+                Plugin.Instance?.DebugLog("Suppressed native new-game camera tween for the selected port.");
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
                 return;
@@ -384,8 +407,10 @@ namespace NewBeginnings
         {
             if (pending == null || !ReferenceEquals(menu, pendingMenu)) return false;
             var pair = pending;
+            var options = pendingOptions;
             pending = null;
             pendingMenu = null;
+            pendingOptions = null;
             try
             {
                 if (!TryResolve(pair.Port.Index, pair.Boat.Index, out var selected, out var reason) ||
@@ -401,7 +426,9 @@ namespace NewBeginnings
                 // Use the accepted catalog classification, including exact-name
                 // size overrides, only after its live identities are verified.
                 selected.Size = pair.Boat.Size;
+                selected.Options = options;
                 Apply(selected, menu, ref startPos);
+                StartingValues.Arm(selected);
                 return true;
             }
             catch (Exception exception)
@@ -431,7 +458,7 @@ namespace NewBeginnings
                 controller.transform.SetPositionAndRotation(target.position, target.rotation);
                 nativeTweenObserver = observer.gameObject;
                 nativeTweenTarget = target;
-                Plugin.Instance.Report("Native new-game observer and controller moved directly to the selected port.");
+                Plugin.Instance.DebugLog("Native new-game observer and controller moved directly to the selected port.");
             }
             catch (Exception exception)
             {
@@ -594,7 +621,7 @@ namespace NewBeginnings
                 !IsFinite(berthPosition) || !IsFinite(berthRotation) ||
                 !IsFinite(oldPosition) || !IsFinite(oldRotation))
                 throw new InvalidOperationException("A selected port, berth or boat has a non-finite transform.");
-            Plugin.Instance.Report($"Start placement coordinates: port {selected.Port.transform.position}, recovery dock marker {selected.Recovery.transform.position}, berth {berthPosition}, boat origin {oldPosition}.");
+            Plugin.Instance.DebugLog($"Start placement coordinates: port {selected.Port.transform.position}, recovery dock marker {selected.Recovery.transform.position}, berth {berthPosition}, boat origin {oldPosition}.");
             var oldVelocity = selected.Body.velocity;
             var oldAngularVelocity = selected.Body.angularVelocity;
             var anchor = selected.Ropes.anchor;
@@ -665,7 +692,7 @@ namespace NewBeginnings
                 Plugin.Instance.BeginPlayerStartTracking(menu, target);
                 StarterCargo.Arm(selected);
                 StarterMooring.Arm(menu, selected, frontRope, backRope);
-                Plugin.Instance.Report($"Placed boat {selected.Saveable.sceneIndex} at port {selected.Port.portIndex}; native new-game ownership grant will follow.");
+                Plugin.Instance.DebugLog($"Placed boat {selected.Saveable.sceneIndex} at port {selected.Port.portIndex}; native new-game ownership grant will follow.");
                 Plugin.Instance.BeginBoatSettle(menu, selected, berthPosition, berthRotation, probeGuard);
                 probeGuard = null;
                 StarterBoatRepair.Arm(menu, selected);
@@ -748,7 +775,6 @@ namespace NewBeginnings
                 Rope = rope,
                 LocalPosition = selected.Saveable.transform.InverseTransformPoint(rope.transform.position)
             }).ToArray();
-            LogHappyBayMooringGeometry(selected, candidates);
             var xSpan = candidates.Max(item => item.LocalPosition.x) -
                 candidates.Min(item => item.LocalPosition.x);
             var zSpan = candidates.Max(item => item.LocalPosition.z) -
@@ -821,7 +847,7 @@ namespace NewBeginnings
                 throw new InvalidOperationException("Selected boat has no distinct mooring ropes at opposite ends.");
             front = bestFront.Rope;
             back = bestBack.Rope;
-            Plugin.Instance.Report($"Start mooring ropes: front {front.name} at {bestFront.LocalPosition}, back {back.name} at {bestBack.LocalPosition}; " +
+            Plugin.Instance.DebugLog($"Start mooring ropes: front {front.name} at {bestFront.LocalPosition}, back {back.name} at {bestBack.LocalPosition}; " +
                 $"longitudinal axis {(useX ? "X" : "Z")} span {maximum - minimum:0.00} m; " +
                 $"dock lateral offset {dockSide:0.00} m, rope lateral center {lateralCenter:0.00} m; " +
                 $"{(bestPriority == 2 ? "mixed-side fallback" : bestPriority == 0 ? "dock-facing same-side pair" : "same-side pair")}, horizontal distance squared {bestDistance:0.00}.");
@@ -835,31 +861,6 @@ namespace NewBeginnings
             var x = rope.x - dock.x;
             var z = rope.z - dock.z;
             return x * x + z * z;
-        }
-
-        private static void LogHappyBayMooringGeometry(ResolvedStart selected, RopeCandidate[] candidates)
-        {
-            if (selected.Saveable.sceneIndex != 144 || !string.Equals(selected.Saveable.gameObject.name,
-                "BOAT happybayboat (144)(Clone)", StringComparison.OrdinalIgnoreCase)) return;
-            try
-            {
-                var hull = selected.Saveable.transform;
-                var front = selected.FrontMooring.transform;
-                var back = selected.BackMooring.transform;
-                Plugin.Instance?.Report($"Happy Bay mooring diagnostic: port {selected.Port.portIndex}, hull {hull.name}; " +
-                    $"front dock {front.name} [parent {front.parent?.name}, root {front.root.name}] at hull-local {hull.InverseTransformPoint(front.position).ToString("F3")}; " +
-                    $"back dock {back.name} [parent {back.parent?.name}, root {back.root.name}] at hull-local {hull.InverseTransformPoint(back.position).ToString("F3")}; " +
-                    $"registered ropes {candidates.Length}.");
-                foreach (var candidate in candidates.Take(8))
-                    Plugin.Instance?.Report($"Happy Bay mooring diagnostic: rope {candidate.Rope.name} " +
-                        $"at hull-local {candidate.LocalPosition.ToString("F3")}, selected body {candidate.Rope.GetBoatRigidbody() == selected.Body}, " +
-                        $"front horizontal distance squared {HorizontalDistanceSquared(candidate.Rope.transform.position, front.position):F3}, " +
-                        $"back horizontal distance squared {HorizontalDistanceSquared(candidate.Rope.transform.position, back.position):F3}.");
-            }
-            catch (Exception exception)
-            {
-                Plugin.Instance?.Warn("Happy Bay mooring diagnostic was unavailable: " + exception.Message);
-            }
         }
 
         private static void MoorAt(PickupableBoatMooringRope rope, GPButtonDockMooring dock,
@@ -897,9 +898,9 @@ namespace NewBeginnings
             if (!IsFinite(candidate))
                 throw new InvalidOperationException("Large-boat berth offset produced a non-finite position.");
             // Compose after native/Crab Beach/Siren Song placement. This extra
-            // requested distance is unconditional on neighboring hulls; the
+            // distance is unconditional on neighboring hulls; the
             // existing berth selection and occupied-pair checks still run.
-            Plugin.Instance.Report($"Boat {selected.Saveable.sceneIndex} berth moved an extra {distance:F2}m away from its live dock pair to {candidate}; existing berth adjustments and shore markers preserved.");
+            Plugin.Instance.DebugLog($"Boat {selected.Saveable.sceneIndex} berth moved an extra {distance:F2}m away from its live dock pair to {candidate}; existing berth adjustments and shore markers preserved.");
             return candidate;
         }
 
