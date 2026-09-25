@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>New Beginnings — sailboat and sunrise</title>
+  <rect width="256" height="256" fill="#1c3441"/>
+  <g fill="none" stroke="#a98a5d" stroke-width="5" stroke-linecap="round">
+    <path d="M177 42V34 M207 54L213 48 M218 81H226 M146 54L140 48"/>
+  </g>
+  <path d="M147 104V91A30 30 0 0 1 207 91V104Z" fill="#a98a5d"/>
+  <path d="M143 110H215" fill="none" stroke="#a98a5d" stroke-width="5" stroke-linecap="round"/>
+  <path d="M115 52V159H51Z M127 78L183 159H127Z" fill="#e8d3a8"/>
+  <path d="M116 166V49" fill="none" stroke="#a98a5d" stroke-width="5" stroke-linecap="round"/>
+  <path d="M43 174H214L192 197H76Z" fill="#e8d3a8"/>
+  <path d="M76 197H192" fill="none" stroke="#a98a5d" stroke-width="4" stroke-linecap="round"/>
+  <g fill="none" stroke="#e8d3a8" stroke-width="5" stroke-linecap="round">
+    <path d="M58 217H100 M118 217H157 M175 217H198"/>
+  </g>
+</svg>
