@@ -23,6 +23,7 @@ namespace NewBeginnings
         public int Region;
         public BoatSize? Size;
         internal StartingOptionsSettings Options;
+        internal NativeBerth.Plan NativeBerth;
     }
 
     internal sealed class ProbeVelocityGuard
@@ -485,19 +486,53 @@ namespace NewBeginnings
                 port.Recovery.mooringBack == null || boat.Boat.isPurchased()) return false;
             var body = boat.Saveable.GetComponent<Rigidbody>();
             var ropes = boat.Saveable.GetComponent<BoatMooringRopes>();
-            var front = port.Recovery.mooringFront.GetComponent<GPButtonDockMooring>();
-            var back = port.Recovery.mooringBack.GetComponent<GPButtonDockMooring>();
-            if (body == null || !ProbeVelocityGuard.CanGuard(boat.Saveable) ||
-                ropes == null || ropes.ropes == null || ropes.ropes.Length < 2 ||
-                ropes.ropes.Any(item => item == null) || ropes.GetAnchorController() == null ||
-                ropes.anchor != null && ropes.anchor.IsSet() ||
-                front == null || back == null || front == back ||
-                front.spring == null || back.spring == null) return false;
-            if (SirenSongBerth.IsTarget(port.Port) &&
-                !SirenSongBerth.TryGetMoorings(port.Port, port.Recovery, body,
-                    out front, out back, out _)) return false;
-            return (front.spring.connectedBody == null || front.spring.connectedBody == body) &&
-                (back.spring.connectedBody == null || back.spring.connectedBody == body);
+            if (NativeBerth.TryResolve(port.Port, boat.Boat, boat.Saveable, body, ropes, out _))
+                return true;
+            var selected = new ResolvedStart { Port = port.Port, Recovery = port.Recovery,
+                Boat = boat.Boat, Saveable = boat.Saveable, Body = body, Ropes = ropes };
+            return TryResolveRelocation(selected, out _);
+        }
+
+        // Reused immediately before a stale preservation plan falls back. No
+        // boat mutation is permitted until these relocation-only guards pass.
+        private static bool TryResolveRelocation(ResolvedStart selected, out string reason)
+        {
+            reason = null;
+            var recovery = selected.Recovery;
+            var ropes = selected.Ropes;
+            if (selected.Body == null || selected.Saveable == null ||
+                !ProbeVelocityGuard.CanGuard(selected.Saveable) || ropes == null ||
+                ropes.ropes == null || ropes.ropes.Length < 2 || ropes.ropes.Any(item => item == null) ||
+                ropes.GetAnchorController() == null || recovery == null || recovery.parentPort != selected.Port ||
+                recovery.boatPos == null || recovery.mooringFront == null || recovery.mooringBack == null)
+            {
+                reason = "Selected boat or recovery berth lacks its normal relocation components.";
+                return false;
+            }
+            var front = recovery.mooringFront.GetComponent<GPButtonDockMooring>();
+            var back = recovery.mooringBack.GetComponent<GPButtonDockMooring>();
+            if (front == null || back == null || front == back || front.spring == null || back.spring == null)
+            {
+                reason = "Selected recovery berth lacks its initialized dock springs.";
+                return false;
+            }
+            if (SirenSongBerth.IsTarget(selected.Port) &&
+                !SirenSongBerth.TryGetMoorings(selected.Port, recovery, selected.Body,
+                    out front, out back, out reason)) return false;
+            if (front.spring.connectedBody != null && front.spring.connectedBody != selected.Body ||
+                back.spring.connectedBody != null && back.spring.connectedBody != selected.Body)
+            {
+                reason = "Selected recovery dock spring is occupied by another boat.";
+                return false;
+            }
+            if (ropes.anchor != null && ropes.anchor.IsSet())
+            {
+                reason = "Selected boat is anchored; relocation cannot safely restore that state on failure.";
+                return false;
+            }
+            selected.FrontMooring = front;
+            selected.BackMooring = back;
+            return true;
         }
 
         private static bool TryResolve(int portIndex, int boatSceneIndex, out ResolvedStart result, out string reason)
@@ -555,27 +590,12 @@ namespace NewBeginnings
             }
             var body = saveable.GetComponent<Rigidbody>();
             var ropes = saveable.GetComponent<BoatMooringRopes>();
-            if (body == null || !ProbeVelocityGuard.CanGuard(saveable) ||
-                ropes == null || ropes.ropes == null || ropes.ropes.Length < 2 ||
-                ropes.ropes.Any(item => item == null) || ropes.GetAnchorController() == null)
-            {
-                reason = $"Boat {boatSceneIndex} lacks its normal rigidbody, velocity guard, mooring ropes, or anchor controller.";
-                return false;
-            }
-            if (SirenSongBerth.IsTarget(port) &&
-                !SirenSongBerth.TryGetMoorings(port, recovery, body,
-                    out frontMooring, out backMooring, out reason)) return false;
-            if ((frontMooring.spring.connectedBody != null && frontMooring.spring.connectedBody != body) ||
-                (backMooring.spring.connectedBody != null && backMooring.spring.connectedBody != body))
-            {
-                reason = $"Port {portIndex} has a dock spring occupied by another boat.";
-                return false;
-            }
-            if (ropes.anchor != null && ropes.anchor.IsSet())
-            {
-                reason = $"Boat {boatSceneIndex} is anchored; this fixed-start stage cannot safely restore that state on failure.";
-                return false;
-            }
+            NativeBerth.TryResolve(port, boat, saveable, body, ropes, out var nativeBerth);
+            var relocation = new ResolvedStart { Port = port, Recovery = recovery,
+                Boat = boat, Saveable = saveable, Body = body, Ropes = ropes };
+            if (nativeBerth == null && !TryResolveRelocation(relocation, out reason)) return false;
+            frontMooring = nativeBerth != null ? nativeBerth.Front : relocation.FrontMooring;
+            backMooring = nativeBerth != null ? nativeBerth.Back : relocation.BackMooring;
             var region = (int)port.region;
             if (region < 0 || region > 2)
             {
@@ -594,12 +614,85 @@ namespace NewBeginnings
             {
                 Port = port, Recovery = recovery, Boat = boat, Saveable = saveable,
                 Body = body, Ropes = ropes, FrontMooring = frontMooring,
-                BackMooring = backMooring, StarterSet = sets[0], Region = region
+                BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth
             };
             return true;
         }
 
         private static void Apply(ResolvedStart selected, StartMenu menu, ref Transform startPos)
+        {
+            if (selected.NativeBerth != null && selected.NativeBerth.Revalidate())
+            {
+                ApplyPreserved(selected, menu, ref startPos);
+                return;
+            }
+            if (selected.NativeBerth != null)
+                Plugin.Instance.Warn("Native berth changed after selection; checking the ordinary relocation berth again.");
+            selected.NativeBerth = null;
+            if (!TryResolveRelocation(selected, out var reason))
+                throw new InvalidOperationException(reason);
+            ApplyRelocated(selected, menu, ref startPos);
+        }
+
+        private static void ApplyPreserved(ResolvedStart selected, StartMenu menu, ref Transform startPos)
+        {
+            var plan = selected.NativeBerth;
+            var boatTransform = selected.Saveable.transform;
+            var starters = (PurchasableBoat[])StartingBoatsField.GetValue(menu);
+            if (starters == null || selected.Region < 0 || selected.Region >= starters.Length ||
+                starters[selected.Region] == null)
+                throw new InvalidOperationException("Native regional starting boat array is incomplete.");
+            var oldStarterBoat = selected.StarterSet.starterBoat;
+            var oldLastBoat = GameState.lastBoat;
+            var oldLastOwnedBoat = GameState.lastOwnedBoat;
+            var oldLastVisitedPort = GameState.lastVisitedPort;
+            var oldStartPos = startPos;
+            try
+            {
+                selected.FrontMooring = plan.Front;
+                selected.BackMooring = plan.Back;
+                var target = Plugin.Instance.MakeTemporaryStart(selected, boatTransform.rotation,
+                    plan.ShorePosition, boatTransform.position);
+                if (!IsFinite(target.position) || !IsFinite(target.rotation))
+                    throw new InvalidOperationException("Selected player target gained a non-finite transform.");
+                var replacement = (PurchasableBoat[])starters.Clone();
+                replacement[selected.Region] = selected.Boat;
+                StartingBoatsField.SetValue(menu, replacement);
+                selected.StarterSet.starterBoat = boatTransform;
+                GameState.lastBoat = boatTransform;
+                GameState.lastOwnedBoat = boatTransform;
+                GameState.lastVisitedPort = selected.Port;
+                startPos = target;
+                selected.Menu = menu;
+                Plugin.Instance.BeginPlayerStartTracking(menu, target);
+                StarterCargo.Arm(selected);
+                StarterBoatRepair.Arm(menu, selected);
+                // Native placement is already intact; the repair still waits
+                // for owned, active gameplay and its normal eight-second delay.
+                StarterBoatRepair.MarkSettled(selected);
+                LeopardStarterRig.Arm(menu, selected);
+                Plugin.Instance.DebugLog($"Preserved native berth for boat {selected.Saveable.sceneIndex} at port {selected.Port.portIndex}; native new-game ownership grant will follow.");
+            }
+            catch
+            {
+                // This branch never changes hull, anchor or rope state. Its
+                // rollback must not call relocation's unmoor/restore helpers.
+                StartingBoatsField.SetValue(menu, starters);
+                selected.StarterSet.starterBoat = oldStarterBoat;
+                GameState.lastBoat = oldLastBoat;
+                GameState.lastOwnedBoat = oldLastOwnedBoat;
+                GameState.lastVisitedPort = oldLastVisitedPort;
+                startPos = oldStartPos;
+                Plugin.Instance.CancelPlayerStartTracking();
+                Plugin.Instance.ClearDocksideSurface();
+                StarterCargo.Disarm();
+                StarterBoatRepair.Cancel();
+                LeopardStarterRig.Cancel();
+                throw;
+            }
+        }
+
+        private static void ApplyRelocated(ResolvedStart selected, StartMenu menu, ref Transform startPos)
         {
             // Resolve the berth while the selected boat is still at its old location. Native
             // GetBoatPos applies its normal occupied-berth offset when another boat is present.

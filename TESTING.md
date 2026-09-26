@@ -2,6 +2,20 @@
 
 Build and package checks do not run Sailwind. Check changed startup behavior in-game using a separate new game.
 
+## Preserve an existing native berth
+
+Start each vanilla boat at its original port: Dhow at Neverdin, Sanbuq at Gold Rock City, Baghlah at Oasis, Cog at Siren Song, Brig at Fort Aestrin, Jong at Lagoon Bay, Junk at Dragon Cliffs, and Kakam at Crab Beach. Check that the log reports a preserved native berth, ownership is granted, the hull stays at its original dock, and its original moorings and anchor remain unchanged. Confirm that no additional line slack, berth offset or delayed hull relocation runs for that boat. Its one-time hull repair must still run about eight seconds after ownership and gameplay readiness. Check that later damage remains and that loading an existing save does not schedule another repair.
+
+Repeat a nearby and a distant start with Scrambled Seas. Check the actual dock after it becomes visible: the player and crates must arrive on reachable ground beside the retained berth, not below sea level or at the port's recovery dock. Verify money, reputation, selected equipment and standard-supply choices still apply. Board, disembark, depart, save and reload. Preservation is a new-game operation and must not run on loading an existing save.
+
+Start the same ship at another port and confirm the existing relocation, mooring slack and one-time repair still work. At Siren Song, specifically compare keeping the native Cog with starting another ship at the alternate berth. At Fort Aestrin, inactive Brig variants must not prevent preservation of the actual Brig.
+
+With a mod boat that uses native authored dock references and mooring components, verify its original-port start follows the preservation path. A missing, ambiguous, disconnected or occupied berth must use the ordinary placement checks, or reject an unusable start through the existing selection flow. A mod boat passing these checks is not evidence that every mod boat is supported.
+
+Static scene inspection and managed tests do not establish these in-game results. The Gold Rock invisible-climbing investigation remains separate; keeping a berth is not yet a verified remedy for that collision problem.
+
+Player trials confirmed the Junk, Sanbuq, Baghlah and Kakam at their original spawn points, with Happy Bay Boat also reported as apparently correct. The retained Baghlah/Oasis and Kakam/Crab Beach logs confirm native-berth preservation and all 56 starter supply items placed. Neither run logged repair completion, and time spent in active gameplay was uncertain, so repair acceptance remains open. On the next check, wait for the repair outcome message and also pause/resume during its delay: a temporary physics pause should restart the delay after readiness returns, without causing a second repair after completion.
+
 ## Menu and placement
 
 - On a fresh launch, confirm the parchment appears behind the new-game controls before opening any submenu. Recheck after returning from exclusions and Starting Options, then after leaving and reopening the new-game menu.

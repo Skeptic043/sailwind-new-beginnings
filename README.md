@@ -33,7 +33,11 @@ With standard supplies enabled, your starting port determines the regional suppl
 
 Filled boxes and barrels use their normal contents. Box of wall hooks contains 12 hooks for hanging items on walls, while Box of fishing hooks contains 20 fishing hooks.
 
-Boats receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. About eight seconds after the starting boat is ready, it receives one hull repair to clear damage from its initial settling.
+When your selected boat is already at its original berth in the starting port and that berth can be verified, New Beginnings leaves the boat and its moorings in place. You receive ownership normally, with your player and supplies placed near that dock. This also applies to mod boats whose original berth can be verified.
+
+Boats that need to be moved receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. If an existing berth cannot be verified, New Beginnings uses its usual starting placement.
+
+Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
 ## Configuration
 
@@ -71,6 +75,7 @@ Ports with limited room for large ship spawns include (but are not limited to):
 - Sage Hills
 - Mirage Mountain
 - Aestra Abbey
+- Old Ankh Town
 
 HMS Leopard is especially large and can struggle at ports that work for other large ships. She has grounded at Neverdin on spawn in my testing and may be difficult to free there. She also ships without default sails. Because of this, on a new start with an unfitted Leopard, New Beginnings adds one stock medium lateen to its central main mast.
 
