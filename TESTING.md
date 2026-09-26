@@ -14,7 +14,7 @@ With a mod boat that uses native authored dock references and mooring components
 
 Static scene inspection and managed tests do not establish these in-game results. The Gold Rock invisible-climbing investigation remains separate; keeping a berth is not yet a verified remedy for that collision problem.
 
-Player trials confirmed the Junk, Sanbuq, Baghlah and Kakam at their original spawn points, with Happy Bay Boat also reported as apparently correct. The retained Baghlah/Oasis and Kakam/Crab Beach logs confirm native-berth preservation and all 56 starter supply items placed. Neither run logged repair completion, and time spent in active gameplay was uncertain, so repair acceptance remains open. On the next check, wait for the repair outcome message and also pause/resume during its delay: a temporary physics pause should restart the delay after readiness returns, without causing a second repair after completion.
+Player trials confirmed the Junk, Sanbuq, Baghlah and Kakam at their original spawn points, with Happy Bay Boat also reported as apparently correct. The retained Baghlah/Oasis and Kakam/Crab Beach logs confirm native-berth preservation and all 56 starter supply items placed. Neither run logged repair completion, and time spent in active gameplay was uncertain. A later Jong run confirmed the preserved berth, all 56 supplies and one completed hull repair with damage already at zero. That run used the earlier repair-enabled build, so it does not verify the subsequent pause/retry adjustment. Check pause/resume during the delay: a temporary physics pause should restart the delay after readiness returns, without causing a second repair after completion.
 
 ## Menu and placement
 
@@ -29,6 +29,7 @@ Choose combinations relevant to the change. Larger ships can ground at cramped p
 
 ## Starting options
 
+- Select a fishing rod and confirm it casts after starter placement, both when placed loose and after withdrawal from a crate. Save and reload, then cast again. Repeat with a large mixed loadout to check that packing and placement still complete normally. The user reported these fishing-rod checks passed on 2026-09-26.
 - Open each page with and without Scrambled Seas and Save Slots Plus. Check label size, pointer targets, slider clicks and dragging, and the native name field after returning. The single centered Done button must retain edits when reopening the menu. With Sailwind Difficulty installed, check that its panel does not cover the Starting Options panel or Done button.
 - Check a default start, then 0x, a fractional multiplier and 100x. Only the selected starting faction's currency should multiply. Check blank, 0 and positive custom amounts for all four currencies, including an override of the starting faction's currency. Repeat a relevant case with Sailwind Difficulty and Scrambled Seas.
 - Check default reputation, the main starting-region level, and distinct values for all three regions. Positive regional values must win over the main value. Zero must leave that region at its normal value unless the main slider applies there. Verify both the displayed level and its trading/mission effects.

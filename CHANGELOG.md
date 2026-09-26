@@ -1,5 +1,15 @@
 # Release notes
 
+## Version 1.2.1
+
+### Changed
+
+- Boats starting at their original port now keep their existing berth, moorings and anchor when available instead of being moved to the port's recovery location. This change includes mod boats that use the game's native mooring setup.
+
+### Fixed
+
+- Fixed fishing rods selected as starting equipment failing to cast.
+
 ## Version 1.2.0
 
 ### Added

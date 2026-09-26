@@ -115,6 +115,7 @@ namespace NewBeginnings
         private static readonly Dictionary<ShipItem, ShipItem> Packed = new Dictionary<ShipItem, ShipItem>();
         private static readonly Dictionary<ShipItem, ShipItem> WallHooks = new Dictionary<ShipItem, ShipItem>();
         private static readonly HashSet<ShipItem> WallHookBoxes = new HashSet<ShipItem>();
+        private static readonly HashSet<ShipItem> Purchased = new HashSet<ShipItem>();
         private static ResolvedStart owner;
         private static bool appended;
         private static bool appendSucceeded;
@@ -227,6 +228,32 @@ namespace NewBeginnings
             Packed.Clear();
             WallHooks.Clear();
             WallHookBoxes.Clear();
+            Purchased.Clear();
+        }
+
+        // Native StarterSet marks its children sold without calling OnBuy.
+        // ShipItemFishingRod.OnLoad hides the physical bobber while unsold and
+        // only OnBuy restores it, so an added rod could never cast. Complete
+        // that purchase step once, before packing or after final placement.
+        private static void CompletePurchase(ShipItem item)
+        {
+            if (item == null || !(item is ShipItemFishingRod) || !Extras.Contains(item) ||
+                !item.sold || !Purchased.Add(item)) return;
+            try
+            {
+                item.OnBuy();
+            }
+            catch (Exception exception)
+            {
+                Plugin.Instance?.Error("Could not finish setting up a starter fishing rod. It may not be able to cast.", exception);
+            }
+        }
+
+        internal static void CompleteLoosePurchases()
+        {
+            if (GameState.currentlyLoading) return;
+            foreach (var item in Extras.ToArray())
+                if (!Packed.ContainsKey(item)) CompletePurchase(item);
         }
 
         internal static bool IsExtra(ShipItem item) => !ReferenceEquals(item, null) && Extras.Contains(item);
@@ -403,6 +430,7 @@ namespace NewBeginnings
                     if (crate == null) { reason = "waiting for an available native equipment crate"; return false; }
                     if (!item.sold || !crate.sold || crate.GetComponent<SaveablePrefab>().instanceId <= 0)
                     { reason = "waiting for native starter-item ownership"; return false; }
+                    CompletePurchase(item);
                     prepare(item);
                     item.transform.SetPositionAndRotation(crate.transform.position, crate.transform.rotation);
                     Insert.Invoke(crate.GetComponent(CrateType), new object[] { item });

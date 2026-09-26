@@ -106,6 +106,7 @@ namespace NewBeginnings
             wrapperObserved = false;
             placementClaimed = false;
             fallbackScheduled = false;
+            AdditionalEquipment.CompleteLoosePurchases();
             AdditionalEquipment.Reset();
             Captured.Clear();
             DifficultyRemovalRequests.Clear();
