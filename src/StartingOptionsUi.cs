@@ -7,6 +7,23 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
+    internal sealed class EquipmentButtonRepeat
+    {
+        private float due;
+        private int repeats;
+        internal bool Active { get; private set; }
+        internal void Start(float now) { Active = true; repeats = 0; due = now + .45f; }
+        internal void Stop() { Active = false; }
+        internal bool Tick(float now, bool held, bool focused)
+        {
+            if (!held || !focused) { Stop(); return false; }
+            if (!Active || now < due) return false;
+            repeats++;
+            due = now + Math.Max(.045f, .16f - repeats * .015f);
+            return true;
+        }
+    }
+
     // Uses the same world-space pointer targets as Sailwind's settings sliders.
     internal sealed class StartingOptionsSlider : MonoBehaviour
     {
@@ -126,7 +143,11 @@ namespace NewBeginnings
         private readonly string[] amounts = new string[4];
         private readonly TextMesh[] reputationLabels = new TextMesh[4];
         private readonly StartingOptionsSlider[] reputationSliders = new StartingOptionsSlider[4];
-        private readonly MenuUiButton[] equipmentRows = new MenuUiButton[EquipmentRows];
+        private readonly TextMesh[] equipmentRows = new TextMesh[EquipmentRows];
+        private readonly MenuUiButton[] equipmentCounts = new MenuUiButton[EquipmentRows];
+        private readonly MenuUiButton[] equipmentMinus = new MenuUiButton[EquipmentRows];
+        private readonly MenuUiButton[] equipmentPlus = new MenuUiButton[EquipmentRows];
+        private MenuUiButton standardSupplies;
         private StartingOptionsSlider multiplier;
         private MenuUiButton previous;
         private MenuUiButton next;
@@ -139,6 +160,11 @@ namespace NewBeginnings
         private int page;
         private int tab;
         private int focusedCurrency = -1;
+        private int focusedEquipment = -1;
+        private string equipmentInput = "";
+        private int repeatingRow;
+        private int repeatingDirection;
+        private readonly EquipmentButtonRepeat equipmentRepeat = new EquipmentButtonRepeat();
         private bool selectAll;
         internal bool IsOpen { get; private set; }
 
@@ -158,6 +184,7 @@ namespace NewBeginnings
         {
             var root = new GameObject(name);
             root.transform.SetParent(transform, false);
+            root.transform.localPosition = Vector3.up * .20f;
             return root;
         }
 
@@ -172,10 +199,10 @@ namespace NewBeginnings
 
         private void Build()
         {
-            owner.MakeLabel(transform, "Starting options title", "Starting Options", 0f, .76f, .016f);
-            moneyTab = Button(transform, "Money tab", "Money", -1.18f, .55f, .90f, .47f, () => ShowTab(0));
-            reputationTab = Button(transform, "Reputation tab", "Reputation", 0f, .55f, 1.08f, .47f, () => ShowTab(1));
-            equipmentTab = Button(transform, "Equipment tab", "Equipment", 1.18f, .55f, 1.05f, .47f, () => ShowTab(2));
+            owner.MakeLabel(transform, "Starting options title", "Starting Options", 0f, .96f, .016f);
+            moneyTab = Button(transform, "Money tab", "Money", -1.18f, .75f, .90f, .47f, () => ShowTab(0));
+            reputationTab = Button(transform, "Reputation tab", "Reputation", 0f, .75f, 1.08f, .47f, () => ShowTab(1));
+            equipmentTab = Button(transform, "Equipment tab", "Equipment", 1.18f, .75f, 1.05f, .47f, () => ShowTab(2));
             message = owner.MakeLabel(transform, "Starting options message", "", 0f, -.78f, .009f);
             Button(transform, "Save starting options", "Done", 0f, -.97f, .82f, .64f, () => Close(true));
 
@@ -214,18 +241,29 @@ namespace NewBeginnings
                 "Regional levels override the starting region level", 0f, -.69f, .009f);
 
             equipmentPage = Page("Additional Equipment");
-            equipmentSummary = owner.MakeLabel(equipmentPage.transform, "Additional equipment count", "", 0f, .33f, .010f);
+            standardSupplies = Button(equipmentPage.transform, "Standard starter supplies", "", 0f, .34f, 2.9f, .32f,
+                () => { draft.StandardSupplies = !draft.StandardSupplies; RefreshEquipment(); });
+            standardSupplies.description = "Include the normal regional supplies, or start with only your chosen equipment.";
+            equipmentSummary = owner.MakeLabel(equipmentPage.transform, "Additional equipment count", "", 0f, .23f, .009f);
             for (var i = 0; i < EquipmentRows; i++)
             {
                 var row = i;
-                equipmentRows[i] = Button(equipmentPage.transform, "Additional equipment row " + i, "",
-                    i % 2 == 0 ? -1.01f : 1.01f, .13f - .17f * (i / 2), 1.91f, .43f, () => ToggleEquipment(row));
+                var x = i % 2 == 0 ? -1.01f : 1.01f;
+                var y = .13f - .18f * (i / 2);
+                equipmentRows[i] = owner.MakeLabel(equipmentPage.transform, "Equipment name " + i, "", x, y, .010f);
+                equipmentMinus[i] = Button(equipmentPage.transform, "Equipment decrease " + i, "-",
+                    x - .50f, y - .095f, .28f, .28f, () => BeginEquipmentRepeat(row, -1));
+                equipmentCounts[i] = owner.MakeButton(equipmentPage.transform, "Equipment quantity " + i,
+                    x, y - .095f, .62f, .28f, () => FocusEquipment(row));
+                equipmentCounts[i].description = "Enter a whole quantity. Zero removes this item from your loadout.";
+                equipmentPlus[i] = Button(equipmentPage.transform, "Equipment increase " + i, "+",
+                    x + .50f, y - .095f, .28f, .28f, () => BeginEquipmentRepeat(row, 1));
             }
-            previous = Button(equipmentPage.transform, "Previous equipment page", "<", -1.45f, -.70f, .44f, .42f,
+            previous = Button(equipmentPage.transform, "Previous equipment page", "<", -1.45f, -.90f, .44f, .42f,
                 () => { page--; RefreshEquipment(); });
-            next = Button(equipmentPage.transform, "Next equipment page", ">", 1.45f, -.70f, .44f, .42f,
+            next = Button(equipmentPage.transform, "Next equipment page", ">", 1.45f, -.90f, .44f, .42f,
                 () => { page++; RefreshEquipment(); });
-            clearEquipment = Button(equipmentPage.transform, "Clear additional equipment", "Clear selection", 0f, -.70f, 1.35f, .42f,
+            clearEquipment = Button(equipmentPage.transform, "Clear additional equipment", "Clear selection", 0f, -.90f, 1.35f, .42f,
                 ClearEquipmentSelection);
         }
 
@@ -260,6 +298,8 @@ namespace NewBeginnings
             IsOpen = true;
             page = 0;
             focusedCurrency = -1;
+            focusedEquipment = -1;
+            equipmentRepeat.Stop();
             owner.ShowStartingOptions(true);
             gameObject.SetActive(true);
             ShowTab(0);
@@ -293,6 +333,8 @@ namespace NewBeginnings
         private void OnDisable()
         {
             focusedCurrency = -1;
+            focusedEquipment = -1;
+            equipmentRepeat.Stop();
             selectAll = false;
             if (IsOpen) Close(false);
         }
@@ -307,7 +349,7 @@ namespace NewBeginnings
             MenuUi.SetEnabled(moneyTab, tab != 0);
             MenuUi.SetEnabled(reputationTab, tab != 1);
             MenuUi.SetEnabled(equipmentTab, tab != 2);
-            message.text = tab == 2 ? "Each checked item adds one extra to your normal loadout." : "";
+            message.text = "";
             RefreshMoney();
             RefreshReputation();
             RefreshEquipment();
@@ -352,22 +394,36 @@ namespace NewBeginnings
             var modSection = page >= VanillaPages;
             equipmentSummary.text = (modSection ? "Mod items" : "Vanilla items") +
                 " - page " + (page + 1) + "/" + pages + " - " +
-                draft.AdditionalEquipment.Count + " selected total";
+                draft.EquipmentTotal + " chosen items";
+            MenuUi.SetButtonText(standardSupplies, "Standard supplies: " + (draft.StandardSupplies ? "On" : "Off"));
+            MenuUi.ButtonText(standardSupplies).transform.localScale = Vector3.one * .010f;
             for (var row = 0; row < EquipmentRows; row++)
             {
                 var index = EquipmentPageStart + row;
-                var button = equipmentRows[row];
-                button.transform.parent.gameObject.SetActive(index < EquipmentPageEnd);
+                var visible = index < EquipmentPageEnd;
+                equipmentRows[row].gameObject.SetActive(visible);
+                equipmentCounts[row].transform.parent.gameObject.SetActive(visible);
+                equipmentMinus[row].transform.parent.gameObject.SetActive(visible);
+                equipmentPlus[row].transform.parent.gameObject.SetActive(visible);
                 if (index >= EquipmentPageEnd) continue;
                 var entry = equipment[index];
-                var selected = draft.AdditionalEquipment.Contains(entry.Key);
-                var label = (selected ? "[x] " : "[ ] ") + entry.DisplayName;
-                MenuUi.SetButtonText(button, label);
-                MenuUi.ButtonText(button).transform.localScale = Vector3.one *
-                    (.011f * Mathf.Min(1f, 26f / Math.Max(26, label.Length)));
-                button.lookText = entry.DisplayName;
-                button.description = (entry.IsModded ? entry.SourceName + ": " : "") +
-                    (selected ? "Remove" : "Add") + " one extra " + entry.DisplayName;
+                draft.EquipmentQuantities.TryGetValue(entry.Key, out var quantity);
+                equipmentRows[row].text = entry.DisplayName;
+                equipmentRows[row].transform.localScale = Vector3.one *
+                    (.010f * Mathf.Min(1f, 26f / Math.Max(26, entry.DisplayName.Length)));
+                var countText = focusedEquipment == row ?
+                    (selectAll ? "[" + equipmentInput + "]" : equipmentInput) + "|" : quantity.ToString(CultureInfo.InvariantCulture);
+                MenuUi.SetButtonText(equipmentCounts[row], countText);
+                MenuUi.ButtonText(equipmentCounts[row]).transform.localScale = Vector3.one *
+                    (.010f * Mathf.Min(1f, 7f / Math.Max(7, countText.Length)));
+                MenuUi.SetEnabled(equipmentMinus[row], quantity > 0);
+                MenuUi.SetEnabled(equipmentPlus[row], quantity < int.MaxValue);
+                foreach (var button in new[] { equipmentMinus[row], equipmentPlus[row] })
+                {
+                    MenuUi.ButtonText(button).transform.localScale = Vector3.one * .010f;
+                    button.lookText = entry.DisplayName;
+                    button.description = (entry.IsModded ? entry.SourceName + ": " : "") + entry.DisplayName;
+                }
             }
             MenuUi.SetEnabled(previous, pages > 1);
             MenuUi.SetEnabled(next, pages > 1);
@@ -380,31 +436,36 @@ namespace NewBeginnings
             if (tab == 2)
                 message.text = unavailable.Length > 0
                     ? unavailable.Length + " selected items unavailable. Clear unavailable to remove them."
-                    : "Each checked item adds one extra to your normal loadout.";
+                    : "";
         }
 
-        private string[] UnavailableEquipmentKeys() => draft.AdditionalEquipment
+        private string[] UnavailableEquipmentKeys() => draft.EquipmentQuantities.Keys
             .Except(equipment.Select(entry => entry.Key), StringComparer.Ordinal).ToArray();
 
         private void ClearEquipmentSelection()
         {
             var unavailable = UnavailableEquipmentKeys();
-            if (unavailable.Length == 0) draft.AdditionalEquipment.Clear();
-            else foreach (var key in unavailable) draft.AdditionalEquipment.Remove(key);
+            if (unavailable.Length == 0) draft.EquipmentQuantities.Clear();
+            else foreach (var key in unavailable) draft.EquipmentQuantities.Remove(key);
             RefreshEquipment();
         }
 
-        private void ToggleEquipment(int row)
+        private void ChangeEquipment(int row, int direction)
         {
             var index = EquipmentPageStart + row;
             if (index < 0 || index >= EquipmentPageEnd) return;
             var key = equipment[index].Key;
-            if (!draft.AdditionalEquipment.Remove(key)) draft.AdditionalEquipment.Add(key);
+            draft.EquipmentQuantities.TryGetValue(key, out var quantity);
+            if (direction > 0 && quantity == int.MaxValue || direction < 0 && quantity == 0) return;
+            quantity += direction;
+            if (quantity == 0) draft.EquipmentQuantities.Remove(key);
+            else draft.EquipmentQuantities[key] = quantity;
             RefreshEquipment();
         }
 
         private void Focus(int index)
         {
+            Blur();
             focusedCurrency = index;
             selectAll = true;
             RefreshMoney();
@@ -413,8 +474,46 @@ namespace NewBeginnings
         private void Blur()
         {
             focusedCurrency = -1;
+            focusedEquipment = -1;
+            equipmentRepeat.Stop();
             selectAll = false;
-            if (draft != null) RefreshMoney();
+            if (draft != null) { RefreshMoney(); RefreshEquipment(); }
+        }
+
+        private void BeginEquipmentRepeat(int row, int direction)
+        {
+            ChangeEquipment(row, direction);
+            repeatingRow = row;
+            repeatingDirection = direction;
+            var button = direction > 0 ? equipmentPlus[row] : equipmentMinus[row];
+            if (!button.unclickable && Application.isFocused && Input.GetMouseButton(0)) equipmentRepeat.Start(Time.realtimeSinceStartup);
+        }
+
+        private void FocusEquipment(int row)
+        {
+            Blur();
+            var index = EquipmentPageStart + row;
+            if (index < 0 || index >= EquipmentPageEnd) return;
+            focusedEquipment = row;
+            draft.EquipmentQuantities.TryGetValue(equipment[index].Key, out var quantity);
+            equipmentInput = quantity.ToString(CultureInfo.InvariantCulture);
+            selectAll = true;
+            RefreshEquipment();
+        }
+
+        internal static bool TryReadQuantity(string text, out int quantity)
+        {
+            if (string.IsNullOrEmpty(text)) { quantity = 0; return true; }
+            return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out quantity) && quantity >= 0;
+        }
+
+        private void SetEquipmentInput(string value)
+        {
+            if (!TryReadQuantity(value, out var quantity)) return;
+            equipmentInput = value;
+            var key = equipment[EquipmentPageStart + focusedEquipment].Key;
+            if (quantity == 0) draft.EquipmentQuantities.Remove(key);
+            else draft.EquipmentQuantities[key] = quantity;
         }
 
         private bool ReadAmounts()
@@ -433,25 +532,45 @@ namespace NewBeginnings
         {
             if (!IsOpen) return;
             if (!Application.isFocused) { Blur(); return; }
+            var heldButton = repeatingDirection > 0 ? equipmentPlus[repeatingRow] : equipmentMinus[repeatingRow];
+            if (equipmentRepeat.Active && (heldButton == null || heldButton.unclickable)) equipmentRepeat.Stop();
+            if (equipmentRepeat.Tick(Time.realtimeSinceStartup, Input.GetMouseButton(0), Application.isFocused))
+                ChangeEquipment(repeatingRow, repeatingDirection);
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                if (focusedCurrency >= 0) Blur();
+                if (focusedCurrency >= 0 || focusedEquipment >= 0) Blur();
                 return;
             }
-            if (focusedCurrency < 0 || tab != 0) return;
+            var editingEquipment = focusedEquipment >= 0 && tab == 2;
+            if (!editingEquipment && (focusedCurrency < 0 || tab != 0)) return;
             if (Input.GetKeyDown(KeyCode.Tab))
             {
-                Focus((focusedCurrency + (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? 3 : 1)) % 4);
+                var backwards = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                if (editingEquipment)
+                {
+                    var visible = EquipmentPageEnd - EquipmentPageStart;
+                    FocusEquipment((focusedEquipment + (backwards ? visible - 1 : 1)) % visible);
+                }
+                else Focus((focusedCurrency + (backwards ? 3 : 1)) % 4);
                 return;
             }
             if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && Input.GetKeyDown(KeyCode.A))
                 selectAll = true;
-            var value = amounts[focusedCurrency];
+            var value = editingEquipment ? equipmentInput : amounts[focusedCurrency];
+            var originalValue = value;
+            var rejected = false;
             foreach (var character in Input.inputString)
             {
                 if (character == '\n' || character == '\r')
                 {
-                    amounts[focusedCurrency] = value;
+                    if (rejected && editingEquipment)
+                    {
+                        RefreshEquipment();
+                        message.text = "Enter a whole number from 0 to " + int.MaxValue + ".";
+                        return;
+                    }
+                    if (editingEquipment) SetEquipmentInput(value);
+                    else amounts[focusedCurrency] = value;
                     Blur();
                     return;
                 }
@@ -465,12 +584,15 @@ namespace NewBeginnings
                     var proposed = (selectAll ? "" : value) + character;
                     if (int.TryParse(proposed, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
                         value = parsed.ToString(CultureInfo.InvariantCulture);
+                    else rejected = true;
                     selectAll = false;
                 }
             }
             if (Input.GetKeyDown(KeyCode.Delete)) { value = ""; selectAll = false; }
-            amounts[focusedCurrency] = value;
-            RefreshMoney();
+            if (rejected && editingEquipment) value = originalValue;
+            if (editingEquipment) { SetEquipmentInput(value); RefreshEquipment(); }
+            else { amounts[focusedCurrency] = value; RefreshMoney(); }
+            if (rejected) message.text = "Enter a whole number from 0 to " + int.MaxValue + ".";
         }
     }
 }

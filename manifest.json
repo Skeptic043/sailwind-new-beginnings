@@ -1,6 +1,6 @@
 {
   "name": "New_Beginnings",
-  "version_number": "1.1.0",
+  "version_number": "1.2.0",
   "website_url": "https://github.com/Skeptic043/sailwind-new-beginnings",
   "description": "Choose or randomize your starting port and boat, customize starting money and regional reputation, and add vanilla or detected mod equipment.",
   "dependencies": [

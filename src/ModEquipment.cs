@@ -16,6 +16,7 @@ namespace NewBeginnings
         // Recheck this boundary when Sailwind adds native prefabs. Registered
         // tools without detectable plugin provenance use a separate identity.
         private const int NativeDirectoryLength = 390;
+        private const string NavigationProvider = "com.larsonlogistics.sailwind.navsuite";
         private const string FurnitureProvider = "com.kemy.kemyfurniture";
         private static readonly Provider Unattributed = new Provider
         { Id = "registered", Name = "Other mod items" };
@@ -65,7 +66,7 @@ namespace NewBeginnings
             for (var index = NativeDirectoryLength; index < directory.directory.Length; index++)
             {
                 var prefab = directory.directory[index];
-                if (!IsTemplate(prefab, index, out var item) || !FitsCrate(item) || !HasVisibleMesh(prefab) ||
+                if (!IsTemplate(prefab, index, out var item) || !HasVisibleMesh(prefab) ||
                     ExcludedName(prefab.name) || ExcludedName(item.name) || HasConsumableComponent(prefab)) continue;
                 var owners = Owners(prefab, providers).Distinct().ToArray();
                 if (owners.Any(provider => provider.Id == FurnitureProvider) || IsFurniture(prefab, providers)) continue;
@@ -91,16 +92,28 @@ namespace NewBeginnings
                     owner = owners.Length == 1 ? owners[0] : Unattributed;
                 }
                 if (owner == null || owner.Id == FurnitureProvider) continue;
+                // Exact Kemy tool references may use authored scale. The compass
+                // and inclinometer opt into native crate scale/withdrawal; the
+                // native-big binnacle stays loose. Other mods keep the original gate.
+                var looseNavigation = knownEquipment && owner.Id == NavigationProvider &&
+                    itemAssembly == typeof(ShipItem).Assembly && owners.Length <= 1 &&
+                    (owners.Length == 0 || owners[0] == owner) && ValidScale(prefab.transform.localScale);
+                if (!FitsCrate(item) && !looseNavigation) continue;
+                var scaledPacking = looseNavigation && !item.big &&
+                    (MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "compassPrefab", prefab) ||
+                     MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "inclinometerPrefab", prefab));
                 var title = string.IsNullOrWhiteSpace(item.name) ? CanonicalName(prefab.name) : item.name;
                 // The authored variant name distinguishes same-name gauges,
                 // compasses and telltales without exposing a mutable save index.
                 var variant = CanonicalName(prefab.name);
+                var bearingCompassLabel = owner.Id == NavigationProvider && variant == "BearingCompass";
+                if (bearingCompassLabel) title = "Bearing Compass";
                 var radioLabel = owner.Id == "local.sailwind.radio" &&
                     (string.Equals(title, "Radio", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(title, "Small Speaker", StringComparison.OrdinalIgnoreCase));
                 if (radioLabel)
                     title = string.Equals(title, "Radio", StringComparison.OrdinalIgnoreCase) ? "Radio" : "Small Speaker";
-                var redundantVariant = radioLabel ||
+                var redundantVariant = radioLabel || bearingCompassLabel ||
                     (string.Equals(title, "Propeller Controller", StringComparison.OrdinalIgnoreCase) &&
                      string.Equals(variant, "Pump Controller", StringComparison.OrdinalIgnoreCase)) ||
                     (string.Equals(title, "Celestial Atlas", StringComparison.OrdinalIgnoreCase) &&
@@ -108,7 +121,7 @@ namespace NewBeginnings
                 if (!redundantVariant && !string.Equals(title, variant, StringComparison.OrdinalIgnoreCase))
                     title += " (" + variant + ")";
                 found.Add(new EquipmentEntry(index, prefab.name, item.GetType().FullName,
-                    title, owner.Id, owner.Name));
+                    title, owner.Id, owner.Name, scaledPacking));
             }
             return found.GroupBy(entry => entry.Key, StringComparer.Ordinal)
                 .Where(group => group.Count() == 1).Select(group => group.Single())
@@ -145,6 +158,12 @@ namespace NewBeginnings
             // resets the root scale to one, so scaled items cannot be offered.
             return !item.big && (item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f;
         }
+
+        internal static bool ValidScale(Vector3 scale) => ValidScaleAxis(scale.x) &&
+            ValidScaleAxis(scale.y) && ValidScaleAxis(scale.z);
+
+        private static bool ValidScaleAxis(float value) => value > 0f &&
+            !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static bool ExcludedName(string name)
         {
@@ -223,7 +242,7 @@ namespace NewBeginnings
 
         private static bool KnownEquipment(Provider provider, GameObject prefab)
         {
-            if (provider.Id == "com.larsonlogistics.sailwind.navsuite")
+            if (provider.Id == NavigationProvider)
             {
                 var type = provider.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false);
                 return MatchesField(type, "inclinometerPrefab", prefab) ||

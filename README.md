@@ -18,7 +18,7 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of random starts, then click Done to save changes.
 
-The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. The equipment menu allows you to select what equipment you want to spawn with. Items that fit are packed into crates near your spawn, while fishing hooks and firewood come in their own filled boxes.
+The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being place directly on the ground. 
 
 <details>
 <summary>Spoiler: a manually selected location</summary>
@@ -29,7 +29,9 @@ Chronos is never randomly picked and must be manually chosen.
 
 ## Starting supplies and mooring
 
-Your starting port determines the regional supplies, which are packed into crates on the ground nearby when they fit. Larger supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines the supplies you receive.
+With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby when they fit. Larger supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those standard supplies.
+
+Filled boxes and barrels use their normal contents. Box of wall hooks contains 12 hooks for hanging items on walls, while Box of fishing hooks contains 20 fishing hooks.
 
 Boats receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. About eight seconds after the starting boat is ready, it receives one hull repair to clear damage from its initial settling.
 
@@ -41,6 +43,8 @@ Once startup finishes, including mooring setup and the one-time hull repair, New
 
 ## Compatibility and limitations
 
+Large starting loadouts can take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear. Reduce your selection or choose a larger port if this happens.
+
 For the starting options menu, automatic mod equipment detection looks for small tools that can go into crates. It can find items from untested mods, but cannot guarantee automatic inclusion of every mod item. Please open an issue if you run into any problems with mod items. Equipment in the following mods is tested working and compatible:
 
 - [SailwindClimate](https://github.com/bryon82/SailwindClimate)
@@ -48,6 +52,7 @@ For the starting options menu, automatic mod equipment detection looks for small
 - [Propeller](https://github.com/DogEggz01/Propeller)
 - [Realistic-Skies](https://github.com/KingCam77/Realistic-Skies)
 - [KemyNavigationTools](https://github.com/Kemylar/KemyNavigationTools)
+- [Sailwind-Radio](https://github.com/Skeptic043/Sailwind-Radio)
 
 Port and boat selection has been tested with [Scrambled Seas: NANDbrew Edition](https://github.com/NANDbrew/scrambled-seas), [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty), and [SaveSlotsPlus](https://github.com/bryon82/SailwindSaveSlotsPlus). The following mods that add boats have also been tested with port and boat selection:
 
@@ -72,6 +77,7 @@ HMS Leopard is especially large and can struggle at ports that work for other la
 ## Known issues
 
 - HMS Leopard's starter sail can briefly flash fully deployed when unfurling, then return to its actual reefing position.
+- Large starting loadouts can cause the game to hitch and take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear. Try fewer items or a larger port if this happens.
 
 ## AI Use
 

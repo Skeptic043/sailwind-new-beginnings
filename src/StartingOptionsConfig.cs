@@ -13,6 +13,7 @@ namespace NewBeginnings
         private readonly ConfigEntry<string>[] currencies = new ConfigEntry<string>[4];
         private readonly ConfigEntry<int>[] factions = new ConfigEntry<int>[3];
         private readonly ConfigEntry<string> equipment;
+        private readonly ConfigEntry<bool> standardSupplies;
 
         internal StartingOptionsSettings Settings { get; } = new StartingOptionsSettings();
 
@@ -40,13 +41,11 @@ namespace NewBeginnings
                 Settings.FactionReputation[i] = ValidLevel(factions[i].Value, keys[i]);
             }
             equipment = file.Bind("Starting Options", "AdditionalEquipment", "",
-                "Extra equipment IDs, encoded and separated by semicolons. Each selected entry adds one item. Edit with the new-game menu.");
-            foreach (var id in equipment.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                try { Settings.AdditionalEquipment.Add(Uri.UnescapeDataString(id)); }
-                catch (UriFormatException) { Plugin.Instance?.Warn("Ignored malformed additional equipment ID."); }
-            }
-            AdditionalEquipment.NormalizeSelection(Settings.AdditionalEquipment);
+                "Encoded equipment IDs with =quantity, separated by semicolons. Legacy IDs without a quantity mean one. Whole-number range 0 to 2147483647; zero removes a selection. Edit with the new-game menu.");
+            standardSupplies = file.Bind("Starting Options", "StandardSupplies", true,
+                "Include the normal regional starter supplies. Disable to start with only the equipment quantities chosen here.");
+            Settings.StandardSupplies = standardSupplies.Value;
+            ReadEquipment(equipment.Value, Settings);
             Settings.CurrencyMultiplier = multiplier.Value;
             if (float.IsNaN(multiplier.Value) || float.IsInfinity(multiplier.Value) ||
                 multiplier.Value < 0f || multiplier.Value > 100f)
@@ -64,17 +63,61 @@ namespace NewBeginnings
             return 0;
         }
 
+        internal static void ReadEquipment(string value, StartingOptionsSettings settings)
+        {
+            settings.EquipmentQuantities.Clear();
+            foreach (var token in (value ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var separator = token.LastIndexOf('=');
+                var encoded = separator < 0 ? token : token.Substring(0, separator);
+                var count = 1;
+                if (separator >= 0 && (!int.TryParse(token.Substring(separator + 1), NumberStyles.None,
+                    CultureInfo.InvariantCulture, out count) || count < 0))
+                {
+                    Plugin.Instance?.Warn("Ignored invalid equipment quantity.");
+                    continue;
+                }
+                if (count == 0) continue;
+                try
+                {
+                    // Uri.UnescapeDataString preserves broken percent escapes; reject them explicitly.
+                    for (var index = 0; index < encoded.Length; index++)
+                        if (encoded[index] == '%' && (index + 2 >= encoded.Length ||
+                            !Uri.IsHexDigit(encoded[index + 1]) || !Uri.IsHexDigit(encoded[index + 2])))
+                            throw new UriFormatException();
+                        else if (encoded[index] == '%') index += 2;
+                    var id = Uri.UnescapeDataString(encoded);
+                    if (id.Length == 0) continue;
+                    // Duplicate legacy checkbox IDs still mean one selected item.
+                    settings.EquipmentQuantities[id] = Math.Max(count,
+                        settings.EquipmentQuantities.TryGetValue(id, out var prior) ? prior : 0);
+                }
+                catch (UriFormatException) { Plugin.Instance?.Warn("Ignored malformed additional equipment ID."); }
+            }
+            try { settings.NormalizeEquipment(); }
+            catch (InvalidOperationException exception)
+            {
+                // Keep the original entries visible for correction, rather than clipping quantities.
+                Plugin.Instance?.Warn(exception.Message + ". Correct these equipment entries before starting.");
+            }
+        }
+
+        internal static string WriteEquipment(StartingOptionsSettings settings) =>
+            string.Join(";", settings.EquipmentQuantities.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => Uri.EscapeDataString(pair.Key) + "=" + pair.Value.ToString(CultureInfo.InvariantCulture)).ToArray());
+
         internal void Save()
         {
             if (!Settings.TryValidate(out var reason)) throw new InvalidOperationException(reason);
-            AdditionalEquipment.NormalizeSelection(Settings.AdditionalEquipment);
+            Settings.NormalizeEquipment();
+            if (!Settings.TryValidate(out reason)) throw new InvalidOperationException(reason);
             multiplier.Value = Settings.CurrencyMultiplier;
             startingReputation.Value = Settings.StartingReputation;
             for (var i = 0; i < currencies.Length; i++)
                 currencies[i].Value = Settings.CurrencyOverrides[i]?.ToString(CultureInfo.InvariantCulture) ?? "";
             for (var i = 0; i < factions.Length; i++) factions[i].Value = Settings.FactionReputation[i];
-            equipment.Value = string.Join(";", Settings.AdditionalEquipment.OrderBy(id => id, StringComparer.Ordinal)
-                .Select(Uri.EscapeDataString).ToArray());
+            equipment.Value = WriteEquipment(Settings);
+            standardSupplies.Value = Settings.StandardSupplies;
             file.Save();
         }
     }

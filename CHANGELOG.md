@@ -1,5 +1,27 @@
 # Release notes
 
+## Version 1.2.0
+
+### Added
+
+- A Standard supplies toggle in the equipment menu.
+- Box of wall hooks, Box of salmon, Box of oranges, Barrel of water, Barrel of rum and Single cheese in the equipment menu. Each box of wall hooks contains 12 hooks for hanging items on walls.
+
+### Changed
+
+- Replaced equipment checkboxes with quantity controls. 
+- Replaced the single lantern candle with Box of candles.
+- Adjusted the equipment menu spacing to keep labels and controls separate while retaining ten items per page.
+
+### Fixed
+
+- Restored missing Kemy navigation tools in the equipment menu.
+- Addressed a crate-allocation error that could prevent selected equipment from being placed.
+
+### Known issues
+
+- Large starting loadouts can cause the game to hitch and take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear. Try fewer items or a larger port if this happens.
+
 ## Version 1.1.0
 
 ### New

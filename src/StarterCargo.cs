@@ -63,6 +63,7 @@ namespace NewBeginnings
         private static int difficultyRemovalsApplied;
         private static bool nativeStarterCompleted;
         private static bool rosterFinalized;
+        private static bool standardSuppliesSuppressed;
         private static readonly Dictionary<ShipItem, Vector3> AuthoredPositions =
             new Dictionary<ShipItem, Vector3>(ReferenceComparer);
         private static readonly Dictionary<ShipItem, Quaternion> AuthoredRotations =
@@ -114,6 +115,7 @@ namespace NewBeginnings
             difficultyRemovalsApplied = 0;
             nativeStarterCompleted = false;
             rosterFinalized = false;
+            standardSuppliesSuppressed = false;
             AuthoredPositions.Clear();
             AuthoredRotations.Clear();
             AuthoredNames.Clear();
@@ -253,7 +255,10 @@ namespace NewBeginnings
                     var survivors = CollectItems(__instance.transform).Where(item =>
                         !DifficultyRemovalRequests.Contains(item) &&
                         !IsIntentionalScrambledSeasMap(item)).ToArray();
-                    AdditionalEquipment.Append(armed, survivors);
+                    var excludeStandard = armed.Options != null && !armed.Options.StandardSupplies;
+                    var appended = AdditionalEquipment.Append(armed, excludeStandard ? new ShipItem[0] : survivors);
+                    if (excludeStandard && (!appended || !SuppressStandardSupplies(__instance)))
+                        Plugin.Instance?.Warn("Chosen-only supplies could not be initialized. The original starter supplies were preserved; this start does not match the requested loadout.");
                     foreach (var item in CollectItems(__instance.transform))
                         Capture(item);
                     wrapperObserved = true;
@@ -265,6 +270,57 @@ namespace NewBeginnings
                     Plugin.Instance?.Error("Could not observe the native regional starter coroutine.", exception);
                 }
             }
+        }
+
+        private static bool SuppressStandardSupplies(StarterSet set)
+        {
+            // Arm and the Difficulty observer captured exact native identities before
+            // Append introduced new children. Never suppress clones or unrelated world items.
+            var originals = CollectItems(set.transform).Concat(Captured)
+                .Where(item => !AdditionalEquipment.IsAdditional(item)).Distinct(ReferenceComparer).ToArray();
+            var active = originals.Where(item => item != null).ToDictionary(item => item,
+                item => item.gameObject.activeSelf, ReferenceComparer);
+            var parents = active.Keys.ToDictionary(item => item, item => item.transform.parent, ReferenceComparer);
+            var siblings = active.Keys.ToDictionary(item => item, item => item.transform.GetSiblingIndex(), ReferenceComparer);
+            var holding = new GameObject("NewBeginnings excluded standard supplies");
+            holding.SetActive(false);
+            try
+            {
+                foreach (var item in originals)
+                {
+                    if (item != null)
+                    {
+                        // Native initialization has not begun: no sale, save registration,
+                        // or physics ownership exists to undo. Detach before its child walk.
+                        item.gameObject.SetActive(false);
+                        item.transform.SetParent(holding.transform, true);
+                    }
+                }
+                foreach (var item in originals)
+                {
+                    Captured.Remove(item);
+                    AuthoredPositions.Remove(item);
+                    AuthoredRotations.Remove(item);
+                    AuthoredNames.Remove(item);
+                    DifficultyRemovalRequests.Remove(item);
+                }
+                standardSuppliesSuppressed = true;
+                Plugin.Instance?.DebugLog("Standard starter supplies excluded: " + originals.Length + " exact native identities; native boat initialization retained.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                foreach (var pair in active.OrderBy(pair => siblings[pair.Key]))
+                    if (pair.Key != null)
+                    {
+                        pair.Key.transform.SetParent(parents[pair.Key], true);
+                        pair.Key.transform.SetSiblingIndex(siblings[pair.Key]);
+                        pair.Key.gameObject.SetActive(pair.Value);
+                    }
+                Plugin.Instance?.Error("Could not exclude standard supplies; restored their original hierarchy.", exception);
+                return false;
+            }
+            finally { UnityEngine.Object.Destroy(holding); }
         }
 
         private static IEnumerator FollowNativeStarterSet(IEnumerator original,
@@ -335,7 +391,9 @@ namespace NewBeginnings
                     nativeReady = AdditionalEquipment.TryPack(selected, PreparePackedItem, out lastReason);
                 if (nativeReady && Captured.Count == 0)
                 {
-                    Plugin.Instance?.Report("Dockside starter supplies: the observed difficulty adjustment left an intentionally empty native set; no items were added.");
+                    Plugin.Instance?.Report(standardSuppliesSuppressed
+                        ? "Dockside starter supplies: standard supplies disabled and no equipment selected; starting without supplies."
+                        : "Dockside starter supplies: the observed difficulty adjustment left an intentionally empty native set; no items were added.");
                     placementStage = "completed with intentionally empty starter set";
                     Disarm();
                     yield break;
@@ -665,7 +723,7 @@ namespace NewBeginnings
                 return false;
             }
             if (Captured.Count == 0 && IsIntentionalEmptyRoster(nativeStarterCompleted,
-                difficultyAdjustmentCompleted, difficultyRemovalsApplied))
+                difficultyAdjustmentCompleted, difficultyRemovalsApplied, standardSuppliesSuppressed))
                 return true;
             if (Captured.Count == 0 || RegisteredField == null)
             {
@@ -718,8 +776,8 @@ namespace NewBeginnings
                 captured.Where(item => requested.Contains(item) && destroyed(item)).ToArray();
 
         private static bool IsIntentionalEmptyRoster(bool starterCompleted,
-            bool adjustmentCompleted, int observedRemovals) =>
-            starterCompleted && adjustmentCompleted && observedRemovals > 0;
+            bool adjustmentCompleted, int observedRemovals, bool suppliesSuppressed = false) =>
+            starterCompleted && (suppliesSuppressed || adjustmentCompleted && observedRemovals > 0);
 
         private static bool IsCurrentCapture(object currentSelection, object ownerSelection, bool finalized) =>
             currentSelection != null && ReferenceEquals(currentSelection, ownerSelection) && !finalized;

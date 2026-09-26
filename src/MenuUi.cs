@@ -256,7 +256,8 @@ namespace NewBeginnings
                 return false;
             }
             if (Plugin.Instance?.StartOptions != null &&
-                !AdditionalEquipment.TryValidateSelection(Plugin.Instance.StartOptions.AdditionalEquipment, out reason)) return false;
+                (!Plugin.Instance.StartOptions.TryValidate(out reason) ||
+                 !AdditionalEquipment.TryValidateSelection(Plugin.Instance.StartOptions.EquipmentQuantities.Keys, out reason))) return false;
             RefreshCatalog();
             if (catalogUnavailable) return true;
             if (catalog != null && catalog.TryChoose(settings, individualExclusions,

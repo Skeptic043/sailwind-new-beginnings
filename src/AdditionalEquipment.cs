@@ -16,22 +16,24 @@ namespace NewBeginnings
         internal readonly string PrefabName;
         internal readonly string ItemType;
         internal readonly bool IsModded;
+        internal readonly bool AllowScaledPacking;
         internal readonly string SourceName = "";
         internal readonly string SourceId = "";
 
-        internal EquipmentEntry(int index, string prefabName, string itemType, string displayName)
+        internal EquipmentEntry(int index, string prefabName, string itemType, string displayName, string key = null)
         {
             Index = index;
             PrefabName = prefabName;
             ItemType = itemType;
             DisplayName = displayName;
-            Key = "native:" + index + ":" + prefabName;
+            Key = key ?? "native:" + index + ":" + prefabName;
         }
 
         internal EquipmentEntry(int index, string prefabName, string itemType, string displayName,
-            string sourceId, string sourceName) : this(index, prefabName, itemType, displayName)
+            string sourceId, string sourceName, bool allowScaledPacking = false) : this(index, prefabName, itemType, displayName)
         {
             IsModded = true;
+            AllowScaledPacking = allowScaledPacking;
             SourceId = sourceId;
             SourceName = sourceName;
             Key = "mod:" + Uri.EscapeDataString(sourceId) + ":" +
@@ -43,7 +45,13 @@ namespace NewBeginnings
     // starter coroutine initializes ownership; native crates own their contents.
     internal static class AdditionalEquipment
     {
+        internal const string WallHooksKey = "bundle:wallhooks";
+        private const int WallHooksPerBox = 12;
         private static readonly EquipmentEntry[] Definitions = {
+            new EquipmentEntry(1, "1 crate salmon (E)", "ShipItemCrate", "Box of salmon"),
+            new EquipmentEntry(10, "10 barrel water", "ShipItemBottle", "Barrel of water"),
+            new EquipmentEntry(11, "11 barrel rum", "ShipItemBottle", "Barrel of rum"),
+            new EquipmentEntry(52, "52 cheese", "ShipItemFood", "Single cheese"),
             new EquipmentEntry(40, "40 empty bottle", "ShipItemBottle", "Empty bottle"),
             new EquipmentEntry(70, "70 bucket", "ShipItemBottle", "Bucket"),
             new EquipmentEntry(108, "108 crate of firewood", "ShipItemCrate", "Crate of firewood"),
@@ -60,6 +68,7 @@ namespace NewBeginnings
             new EquipmentEntry(94, "94 broom", "ShipItemBroom", "Broom"),
             new EquipmentEntry(95, "95 fishing rod 1", "ShipItemFishingRod", "Fishing rod"),
             new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", "Box of fishing hooks"),
+            new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", "Box of wall hooks", WallHooksKey),
             new EquipmentEntry(100, "100 mug wood", "ShipItemBottle", "Mug (wood)"),
             new EquipmentEntry(101, "101 mug clay", "ShipItemBottle", "Mug (clay)"),
             new EquipmentEntry(102, "102 mug metal", "ShipItemBottle", "Mug (metal)"),
@@ -74,7 +83,7 @@ namespace NewBeginnings
             new EquipmentEntry(117, "117 map E", "ShipItemFoldable", "Emerald Archipelago map"),
             new EquipmentEntry(118, "118 map M", "ShipItemFoldable", "Aestrin map"),
             new EquipmentEntry(119, "119 map L", "ShipItemFoldable", "Fire Fish Lagoon map"),
-            new EquipmentEntry(130, "130 lantern candle", "ShipItemLanternFuel", "Lantern candle"),
+            new EquipmentEntry(131, "131 lantern candle crate", "ShipItemCrate", "Box of candles"),
             new EquipmentEntry(132, "132 lantern oil bottle", "ShipItemLanternFuel", "Lamp oil"),
             new EquipmentEntry(133, "133 lantern M big", "ShipItemLight", "Lantern (large Aestrin)"),
             new EquipmentEntry(134, "134 lantern E blu", "ShipItemLight", "Lantern (blue)"),
@@ -91,6 +100,7 @@ namespace NewBeginnings
             new EquipmentEntry(170, "170 clock A", "ShipItemClock", "Chronometer (Al'Ankh)"),
             new EquipmentEntry(171, "171 clock E", "ShipItemClock", "Chronometer (Emerald)"),
             new EquipmentEntry(172, "172 clock M", "ShipItemClock", "Chronometer (Aestrin)"),
+            new EquipmentEntry(213, "213 (43) crate oranges", "ShipItemCrate", "Box of oranges"),
             new EquipmentEntry(370, "370 slicing knife A", "ShipItemKnife", "Knife (Al'Ankh)"),
             new EquipmentEntry(371, "371 slicing knife E", "ShipItemKnife", "Knife (Emerald)"),
             new EquipmentEntry(372, "372 slicing knife M", "ShipItemKnife", "Knife (Aestrin)"),
@@ -100,10 +110,14 @@ namespace NewBeginnings
         };
         private static readonly HashSet<ShipItem> Extras = new HashSet<ShipItem>();
         private static readonly HashSet<ShipItem> PackingCandidates = new HashSet<ShipItem>();
+        private static readonly HashSet<ShipItem> ScaledPackingTools = new HashSet<ShipItem>();
         private static readonly List<ShipItem> Carriers = new List<ShipItem>();
         private static readonly Dictionary<ShipItem, ShipItem> Packed = new Dictionary<ShipItem, ShipItem>();
+        private static readonly Dictionary<ShipItem, ShipItem> WallHooks = new Dictionary<ShipItem, ShipItem>();
+        private static readonly HashSet<ShipItem> WallHookBoxes = new HashSet<ShipItem>();
         private static ResolvedStart owner;
         private static bool appended;
+        private static bool appendSucceeded;
         private static bool packingComplete;
         private static string failure;
 
@@ -134,8 +148,40 @@ namespace NewBeginnings
             if (prefab == null || prefab.name != entry.PrefabName) return null;
             var item = prefab.GetComponent<ShipItem>();
             var saveable = prefab.GetComponent<SaveablePrefab>();
+            if (entry.Key == WallHooksKey && !CanCreateWallHookBox(directory, prefab)) return null;
             return item != null && item.GetType().FullName == entry.ItemType &&
                 saveable != null && saveable.prefabIndex == entry.Index ? prefab : null;
+        }
+
+        private static GameObject WallHookPrefab(PrefabsDirectory directory) => Resolve(directory,
+            new EquipmentEntry(79, "79 lamp hanger generic", "ShipItemLampHook", ""));
+
+        private static bool CanCreateWallHookBox(PrefabsDirectory directory, GameObject crate)
+        {
+            var hooks = WallHookPrefab(directory);
+            return hooks != null && CanPack(hooks.GetComponent<ShipItem>()) &&
+                CarrierCapacity(crate) >= WallHooksPerBox;
+        }
+
+        private static void AppendWallHookBox(Transform staging, Vector3 origin, List<GameObject> created)
+        {
+            var directory = Directory;
+            var box = Clone(Resolve(directory, new EquipmentEntry(104,
+                "104 crate of fishing hooks", "ShipItemCrate", "")), staging, origin, created.Count);
+            created.Add(box.gameObject);
+            // Save index 104 remains an ordinary empty crate. Real native hook
+            // objects and their crate IDs persist through the native save path.
+            box.amount = 0f;
+            Extras.Add(box);
+            WallHookBoxes.Add(box);
+            var hookPrefab = WallHookPrefab(directory);
+            for (var index = 0; index < WallHooksPerBox; index++)
+            {
+                var hook = Clone(hookPrefab, staging, origin, created.Count);
+                created.Add(hook.gameObject);
+                Extras.Add(hook);
+                WallHooks.Add(hook, box);
+            }
         }
 
         internal static bool TryValidateSelection(IEnumerable<string> selected, out string reason)
@@ -164,41 +210,50 @@ namespace NewBeginnings
             selected.Remove("native:381:381 brining jar small");
             if (selected.Remove("native:71:71 fuel wood")) selected.Add("native:108:108 crate of firewood");
             if (selected.Remove("native:99:99 fishing hook")) selected.Add("native:104:104 crate of fishing hooks");
+            if (selected.Remove("native:130:130 lantern candle")) selected.Add("native:131:131 lantern candle crate");
         }
 
         internal static void Reset()
         {
             owner = null;
             appended = false;
+            appendSucceeded = false;
             packingComplete = false;
             failure = null;
             Extras.Clear();
             PackingCandidates.Clear();
+            ScaledPackingTools.Clear();
             Carriers.Clear();
             Packed.Clear();
+            WallHooks.Clear();
+            WallHookBoxes.Clear();
         }
 
         internal static bool IsExtra(ShipItem item) => !ReferenceEquals(item, null) && Extras.Contains(item);
-        internal static bool IsCarrier(ShipItem item) => !ReferenceEquals(item, null) && Carriers.Contains(item);
+        internal static bool IsCarrier(ShipItem item) => !ReferenceEquals(item, null) &&
+            (Carriers.Contains(item) || WallHookBoxes.Contains(item));
         internal static bool IsAdditional(ShipItem item) => IsExtra(item) ||
             IsCarrier(item);
         internal static bool IsPacked(ShipItem item) => !ReferenceEquals(item, null) && Packed.ContainsKey(item);
 
-        internal static void Append(ResolvedStart selected, IEnumerable<ShipItem> nativeCandidates)
+        internal static bool Append(ResolvedStart selected, IEnumerable<ShipItem> nativeCandidates)
         {
-            if (appended) return;
+            if (appended) return appendSucceeded;
             owner = selected;
             appended = true;
             PackingCandidates.UnionWith(nativeCandidates.Where(item => item != null));
-            var selectedExtras = new HashSet<string>(selected.Options?.AdditionalEquipment ?? new HashSet<string>(), StringComparer.Ordinal);
-            NormalizeSelection(selectedExtras);
-            if (!TryValidateSelection(selectedExtras, out var selectionReason))
+            var options = selected.Options?.Copy() ?? new StartingOptionsSettings();
+            options.NormalizeEquipment();
+            var valid = options.TryValidate(out var selectionReason) &&
+                TryValidateSelection(options.EquipmentQuantities.Keys, out selectionReason);
+            if (!valid)
             {
                 Plugin.Instance?.Warn(selectionReason + " The normal starter supplies will still be placed.");
-                selectedExtras = new HashSet<string>();
+                packingComplete = true;
+                return false;
             }
             var directory = Directory;
-            var choices = GetCatalog().Where(entry => selectedExtras.Contains(entry.Key)).ToArray();
+            var choices = GetCatalog().Where(entry => options.EquipmentQuantities.ContainsKey(entry.Key)).ToArray();
             var created = new List<GameObject>();
             GameObject staging = null;
             try
@@ -211,18 +266,30 @@ namespace NewBeginnings
                 var existing = selected.StarterSet.GetComponentsInChildren<ShipItem>(true).FirstOrDefault();
                 if (existing != null) origin = existing.transform.position;
                 foreach (var choice in choices)
+                for (var quantity = 0; quantity < options.EquipmentQuantities[choice.Key]; quantity++)
                 {
+                    if (choice.Key == WallHooksKey)
+                    {
+                        AppendWallHookBox(staging.transform, origin, created);
+                        continue;
+                    }
                     var item = Clone(Resolve(directory, choice), staging.transform, origin, created.Count);
                     created.Add(item.gameObject);
                     Extras.Add(item);
+                    if (choice.AllowScaledPacking) ScaledPackingTools.Add(item);
                     PackingCandidates.Add(item);
                 }
                 var carrierPrefab = Resolve(directory, new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", ""));
                 var capacity = CarrierCapacity(carrierPrefab);
+                // Decide the roster once, before native activation. Native
+                // ItemRigidbody.LateUpdate resets loose root scales to one;
+                // reclassifying those items later can exceed the carrier count
+                // and accidentally pack scaled items outside explicit support.
+                PackingCandidates.IntersectWith(PackingCandidates.Where(CanPack).ToArray());
                 if (capacity > 0)
                 {
-                    var count = PackingCandidates.Count(CanPack);
-                    for (var index = 0; index < (count + capacity - 1) / capacity; index++)
+                    var count = PackingCandidates.Count;
+                    for (var index = 0; index < (count + (long)capacity - 1) / capacity; index++)
                     {
                         var item = Clone(carrierPrefab, staging.transform, origin, created.Count);
                         created.Add(item.gameObject);
@@ -234,6 +301,8 @@ namespace NewBeginnings
                     Plugin.Instance?.Warn("Native starter crates are unavailable; starter supplies will use dockside ground placement.");
                 foreach (var gameObject in created)
                     gameObject.transform.SetParent(selected.StarterSet.transform, true);
+                appendSucceeded = true;
+                return true;
             }
             catch (Exception exception)
             {
@@ -246,10 +315,14 @@ namespace NewBeginnings
                     UnityEngine.Object.Destroy(gameObject);
                 }
                 Extras.Clear();
+                WallHooks.Clear();
+                WallHookBoxes.Clear();
                 PackingCandidates.Clear();
+                ScaledPackingTools.Clear();
                 Carriers.Clear();
                 packingComplete = true;
                 Plugin.Instance?.Error("Starter crate and additional equipment initialization failed; normal supplies will use dockside ground placement.", exception);
+                return false;
             }
             finally
             {
@@ -262,6 +335,10 @@ namespace NewBeginnings
             var clone = UnityEngine.Object.Instantiate(prefab, staging, false);
             clone.SetActive(false);
             clone.name = prefab.name;
+            // Native trade templates serialize mission index zero. These new
+            // player supplies have no delivery assignment; clear that state
+            // before OnLoad reads PlayerMissions or initializes crate inventory.
+            clone.GetComponent<Good>()?.RegisterAsMissionless();
             clone.transform.SetPositionAndRotation(origin + new Vector3(ordinal % 8 * 0.5f, 2f + ordinal / 8 * 0.5f, 1.5f), Quaternion.identity);
             return clone.GetComponent<ShipItem>();
         }
@@ -282,10 +359,12 @@ namespace NewBeginnings
 
         private static bool CanPack(ShipItem item)
         {
-            // Native withdrawal restores scale to one, so authored scaled
-            // equipment must remain loose to preserve its size after pickup.
+            // Native insertion/withdrawal owns inventory scale. Only the exact
+            // selected Kemy compass/inclinometer clones opt into that lifecycle;
+            // other authored scaled equipment remains loose.
             return item != null && !item.big &&
-                (item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f;
+                ((item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f ||
+                 (ScaledPackingTools.Contains(item) && ModEquipment.ValidScale(item.transform.localScale)));
         }
 
         internal static bool TryPack(ResolvedStart selected, Action<ShipItem> prepare, out string reason)
@@ -293,9 +372,27 @@ namespace NewBeginnings
             reason = failure;
             if (failure != null) return false;
             if (!ReferenceEquals(owner, selected) || packingComplete) return true;
-            if (Carriers.Count == 0) { packingComplete = true; return true; }
             try
             {
+                foreach (var pair in WallHooks)
+                {
+                    if (Packed.ContainsKey(pair.Key)) continue;
+                    var item = pair.Key;
+                    var crate = pair.Value;
+                    if (item.held != null || crate.held != null)
+                    { reason = "a wall-hook box was picked up before packing"; return false; }
+                    var inventory = crate.GetComponent(CrateType);
+                    if (!item.sold || !crate.sold || crate.GetComponent<SaveablePrefab>().instanceId <= 0 || inventory == null)
+                    { reason = "waiting for native wall-hook box ownership"; return false; }
+                    var contents = (IList)Contents.GetValue(inventory);
+                    if (contents.Count >= CarrierCapacity(crate.gameObject))
+                        throw new InvalidOperationException("wall-hook box has no free native inventory slot");
+                    prepare(item);
+                    item.transform.SetPositionAndRotation(crate.transform.position, crate.transform.rotation);
+                    Insert.Invoke(inventory, new object[] { item });
+                    Packed.Add(item, crate);
+                }
+                if (Carriers.Count == 0) { packingComplete = true; return true; }
                 foreach (var item in PackingCandidates.Where(CanPack))
                 {
                     if (Packed.ContainsKey(item)) continue;
