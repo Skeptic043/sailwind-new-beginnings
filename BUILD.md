@@ -18,7 +18,7 @@ pwsh -File ./Build.ps1 -GameManagedDir 'C:\Games\Sailwind\Sailwind_Data\Managed'
 
 Use the paths for your own installation or mod profile. Alternatively, place `BepInEx.dll` and `0Harmony.dll` in `.local/references/` and omit `-ReferenceDir`.
 
-The Release output is `bin/Release/net471/NewBeginnings.dll`. Build output alone does not establish in-game compatibility. See [TESTING.md](TESTING.md) for startup checks and failure reports.
+The Release output is `bin/Release/net471/NewBeginnings.dll`.
 
 ## Local packages
 

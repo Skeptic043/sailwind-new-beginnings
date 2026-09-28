@@ -7,6 +7,7 @@ namespace NewBeginnings
         private readonly ConfigFile file;
         private readonly ConfigEntry<int> lastPort;
         private readonly ConfigEntry<bool> randomPort;
+        private readonly ConfigEntry<bool> shipyardPortsOnly;
         private readonly ConfigEntry<bool> alAnkh;
         private readonly ConfigEntry<bool> emerald;
         private readonly ConfigEntry<bool> aestrin;
@@ -33,6 +34,8 @@ namespace NewBeginnings
                 "Last manually selected port index. Default: Neverdin.");
             randomPort = file.Bind("Selection", "RandomPort", false,
                 "Choose a random port from the checked geographic pools.");
+            shipyardPortsOnly = file.Bind("Selection", "ShipyardPortsOnly", false,
+                "When Random Port is enabled, limit checked regions to Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay. Ignore individual island exclusions without changing them.");
             alAnkh = file.Bind("Random Port Pools", "AlAnkh", true, "Include Al'Ankh ports.");
             emerald = file.Bind("Random Port Pools", "EmeraldArchipelago", true,
                 "Include Emerald Archipelago ports.");
@@ -61,6 +64,7 @@ namespace NewBeginnings
             {
                 PortIndex = lastPort.Value,
                 RandomPort = randomPort.Value,
+                ShipyardPortsOnly = shipyardPortsOnly.Value,
                 BoatSceneIndex = lastBoat.Value,
                 RandomBoat = randomBoat.Value
             };
@@ -102,6 +106,7 @@ namespace NewBeginnings
         {
             lastPort.Value = Settings.PortIndex;
             randomPort.Value = Settings.RandomPort;
+            shipyardPortsOnly.Value = Settings.ShipyardPortsOnly;
             alAnkh.Value = Settings.PortPools.Contains(PortPool.AlAnkh);
             emerald.Value = Settings.PortPools.Contains(PortPool.Emerald);
             aestrin.Value = Settings.PortPools.Contains(PortPool.Aestrin);

@@ -77,7 +77,7 @@ namespace NewBeginnings
         private static readonly Dictionary<int, string> OfficialBoatNames =
             new Dictionary<int, string>
             {
-                { 10, "Dhow" }, { 20, "Sanbuq" }, { 30, "Baghlah" },
+                { 10, "Dhow" }, { 20, "Sanbuq" }, { 30, "Baghlah (Bigbuq)" },
                 { 40, "Cog" }, { 50, "Brig" }, { 70, "Jong" },
                 { 80, "Junk" }, { 90, "Kakam" }
             };
@@ -403,6 +403,11 @@ namespace NewBeginnings
                 dinghyIndex == index;
         }
 
+        private static bool IsShipyardPort(PortChoice port) =>
+            (port.Index == 0 || port.Index == 9 || port.Index == 15 || port.Index == 22) &&
+            KnownPorts.TryGetValue(port.Index, out var known) &&
+            string.Equals(port.IdentityName, known.Item1, StringComparison.OrdinalIgnoreCase);
+
         internal bool TryChoose(SelectionSettings settings,
             IndividualExclusions individualExclusions, System.Random random,
             out StartPair chosen, out string reason)
@@ -422,7 +427,8 @@ namespace NewBeginnings
             }
             var ports = settings.RandomPort
                 ? Ports.Where(item => item.Pool.HasValue && settings.PortPools.Contains(item.Pool.Value) &&
-                    (individualExclusions == null || !individualExclusions.IsPortExcluded(item))).ToArray()
+                    (settings.ShipyardPortsOnly ? IsShipyardPort(item) :
+                     individualExclusions == null || !individualExclusions.IsPortExcluded(item))).ToArray()
                 : Ports.Where(item => item.Index == settings.PortIndex).ToArray();
             var boats = settings.RandomBoat
                 ? Boats.Where(item => item.Size.HasValue && settings.BoatSizes.Contains(item.Size.Value) &&
@@ -430,7 +436,9 @@ namespace NewBeginnings
                 : Boats.Where(item => item.Index == settings.BoatSceneIndex).ToArray();
             if (ports.Length == 0)
             {
-                reason = settings.RandomPort && Ports.Any(item => item.Pool.HasValue &&
+                reason = settings.RandomPort && settings.ShipyardPortsOnly
+                    ? "No validated shipyard ports match the checked regions."
+                    : settings.RandomPort && Ports.Any(item => item.Pool.HasValue &&
                     settings.PortPools.Contains(item.Pool.Value))
                     ? "Every island in the checked pools is individually excluded from random starts."
                     : settings.RandomPort ? "No validated ports match the checked geographic pools."
@@ -459,7 +467,9 @@ namespace NewBeginnings
                         chosen = new StartPair { Port = port, Boat = boat };
                 }
             if (chosen != null) return true;
-            reason = "No selected boat and port pair has a usable, unoccupied recovery berth.";
+            reason = settings.RandomPort && settings.ShipyardPortsOnly
+                ? "No selected boat has a usable berth at the checked shipyard ports."
+                : "No selected boat and port pair has a usable, unoccupied recovery berth.";
             return false;
         }
     }
@@ -467,6 +477,7 @@ namespace NewBeginnings
     internal sealed class SelectionSettings
     {
         internal bool RandomPort { get; set; }
+        internal bool ShipyardPortsOnly { get; set; }
         internal bool RandomBoat { get; set; }
         internal int PortIndex { get; set; }
         internal int BoatSceneIndex { get; set; }

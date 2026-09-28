@@ -1,5 +1,19 @@
 # Release notes
 
+## Version 1.2.2
+
+### Added
+
+- A Shipyard ports only option for Random Port. It limits starts to Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay within the checked regions.
+
+### Changed
+
+- The Baghlah is now labeled Baghlah (Bigbuq) in the boat selector and exclusion list.
+
+### Fixed
+
+- Normal regional starter maps now pack into supply crates instead of being left on the ground.
+
 ## Version 1.2.1
 
 ### Changed

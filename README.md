@@ -16,9 +16,9 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 ## How it works
 
-Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of random starts, then click Done to save changes.
+Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of the pool for random starts, then click Done to save changes. The Shipyard Ports Only checkbox will only allow ports with shipyards to be chosen from your region selection as your spawn location.
 
-The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being place directly on the ground. 
+The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
 
 <details>
 <summary>Spoiler: a manually selected location</summary>
@@ -29,15 +29,9 @@ Chronos is never randomly picked and must be manually chosen.
 
 ## Starting supplies and mooring
 
-With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby when they fit. Larger supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those standard supplies.
+With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Larger supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 
-Filled boxes and barrels use their normal contents. Box of wall hooks contains 12 hooks for hanging items on walls, while Box of fishing hooks contains 20 fishing hooks.
-
-When your selected boat is already at its original berth in the starting port and that berth can be verified, New Beginnings leaves the boat and its moorings in place. You receive ownership normally, with your player and supplies placed near that dock. This also applies to mod boats whose original berth can be verified.
-
-Boats that need to be moved receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. If an existing berth cannot be verified, New Beginnings uses its usual starting placement.
-
-Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
+Boats that need to be moved away from their normal starting locations receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
 ## Configuration
 

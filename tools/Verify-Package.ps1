@@ -102,7 +102,7 @@ $releaseNames = @('manifest.json','icon.png','README.md','CHANGELOG.md','LICENSE
 $pluginEntries = @($releaseNames | ForEach-Object { [pscustomobject]@{ Source=(Join-Path $ProjectRoot $_); Name=$_ } })
 $pluginEntries += [pscustomobject]@{ Source=$dllPath; Name='BepInEx/plugins/NewBeginnings/NewBeginnings.dll' }
 # Exact public source allowlist: never recursively archive the working directory.
-$sourceNames = $releaseNames + @('.gitignore','.gitattributes','BUILD.md','TESTING.md','assets/icon.svg',
+$sourceNames = $releaseNames + @('.gitignore','.gitattributes','BUILD.md','assets/icon.svg',
     'NewBeginnings.csproj','Build.ps1','Package.ps1','tools/Verify-Package.ps1')
 $sourceEntries = @($sourceNames | ForEach-Object { [pscustomobject]@{ Source=(Join-Path $ProjectRoot $_); Name=$_ } })
 $sourceEntries += @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'src') -File -Filter '*.cs' |

@@ -56,9 +56,11 @@ namespace NewBeginnings
         private bool catalogUnavailable;
         private bool catalogFaultLogged;
         private TextMesh portValue;
+        private GameObject portValuePanel;
         private TextMesh boatValue;
         private TextMesh status;
         private MenuUiButton randomPort;
+        private MenuUiButton shipyardPortsOnly;
         private MenuUiButton randomBoat;
         private MenuUiButton portPrevious;
         private MenuUiButton portNext;
@@ -386,12 +388,15 @@ namespace NewBeginnings
 
             portPrevious = MakeButton(root, "Previous port", -1.83f, .19f, .28f, .52f,
                 () => CyclePort(-1));
-            portValue = MakeValuePanel(root, "Selected port", -1.05f, .19f);
+            portValue = MakeValuePanel(root, "Selected port", -1.05f, .19f, out portValuePanel);
             portNext = MakeButton(root, "Next port", -.27f, .19f, .28f, .52f,
                 () => CyclePort(1));
+            shipyardPortsOnly = MakeButton(root, "Shipyard ports only", -1.05f, -.53f, 1.55f, .44f,
+                () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
+            shipyardPortsOnly.description = "Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay in the checked regions. Ignores individual island exclusions without changing them.";
             boatPrevious = MakeButton(root, "Previous boat", .27f, .19f, .28f, .52f,
                 () => CycleBoat(-1));
-            boatValue = MakeValuePanel(root, "Selected boat", 1.05f, .19f);
+            boatValue = MakeValuePanel(root, "Selected boat", 1.05f, .19f, out _);
             boatNext = MakeButton(root, "Next boat", 1.83f, .19f, .28f, .52f,
                 () => CycleBoat(1));
 
@@ -421,7 +426,7 @@ namespace NewBeginnings
                 1.55f, .44f, () => OpenEditor(true));
             portExclusions.description = "Choose which islands can be selected by Random Port.";
             boatExclusions.description = "Choose which boats can be selected by Random Boat.";
-            var options = MakeButton(root, "Starting options", 0f, -.53f, 1.65f, .44f,
+            var options = MakeButton(root, "Starting options", 1.05f, -.53f, 1.65f, .44f,
                 () => startingOptions?.Open());
             SetButtonText(options, "Starting options...");
             status = MakeLabel(root, "Selection status", "", 0f, -.64f, .009f);
@@ -475,7 +480,7 @@ namespace NewBeginnings
         }
 
         private bool CanEditExclusions(bool boats) => settings != null &&
-            (boats ? settings.RandomBoat : settings.RandomPort);
+            (boats ? settings.RandomBoat : settings.RandomPort && !settings.ShipyardPortsOnly);
 
         private void OpenEditor(bool boats)
         {
@@ -585,7 +590,7 @@ namespace NewBeginnings
             var pages = Math.Max(1, (count + EditorRowsPerPage - 1) / EditorRowsPerPage);
             editorPage = (editorPage % pages + pages) % pages;
             editorTitle.text = editingBoats ? "Random Boat Exclusions" : "Random Island Exclusions";
-            var showTabs = settings.RandomPort && settings.RandomBoat;
+            var showTabs = CanEditExclusions(false) && CanEditExclusions(true);
             SetButtonVisible(editorIslands, showTabs);
             SetButtonVisible(editorBoats, showTabs);
             SetEnabled(editorIslands, showTabs && editingBoats);
@@ -645,9 +650,9 @@ namespace NewBeginnings
             return target;
         }
 
-        private TextMesh MakeValuePanel(Transform root, string name, float x, float y)
+        private TextMesh MakeValuePanel(Transform root, string name, float x, float y, out GameObject visual)
         {
-            var visual = MakeButtonVisual(root, name, x, y, 1.14f, .52f, out var surface);
+            visual = MakeButtonVisual(root, name, x, y, 1.14f, .52f, out var surface);
             // Keep the native panel/text appearance, but no pointer target or
             // collider: these display fields must never intercept arrow clicks.
             foreach (var collider in visual.GetComponentsInChildren<Collider>(true))
@@ -793,6 +798,12 @@ namespace NewBeginnings
             boatValue.text = boat != null ? Trim(boat.DisplayName, 19) : "No boat";
             portValue.color = settings.RandomPort ? MutedInk : Ink;
             boatValue.color = settings.RandomBoat ? MutedInk : Ink;
+            portValuePanel.SetActive(!EditingAny);
+            SetButtonVisible(portPrevious, !EditingAny);
+            SetButtonVisible(portNext, !EditingAny);
+            SetButtonVisible(shipyardPortsOnly, !EditingAny);
+            SetEnabled(shipyardPortsOnly, settings.RandomPort);
+            SetButtonText(shipyardPortsOnly, (settings.ShipyardPortsOnly ? "[x] " : "[ ] ") + "Shipyard ports only");
             SetEnabled(portPrevious, !settings.RandomPort && catalog.Ports.Count > 1);
             SetEnabled(portNext, !settings.RandomPort && catalog.Ports.Count > 1);
             SetEnabled(boatPrevious, !settings.RandomBoat && catalog.Boats.Count > 1);
@@ -824,7 +835,7 @@ namespace NewBeginnings
             // controls hidden then, including their native pointer colliders.
             SetButtonVisible(portExclusions, !EditingAny && settings.RandomPort);
             SetButtonVisible(boatExclusions, !EditingAny && settings.RandomBoat);
-            SetEnabled(portExclusions, settings.RandomPort && individualExclusions != null);
+            SetEnabled(portExclusions, CanEditExclusions(false) && individualExclusions != null);
             SetEnabled(boatExclusions, settings.RandomBoat && individualExclusions != null);
 
             continueAvailable = catalog.TryChoose(settings, individualExclusions,

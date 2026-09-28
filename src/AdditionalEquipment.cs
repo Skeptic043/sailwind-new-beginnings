@@ -111,6 +111,7 @@ namespace NewBeginnings
         private static readonly HashSet<ShipItem> Extras = new HashSet<ShipItem>();
         private static readonly HashSet<ShipItem> PackingCandidates = new HashSet<ShipItem>();
         private static readonly HashSet<ShipItem> ScaledPackingTools = new HashSet<ShipItem>();
+        private static readonly HashSet<ShipItem> ScaledStarterMaps = new HashSet<ShipItem>();
         private static readonly List<ShipItem> Carriers = new List<ShipItem>();
         private static readonly Dictionary<ShipItem, ShipItem> Packed = new Dictionary<ShipItem, ShipItem>();
         private static readonly Dictionary<ShipItem, ShipItem> WallHooks = new Dictionary<ShipItem, ShipItem>();
@@ -224,6 +225,7 @@ namespace NewBeginnings
             Extras.Clear();
             PackingCandidates.Clear();
             ScaledPackingTools.Clear();
+            ScaledStarterMaps.Clear();
             Carriers.Clear();
             Packed.Clear();
             WallHooks.Clear();
@@ -269,6 +271,7 @@ namespace NewBeginnings
             owner = selected;
             appended = true;
             PackingCandidates.UnionWith(nativeCandidates.Where(item => item != null));
+            ScaledStarterMaps.UnionWith(PackingCandidates.Where(IsNativeStarterMap));
             var options = selected.Options?.Copy() ?? new StartingOptionsSettings();
             options.NormalizeEquipment();
             var valid = options.TryValidate(out var selectionReason) &&
@@ -346,6 +349,7 @@ namespace NewBeginnings
                 WallHookBoxes.Clear();
                 PackingCandidates.Clear();
                 ScaledPackingTools.Clear();
+                ScaledStarterMaps.Clear();
                 Carriers.Clear();
                 packingComplete = true;
                 Plugin.Instance?.Error("Starter crate and additional equipment initialization failed; normal supplies will use dockside ground placement.", exception);
@@ -384,14 +388,29 @@ namespace NewBeginnings
             return Math.Min(capacity, buttons.Length);
         }
 
+        private static bool IsNativeStarterMap(ShipItem item)
+        {
+            if (item == null || item.GetType() != typeof(ShipItemFoldable)) return false;
+            var saveable = item.GetComponent<SaveablePrefab>();
+            if (saveable == null) return false;
+            switch (saveable.prefabIndex)
+            {
+                case 116: return item.gameObject.name == "116 map A";
+                case 117: return item.gameObject.name == "117 map E";
+                case 118: return item.gameObject.name == "118 map M";
+                default: return false;
+            }
+        }
+
         private static bool CanPack(ShipItem item)
         {
-            // Native insertion/withdrawal owns inventory scale. Only the exact
-            // selected Kemy compass/inclinometer clones opt into that lifecycle;
-            // other authored scaled equipment remains loose.
+            // Native regional starter maps are authored at scale .95. Those
+            // captured native objects and selected Kemy tools can use native
+            // inventory scale; other authored scaled equipment remains loose.
             return item != null && !item.big &&
                 ((item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f ||
-                 (ScaledPackingTools.Contains(item) && ModEquipment.ValidScale(item.transform.localScale)));
+                 ((ScaledPackingTools.Contains(item) || ScaledStarterMaps.Contains(item)) &&
+                  ModEquipment.ValidScale(item.transform.localScale)));
         }
 
         internal static bool TryPack(ResolvedStart selected, Action<ShipItem> prepare, out string reason)
