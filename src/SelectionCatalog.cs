@@ -47,6 +47,7 @@ namespace NewBeginnings
         private static readonly FieldInfo SaveableField = AccessTools.Field(typeof(PurchasableBoat), "saveable");
         private static readonly FieldInfo PurchaseUiField = AccessTools.Field(typeof(PurchasableBoat), "purchaseUI");
         private static readonly HashSet<string> LoggedBoatInspectionFailures = new HashSet<string>();
+        private static readonly HashSet<string> LoggedHullSizes = new HashSet<string>();
 
         // PurchasableBoat also backs beta houses. Identify a hull by its native
         // boat components instead of a version-specific house flag. One component
@@ -85,8 +86,9 @@ namespace NewBeginnings
         // Match mod boats by both scene index and complete runtime object name.
         // The Shattered Seas prefabs declare Clipper as Shroud Large (153) and
         // Sh'ba as Shroud Small (160); Sh'ba's cloned name is also live-logged.
-        // Old Chronian identities come from its distributed prefabs and loader.
-        // Unknown boats and Leopard's separate cutter remain manual-only.
+        // Old Chronian identities come from its distributed prefabs and loader;
+        // Santa Maria's cloned name is live-logged. Other detected boats are
+        // sized from their hull. Leopard's separate cutter remains manual-only.
         private const string UnknownBoatOrigin = "Other / unclassified";
         private static readonly Dictionary<int, Tuple<string, BoatSize, string, string>> ModBoats =
             new Dictionary<int, Tuple<string, BoatSize, string, string>>
@@ -99,7 +101,8 @@ namespace NewBeginnings
                 { 192, Tuple.Create("BOAT CAELANOR (192)(Clone)", BoatSize.Medium, "Caelanor", "Old Chronian") },
                 { 197, Tuple.Create("BOAT GALLUS (197)(Clone)", BoatSize.Small, "Gallus", "Old Chronian") },
                 { 207, Tuple.Create("BOAT LEOPARD (207)(Clone)", BoatSize.Large, "HMS Leopard", "HMS Leopard") },
-                { 275, Tuple.Create("FFL Paraw", BoatSize.Small, "FFL Paraw", "FFL Paraw") }
+                { 222, Tuple.Create("BOAT SANTA MARIA (222)(Clone)", BoatSize.Medium, "Santa Maria", "Age of Exploration") },
+                { 275, Tuple.Create("FFL Paraw", BoatSize.Small, "Paraw", "Paraw") }
             };
 
         // The three stock boat families are sold in these home archipelagos.
@@ -255,12 +258,14 @@ namespace NewBeginnings
                         result.Rejections.Add($"Boat {boat.gameObject.name} ({index}) lacks placement, mooring, or save components.");
                         continue;
                     }
-                    var size = FindSize(index, boat.gameObject.name, overrides);
+                    var name = boat.gameObject.name;
+                    var metadata = ResolveBoatMetadata(index, name, overrides,
+                        () => MeasureHullSize(body, index, name));
                     result.Boats.Add(new BoatChoice
                     {
-                        Boat = boat, Saveable = saveable, Size = size,
-                        DisplayName = FindBoatName(index, boat.gameObject.name),
-                        OriginGroup = FindBoatOrigin(index, boat.gameObject.name)
+                        Boat = boat, Saveable = saveable, Size = metadata.Size,
+                        DisplayName = metadata.DisplayName,
+                        OriginGroup = metadata.OriginGroup
                     });
                 }
                 catch (Exception exception)
@@ -282,6 +287,45 @@ namespace NewBeginnings
             });
             result.Boats.Sort(CompareBoats);
             return result;
+        }
+
+        // Measure an unlisted boat as Ship Shuffle does: its single root hull
+        // capsule along Z, including authored geometry that distance hiding has
+        // disabled. Any failure leaves the boat manual-only, never rejected.
+        private static BoatSize? MeasureHullSize(Rigidbody body, int index, string name)
+        {
+            BoatSize? size = null;
+            string outcome;
+            try
+            {
+                var hulls = body.GetComponents<CapsuleCollider>().Where(item => item != null &&
+                    !item.isTrigger && (item.attachedRigidbody == body || !item.enabled)).ToArray();
+                var scale = body.transform.lossyScale;
+                if (hulls.Length != 1 || hulls[0].direction != 2)
+                    outcome = $"it has {hulls.Length} root hull capsules; exactly one along Z is required";
+                else if (!(hulls[0].radius > 0f) || !(hulls[0].height > 0f) ||
+                    scale.x == 0f || scale.y == 0f || scale.z == 0f)
+                    outcome = "its root hull capsule has invalid geometry";
+                else
+                {
+                    var radius = hulls[0].radius * Math.Max(Math.Abs(scale.x), Math.Abs(scale.y));
+                    var length = Math.Max(hulls[0].height * Math.Abs(scale.z), 2f * radius);
+                    size = BoatSizing.FromHull(length, radius);
+                    outcome = size.HasValue
+                        ? $"as {size.Value} from its hull ({length:0.0} m x {2f * radius:0.0} m)"
+                        : "its root hull capsule has invalid geometry";
+                }
+            }
+            catch (Exception exception)
+            {
+                outcome = "its hull could not be read: " + exception.GetType().Name + ": " + exception.Message;
+            }
+            // Catalog refreshes repeat this check; report each identity once.
+            if (LoggedHullSizes.Add(index + "|" + name))
+                Plugin.Instance?.DebugLog(size.HasValue
+                    ? $"Sized detected boat {name} ({index}) {outcome}."
+                    : $"Detected boat {name} ({index}) stays manual-only because {outcome}.");
+            return size;
         }
 
         private static int CompareBoats(BoatChoice left, BoatChoice right) =>
@@ -344,46 +388,51 @@ namespace NewBeginnings
             return null;
         }
 
-        private static BoatSize? FindSize(int index, string name, SelectionOverrides overrides)
+        private struct BoatMetadata
         {
-            if (overrides != null && overrides.TryBoatSize(index, name, out var overrideSize))
-                return overrideSize;
-            if (OfficialSizes.TryGetValue(index, out var official) &&
-                string.Equals(name, official.Item1, StringComparison.OrdinalIgnoreCase))
-                return official.Item2;
-            if (ModBoats.TryGetValue(index, out var modBoat) &&
-                string.Equals(name, modBoat.Item1, StringComparison.OrdinalIgnoreCase))
-                return modBoat.Item2;
-            if (IsDinghy(index, name)) return BoatSize.Small;
-            return null;
+            internal BoatSize? Size;
+            internal string DisplayName;
+            internal string OriginGroup;
         }
 
-        private static string FindBoatName(int index, string name)
+        private static BoatMetadata ResolveBoatMetadata(int index, string name,
+            SelectionOverrides overrides, Func<BoatSize?> measureHull = null)
         {
+            var metadata = new BoatMetadata { DisplayName = name, OriginGroup = UnknownBoatOrigin };
+            var recognized = true;
             if (OfficialSizes.TryGetValue(index, out var official) &&
                 string.Equals(name, official.Item1, StringComparison.OrdinalIgnoreCase))
-                return OfficialBoatNames[index];
-            if (ModBoats.TryGetValue(index, out var modBoat) &&
+            {
+                metadata.Size = official.Item2;
+                metadata.DisplayName = OfficialBoatNames[index];
+                metadata.OriginGroup = "Sailwind";
+            }
+            else if (ModBoats.TryGetValue(index, out var modBoat) &&
                 string.Equals(name, modBoat.Item1, StringComparison.OrdinalIgnoreCase))
-                return modBoat.Item3;
-            if (IsDinghy(index, name)) return "Cutter";
-            return name;
-        }
-
-        private static string FindBoatOrigin(int index, string name)
-        {
-            if (OfficialSizes.TryGetValue(index, out var official) &&
-                string.Equals(name, official.Item1, StringComparison.OrdinalIgnoreCase))
-                return "Sailwind";
-            if (ModBoats.TryGetValue(index, out var modBoat) &&
-                string.Equals(name, modBoat.Item1, StringComparison.OrdinalIgnoreCase))
-                return modBoat.Item4;
+            {
+                metadata.Size = modBoat.Item2;
+                metadata.DisplayName = modBoat.Item3;
+                metadata.OriginGroup = modBoat.Item4;
+            }
             // Leopard's loader also instantiates its separate onboard cutter.
             // Group its exact identity without adding a random size class.
-            if (index == 212 && string.Equals(name, "BOAT CUTTER (212)(Clone)",
-                StringComparison.OrdinalIgnoreCase)) return "HMS Leopard";
-            if (IsDinghy(index, name)) return "Dinghies";
-            return UnknownBoatOrigin;
+            else if (index == 212 && string.Equals(name, "BOAT CUTTER (212)(Clone)",
+                StringComparison.OrdinalIgnoreCase))
+                metadata.OriginGroup = "HMS Leopard";
+            else if (IsDinghy(index, name))
+            {
+                metadata.Size = BoatSize.Small;
+                metadata.DisplayName = "Cutter";
+                metadata.OriginGroup = "Dinghies";
+            }
+            else recognized = false;
+            // A user override wins without measuring. Only an unrecognized boat
+            // is measured; a failed measurement keeps it manual-only.
+            if (overrides != null && overrides.TryBoatSize(index, name, out var overrideSize))
+                metadata.Size = overrideSize;
+            else if (!recognized && measureHull != null)
+                metadata.Size = measureHull();
+            return metadata;
         }
 
         private static bool IsDinghy(int index, string name)
@@ -391,7 +440,7 @@ namespace NewBeginnings
             // Dinghies 1.0.11 replaces the prefab's serialized index 130 with the
             // first free save index before cloning it. Match the complete cloned
             // name and the loader's own assignment, not a fixed index observed in
-            // one save. If its internals change, keep the boat manual-only.
+            // one save. If its internals change, the boat is sized by its hull.
             if (index <= 0 || !string.Equals(name, "DNG Cutter(Clone)",
                 StringComparison.OrdinalIgnoreCase)) return false;
             var assembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(item =>

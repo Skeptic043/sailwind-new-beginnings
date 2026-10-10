@@ -1443,12 +1443,19 @@ namespace NewBeginnings
                     return false;
                 }
                 if (!Plugin.Instance.TryProbeDocksideCargoSurface(point,
-                        out var itemGround, out var support) ||
-                    !IsVerifiedLandCollider(support))
+                        out var itemGround, out var support, out var probeReason))
                 {
                     failedItem = item;
-                    reason = "a starter item lost verified dockside support: " +
-                        AuthoredName(item) + " at " + point;
+                    reason = "a starter item lost verified dockside support (surface probe failed): " +
+                        AuthoredName(item) + " at " + point + "; " + probeReason;
+                    return false;
+                }
+                if (!IsVerifiedLandCollider(support))
+                {
+                    failedItem = item;
+                    reason = "a starter item lost verified dockside support (land collider rejected): " +
+                        AuthoredName(item) + " at " + point + ", surface " + itemGround +
+                        " on " + (support == null ? "<missing collider>" : support.name);
                     return false;
                 }
                 if (IsInsideEmbarkVolume(item, itemGround) ||

@@ -22,9 +22,11 @@ namespace NewBeginnings
         private readonly ConfigEntry<string> excludedRandomBoats;
         private readonly ConfigEntry<string> boatSizeOverrides;
         private readonly ConfigEntry<string> portPoolOverrides;
+        private readonly ConfigWarnings warnings = new ConfigWarnings();
 
-        internal SelectionSettings Settings { get; }
-        internal IndividualExclusions IndividualExclusions { get; }
+        internal SelectionSettings Settings { get; } = new SelectionSettings();
+        internal IndividualExclusions IndividualExclusions { get; } =
+            new NewBeginnings.IndividualExclusions();
         internal SelectionOverrides Overrides { get; private set; }
 
         internal SelectionConfig(ConfigFile file)
@@ -60,16 +62,23 @@ namespace NewBeginnings
             portPoolOverrides = file.Bind("Compatibility", "PortPoolOverrides", "",
                 "Semicolon-separated portIndex|exactGameObjectName|AlAnkh/Emerald/Aestrin/FireFishLagoon/SmallIslands records.");
 
-            Settings = new SelectionSettings
-            {
-                PortIndex = lastPort.Value,
-                RandomPort = randomPort.Value,
-                ShipyardPortsOnly = shipyardPortsOnly.Value,
-                BoatSceneIndex = lastBoat.Value,
-                RandomBoat = randomBoat.Value
-            };
-            IndividualExclusions = NewBeginnings.IndividualExclusions.Load(
-                excludedRandomPorts.Value, excludedRandomBoats.Value);
+            Read();
+            Save();
+        }
+
+        // Startup and live reloads (Configuration Manager or a reread file) share
+        // this read, so validation, fallbacks and warnings are identical. The
+        // existing objects are updated in place for every holder.
+        internal void Read()
+        {
+            warnings.Begin();
+            Settings.PortIndex = lastPort.Value;
+            Settings.RandomPort = randomPort.Value;
+            Settings.ShipyardPortsOnly = shipyardPortsOnly.Value;
+            Settings.BoatSceneIndex = lastBoat.Value;
+            Settings.RandomBoat = randomBoat.Value;
+            IndividualExclusions.ReplaceWith(NewBeginnings.IndividualExclusions.Load(
+                excludedRandomPorts.Value, excludedRandomBoats.Value));
             Settings.PortPools.Clear();
             if (alAnkh.Value) Settings.PortPools.Add(PortPool.AlAnkh);
             if (emerald.Value) Settings.PortPools.Add(PortPool.Emerald);
@@ -83,23 +92,18 @@ namespace NewBeginnings
             if (Settings.PortPools.Count == 0)
             {
                 Settings.PortPools.Add(PortPool.AlAnkh);
-                Plugin.Instance.Warn("Every random port pool was disabled; Al'Ankh was restored.");
+                warnings.Warn("Every random port pool was disabled; Al'Ankh was restored.");
             }
             if (Settings.BoatSizes.Count == 0)
             {
                 Settings.BoatSizes.Add(BoatSize.Small);
-                Plugin.Instance.Warn("Every random boat size was disabled; Small was restored.");
+                warnings.Warn("Every random boat size was disabled; Small was restored.");
             }
-            RefreshOverrides();
-            Save();
-        }
-
-        internal void RefreshOverrides()
-        {
             Overrides = SelectionOverrides.Parse(boatSizeOverrides.Value,
                 portPoolOverrides.Value);
             foreach (var error in Overrides.Errors)
-                Plugin.Instance.Warn(error);
+                warnings.Warn(error);
+            warnings.End();
         }
 
         internal void Save()

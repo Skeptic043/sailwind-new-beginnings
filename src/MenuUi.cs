@@ -41,9 +41,10 @@ namespace NewBeginnings
         private static readonly FieldInfo ChoiceUiField = AccessTools.Field(typeof(StartMenu), "chooseIslandUI");
         private StartMenu menu;
         private SelectionSettings settings;
-        private SelectionOverrides overrides;
+        private Func<SelectionOverrides> overrides;
         private IndividualExclusions individualExclusions;
-        private IndividualExclusions editorSnapshot;
+        private IndividualExclusions editorDraft;
+        private Plugin reloadSource;
         private Action changed;
         private SelectionCatalog catalog;
         private GameObject buttonTemplate;
@@ -110,7 +111,7 @@ namespace NewBeginnings
         // Call from a StartMenu.Awake postfix ordered after Scrambled Seas' UI
         // postfix. RefreshCatalog may also be called when the menu is reopened.
         internal static MenuUi Attach(StartMenu startMenu, SelectionSettings current,
-            SelectionOverrides currentOverrides, IndividualExclusions randomExclusions,
+            Func<SelectionOverrides> currentOverrides, IndividualExclusions randomExclusions,
             Action onChanged)
         {
             var choice = startMenu != null ? ChoiceUiField?.GetValue(startMenu) as GameObject : null;
@@ -127,7 +128,7 @@ namespace NewBeginnings
         }
 
         private void Initialize(StartMenu startMenu, SelectionSettings current,
-            SelectionOverrides currentOverrides, IndividualExclusions randomExclusions,
+            Func<SelectionOverrides> currentOverrides, IndividualExclusions randomExclusions,
             Action onChanged)
         {
             menu = startMenu;
@@ -168,6 +169,16 @@ namespace NewBeginnings
 
         private void OnEnable()
         {
+            var plugin = Plugin.Instance;
+            if (plugin != null)
+            {
+                // Pick up hand edits to the file; Configuration Manager changes
+                // arrive through SettingsReloaded while the menu is shown.
+                plugin.ReloadConfigFile();
+                plugin.SettingsReloaded -= OnSettingsReloaded;
+                plugin.SettingsReloaded += OnSettingsReloaded;
+                reloadSource = plugin;
+            }
             if (built && settings != null)
             {
                 HideNativeRegionChoice();
@@ -177,8 +188,19 @@ namespace NewBeginnings
 
         private void OnDisable()
         {
+            if (reloadSource != null) reloadSource.SettingsReloaded -= OnSettingsReloaded;
+            reloadSource = null;
             if (editing) CloseEditor(false);
             startingOptions?.Close(false);
+        }
+
+        // Settings changed outside the menu: an open panel reloads from the saved values and discards its pending edits.
+        private void OnSettingsReloaded()
+        {
+            if (!built || settings == null) return;
+            if (editing && individualExclusions != null) editorDraft = individualExclusions.Copy();
+            startingOptions?.ApplyExternalChange();
+            RefreshCatalog();
         }
 
         private void Update()
@@ -200,13 +222,20 @@ namespace NewBeginnings
             if (!built || settings == null) return;
             try
             {
-                catalog = SelectionCatalog.Discover(overrides);
+                catalog = SelectionCatalog.Discover(overrides?.Invoke());
                 if (catalog.Ports.Count == 0 || catalog.Boats.Count == 0)
                 {
                     var reason = catalog.Rejections.FirstOrDefault() ??
                         "No playable ports or boats were available.";
                     ShowCatalogUnavailable();
-                    if (!catalogFaultLogged)
+                    // The first refresh runs from StartMenu.Awake while this
+                    // panel is hidden and before ports register. Only an empty
+                    // catalog on a shown menu is worth a warning.
+                    if (!gameObject.activeInHierarchy)
+                    {
+                        Plugin.Instance?.DebugLog("New Beginnings catalog not ready at menu creation; it refreshes when the start menu opens. " + reason);
+                    }
+                    else if (!catalogFaultLogged)
                     {
                         catalogFaultLogged = true;
                         Plugin.Instance?.Warn("New Beginnings catalog has no usable start; Sailwind's normal start remains available. " + reason);
@@ -487,7 +516,8 @@ namespace NewBeginnings
             if (EditingAny || !CanEditExclusions(boats) ||
                 individualExclusions == null || editorRoot == null) return;
             RefreshCatalog();
-            editorSnapshot = individualExclusions.Copy();
+            // Edit a draft: Done applies it, any other close discards it.
+            editorDraft = individualExclusions.Copy();
             editing = true;
             editingBoats = boats;
             editorPage = 0;
@@ -509,11 +539,11 @@ namespace NewBeginnings
         {
             if (!editing) return;
             editing = false;
-            if (!save)
+            if (save)
             {
-                individualExclusions?.ReplaceWith(editorSnapshot);
+                individualExclusions?.ReplaceWith(editorDraft);
             }
-            editorSnapshot = null;
+            editorDraft = null;
             editorRoot.SetActive(false);
             foreach (var control in mainControls) control.SetActive(true);
             if (confirm != null) confirm.gameObject.SetActive(confirmWasActive);
@@ -547,30 +577,30 @@ namespace NewBeginnings
 
         private void ToggleEditorRow(int row)
         {
-            if (!editing || !CanEditExclusions(editingBoats) || individualExclusions == null) return;
+            if (!editing || !CanEditExclusions(editingBoats) || editorDraft == null) return;
             var index = editorPage * EditorRowsPerPage + row;
             if (editingBoats)
             {
                 var boats = EditorBoats();
                 if (index >= boats.Length) return;
                 var boat = boats[index];
-                individualExclusions.SetBoatExcluded(boat,
-                    !individualExclusions.IsBoatExcluded(boat));
+                editorDraft.SetBoatExcluded(boat,
+                    !editorDraft.IsBoatExcluded(boat));
             }
             else
             {
                 var ports = EditorPorts();
                 if (index >= ports.Length) return;
                 var port = ports[index];
-                individualExclusions.SetPortExcluded(port,
-                    !individualExclusions.IsPortExcluded(port));
+                editorDraft.SetPortExcluded(port,
+                    !editorDraft.IsPortExcluded(port));
             }
             RefreshEditor();
         }
 
         private void RefreshEditor()
         {
-            if (!editing || catalog == null || individualExclusions == null) return;
+            if (!editing || catalog == null || editorDraft == null) return;
             if (!CanEditExclusions(editingBoats))
             {
                 if (!CanEditExclusions(!editingBoats))
@@ -585,8 +615,8 @@ namespace NewBeginnings
             var boats = editingBoats ? EditorBoats() : null;
             var count = editingBoats ? boats.Length : ports.Length;
             var excluded = editingBoats
-                ? boats.Count(individualExclusions.IsBoatExcluded)
-                : ports.Count(individualExclusions.IsPortExcluded);
+                ? boats.Count(editorDraft.IsBoatExcluded)
+                : ports.Count(editorDraft.IsPortExcluded);
             var pages = Math.Max(1, (count + EditorRowsPerPage - 1) / EditorRowsPerPage);
             editorPage = (editorPage % pages + pages) % pages;
             editorTitle.text = editingBoats ? "Random Boat Exclusions" : "Random Island Exclusions";
@@ -616,8 +646,8 @@ namespace NewBeginnings
                 }
                 var name = editingBoats ? boats[index].DisplayName : ports[index].DisplayName;
                 var isExcluded = editingBoats
-                    ? individualExclusions.IsBoatExcluded(boats[index])
-                    : individualExclusions.IsPortExcluded(ports[index]);
+                    ? editorDraft.IsBoatExcluded(boats[index])
+                    : editorDraft.IsPortExcluded(ports[index]);
                 var label = (isExcluded ? "[ ] " : "[x] ") + Trim(name, 34);
                 SetButtonText(button, label);
                 var text = ButtonText(button);

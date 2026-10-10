@@ -3,12 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
+using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.2.2")]
+    [BepInPlugin(Id, "New Beginnings", "1.2.3")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -95,6 +96,8 @@ namespace NewBeginnings
         internal SelectionSettings Settings => selection.Settings;
         internal SelectionOverrides Overrides => selection.Overrides;
         internal StartingOptionsSettings StartOptions => startingOptions.Settings;
+        internal event Action SettingsReloaded;
+        private int configWrites;
 
         private void Awake()
         {
@@ -106,6 +109,8 @@ namespace NewBeginnings
                 harmony = new Harmony(Id);
                 harmony.PatchAll(typeof(Plugin).Assembly);
                 ScrambledSeasIntegration.Initialize(harmony);
+                // Subscribe last, so a failed initialization leaves no handler.
+                Config.SettingChanged += OnConfigSettingChanged;
                 Logger.LogInfo("New Beginnings loaded with port and boat selection.");
             }
             catch (Exception exception)
@@ -139,7 +144,7 @@ namespace NewBeginnings
                 if (!ScrambledSeasIntegration.CanSelect) return;
                 try
                 {
-                    if (MenuUi.Attach(__instance, plugin.Settings, plugin.Overrides,
+                    if (MenuUi.Attach(__instance, plugin.Settings, () => plugin.Overrides,
                         plugin.selection.IndividualExclusions,
                         plugin.SaveSelection) == null)
                         plugin.Warn("Start menu controls could not be attached; saved settings remain available.");
@@ -151,14 +156,73 @@ namespace NewBeginnings
             }
         }
 
-        private void SaveSelection() => selection.Save();
-        internal void SaveStartingOptions() => startingOptions.Save();
+        private void SaveSelection() => WriteConfig(selection.Save);
+        internal void SaveStartingOptions() => WriteConfig(startingOptions.Save);
+
+        // Each entry assignment raises SettingChanged synchronously. Our own
+        // saves assign entries one by one from settings already in memory, so
+        // ignore those notifications instead of rereading a half-written mix.
+        private void WriteConfig(Action save)
+        {
+            configWrites++;
+            try { save(); }
+            finally { configWrites--; }
+        }
+
+        // Configuration Manager assigns entries at runtime. Reread them into the
+        // shared settings objects, so the menu and the next start use the change
+        // and a later menu save writes it back instead of the startup value.
+        private void OnConfigSettingChanged(object sender, SettingChangedEventArgs args)
+        {
+            if (configWrites == 0) ReloadSettings();
+        }
+
+        private void ReloadSettings()
+        {
+            try
+            {
+                selection.Read();
+                startingOptions.Read();
+                SettingsReloaded?.Invoke();
+            }
+            catch (Exception exception)
+            {
+                Error("New Beginnings could not apply changed settings.", exception);
+            }
+        }
+
+        // Called when the new-game menu opens, to pick up hand edits made to the
+        // file while the game runs. Config.Reload assigns changed entries one by
+        // one; suppress those notifications and the file rewrite each would
+        // trigger, then reread once. Unchanged entries raise nothing.
+        internal void ReloadConfigFile()
+        {
+            var saveOnSet = Config.SaveOnConfigSet;
+            configWrites++;
+            try
+            {
+                if (!System.IO.File.Exists(Config.ConfigFilePath)) return;
+                Config.SaveOnConfigSet = false;
+                Config.Reload();
+            }
+            catch (Exception exception)
+            {
+                Warn("New Beginnings could not reread its configuration file; current settings remain in use. " +
+                    exception.Message);
+            }
+            finally
+            {
+                Config.SaveOnConfigSet = saveOnSet;
+                configWrites--;
+            }
+            ReloadSettings();
+        }
 
         internal bool TryChooseStart(out StartPair pair, out string reason)
         {
             pair = null;
             reason = null;
-            selection.RefreshOverrides();
+            // Overrides are current: every entry change and file reload rereads them.
             var catalog = SelectionCatalog.Discover(selection.Overrides);
             if (catalog.TryChoose(selection.Settings,
                 selection.IndividualExclusions, random, out pair, out reason))
@@ -704,13 +768,29 @@ namespace NewBeginnings
             out Vector3 surface, out Collider collider)
             => ProbeDocksideSurface(horizontalSample, out surface, out collider, null, false);
 
+        internal bool TryProbeDocksideCargoSurface(Vector3 horizontalSample,
+            out Vector3 surface, out Collider collider, out string failureReason)
+        {
+            var summary = new SurfaceProbeSummary { Samples = 1 };
+            var found = ProbeDocksideSurface(horizontalSample, out surface,
+                out collider, summary, false);
+            failureReason = found ? null : summary.ToString();
+            return found;
+        }
+
         private bool ProbeDocksideSurface(Vector3 horizontalSample, out Vector3 surface,
             out Collider collider, SurfaceProbeSummary summary, bool requirePlayerClearance = true)
         {
             surface = Vector3.zero;
             collider = null;
             var marker = docksideMarker;
-            if (marker == null || !IsFinite(horizontalSample)) return false;
+            if (marker == null || !IsFinite(horizontalSample))
+            {
+                if (summary != null && summary.Example == null)
+                    summary.Example = marker == null ? "dockside marker missing" :
+                        "non-finite surface sample " + horizontalSample;
+                return false;
+            }
             // Main-scene terrain can be present before the selected island's
             // buildings and docks. Even a nearby candidate must wait for their
             // collision geometry before it can be judged safe for player or cargo.
@@ -1439,6 +1519,7 @@ namespace NewBeginnings
 
         private void OnDestroy()
         {
+            Config.SettingChanged -= OnConfigSettingChanged;
             StartingValues.Cancel();
             CancelBoatSettle();
             CancelPlayerStartTracking();

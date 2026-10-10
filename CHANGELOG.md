@@ -1,5 +1,21 @@
 # Release notes
 
+## Version 1.2.3
+
+### Added
+
+- The [Santa Maria](https://github.com/winterspices/AgeOfExploration) is now recognized as a medium boat.
+
+### Changed
+
+- Boats from mods that New Beginnings doesn't already know are now sorted into Small, Medium or Large by hull size when possible, so they join the matching Random Boat pool and the exclusion list instead of being manual selection only.
+- FFL Paraw is now labeled Paraw in the boat selector and exclusion list.
+
+### Fixed
+
+- The log no longer shows a false "catalog has no usable start" warning at every launch.
+- Changes made in Configuration Manager now apply while the game is running instead of being overwritten by the new-game menu.
+
 ## Version 1.2.2
 
 ### Added

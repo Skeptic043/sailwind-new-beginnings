@@ -292,7 +292,7 @@ namespace NewBeginnings
             if (IsOpen || Plugin.Instance?.StartOptions == null) return;
             draft = Plugin.Instance.StartOptions.Copy();
             for (var i = 0; i < amounts.Length; i++)
-                amounts[i] = draft.CurrencyOverrides[i]?.ToString(CultureInfo.InvariantCulture) ?? "";
+                amounts[i] = AmountText(draft.CurrencyOverrides[i]);
             equipment = AdditionalEquipment.GetCatalog().OrderBy(entry => entry.IsModded).ToArray();
             vanillaEquipmentCount = equipment.Count(entry => !entry.IsModded);
             IsOpen = true;
@@ -329,6 +329,21 @@ namespace NewBeginnings
             gameObject.SetActive(false);
             owner.ShowStartingOptions(false);
         }
+
+        // Settings changed outside this panel: reload it from the saved values and discard pending edits.
+        internal void ApplyExternalChange()
+        {
+            var saved = Plugin.Instance?.StartOptions;
+            if (!IsOpen || saved == null) return;
+            draft = saved.Copy();
+            for (var i = 0; i < amounts.Length; i++)
+                amounts[i] = AmountText(draft.CurrencyOverrides[i]);
+            // ShowTab blurs any focused field, which would otherwise rewrite the draft from its text.
+            ShowTab(tab);
+        }
+
+        private static string AmountText(int? amount) =>
+            amount?.ToString(CultureInfo.InvariantCulture) ?? "";
 
         private void OnDisable()
         {

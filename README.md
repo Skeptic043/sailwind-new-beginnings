@@ -35,7 +35,7 @@ Boats that need to be moved away from their normal starting locations receive up
 
 ## Configuration
 
-The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`.
+The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`. After launching once, settings can also be changed in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
 Once startup finishes, including mooring setup and the one-time hull repair, New Beginnings no longer moves the player, boat or supplies or changes their state, and can be safely uninstalled.
 
@@ -61,6 +61,9 @@ Port and boat selection has been tested with [Scrambled Seas: NANDbrew Edition](
 - [Paraw](https://github.com/alesparise/FFLParaw-Sailwind-Mod)
 - [Old Chronian](https://github.com/Aquilarts/OldChronian)
 - [Dinghies](https://github.com/alesparise/Dinghies-Sailwind-Mod)
+- [Age of Exploration](https://github.com/winterspices/AgeOfExploration)
+
+Boats from other mods that aren't on this list are sorted into Small, Medium or Large by hull size when possible, so they can come up in Random Boat. Any that can't be measured stay available for manual selection.
 
 Every port has been tested with at least one large boat, but this does not mean every hull fits every port, particularly HMS Leopard. Large ships can take a moment to settle, and some ports don't have enough room for them. Use Island Exclusions to leave cramped ports out of random starts, exclude particular boats, or disable the Large size pool.
 
@@ -80,7 +83,7 @@ HMS Leopard is especially large and can struggle at ports that work for other la
 
 ## AI Use
 
-AI was used to write code for this project. The original concept, design direction, testing, debugging, and release decisions are my own. If you prefer not to use mods developed with AI assistance, I understand and respect that choice.
+AI was used to write all of the code in this project. The original concept, design direction, testing, debugging, and release decisions are my own. If you prefer not to use mods developed with AI assistance, I understand and respect that choice.
 
 ## Issues and links
 
