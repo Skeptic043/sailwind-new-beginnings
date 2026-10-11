@@ -66,7 +66,7 @@ namespace NewBeginnings
             // Pending selection is consumed once, so invoking the factory again
             // at handoff continues through its normal body without recursion.
             if (FixedStart.TryPreparePendingCustom(__0, out var custom,
-                target => playerStartFactory.Invoke(null, new object[] { __0, target, __2, __3 }) as IEnumerator))
+                target => playerStartFactory.Invoke(null, new object[] { __0, target, __2, __3 }) as IEnumerator, true))
             { __result = custom; return false; }
             FixedStart.ApplyPendingAtStart(__0, ref __1);
             return true;

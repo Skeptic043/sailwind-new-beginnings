@@ -14,6 +14,7 @@
 
 - Fort Juniper is a separate starting location when Old Chronian is installed and qualifies for Shipyard ports only.
 - Pirate Island and Saffron Island are optional Small Islands starts. Both start disabled behind the Configuration Manager spoiler reveal and can be enabled separately for manual or random selection. Mod ports does not affect either island.
+- Pirate Island tries its existing docks first, then looks for room to anchor near one dock when the selected boat does not fit alongside.
 - At Saffron, the player and supplies start on dry land with the boat anchored nearby.
 
 </details>
@@ -27,6 +28,8 @@
 ### Fixed
 
 - Addressed Pirate Island falling back to a regional start when Scrambled Seas handled the new-game transition before its scenery could load.
+- Native-anchor starts now use the boat's physical joint attachments, including the layout used by the Santa Maria and vanilla Mediterranean boats.
+- After Scrambled Seas has moved the world, a failed custom start now requires a game restart. This prevents repeated New Game clicks from moving the same world again.
 
 ## Version 1.2.3
 

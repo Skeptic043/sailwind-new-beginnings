@@ -272,12 +272,13 @@ namespace NewBeginnings
         {
             catalog = null;
             catalogUnavailable = true;
-            continueAvailable = true;
+            continueAvailable = !FixedStart.TryGetStartBlock(out var blocked);
             try
             {
                 if (portValue != null) portValue.text = "Unavailable";
                 if (boatValue != null) boatValue.text = "Unavailable";
-                if (status != null) status.text = "New Beginnings unavailable; Sailwind start";
+                if (status != null) status.text = continueAvailable ?
+                    "New Beginnings unavailable; Sailwind start" : Trim(blocked, 58);
                 ApplyContinueState();
             }
             catch (Exception exception)
@@ -292,6 +293,7 @@ namespace NewBeginnings
         internal bool CanStart(out string reason)
         {
             reason = null;
+            if (FixedStart.TryGetStartBlock(out reason)) return false;
             if (EditingAny)
             {
                 reason = "Finish editing your starting options before continuing.";
@@ -905,8 +907,8 @@ namespace NewBeginnings
             SetEnabled(portExclusions, CanEditExclusions(false) && individualExclusions != null);
             SetEnabled(boatExclusions, settings.RandomBoat && individualExclusions != null);
 
-            continueAvailable = catalog.TryChoose(settings, individualExclusions,
-                new System.Random(1), out _, out var reason);
+            continueAvailable = !FixedStart.TryGetStartBlock(out var reason) &&
+                catalog.TryChoose(settings, individualExclusions, new System.Random(1), out _, out reason);
             ApplyContinueState();
             if (continueAvailable)
             {

@@ -125,6 +125,10 @@ namespace NewBeginnings
             private static bool Prefix(StartMenu __instance, StartMenuButtonType button)
             {
                 if (button != StartMenuButtonType.RegionConfirm) return true;
+                // Block at the caller before any StartNewGame prefix (including
+                // Scrambled Seas world movement) can run a second attempt.
+                if (TryGetStartBlock(out var blocked))
+                { MenuUi.ActiveFor(__instance)?.ShowBlockedStart(blocked); return false; }
                 ClearAcceptedButtonChoice();
                 nativeFallbackButtonMenu = null;
                 var plugin = Plugin.Instance;
@@ -192,6 +196,7 @@ namespace NewBeginnings
         {
             private static bool Prefix(StartMenu __instance)
             {
+                if (TryGetStartBlock(out _)) return false;
                 var buttonPair = ReferenceEquals(acceptedButtonMenu, __instance)
                     ? acceptedButtonPair : null;
                 var useNativeStart = ReferenceEquals(nativeFallbackButtonMenu, __instance);
@@ -238,7 +243,10 @@ namespace NewBeginnings
                     if (!pendingOptions.TryValidate(out var optionsReason))
                         throw new InvalidOperationException(optionsReason);
                     if (pair.Port.UsesCustomBerth)
+                    {
                         pendingCustomSnapshot = new CustomStartSnapshot(__instance, (int)previousRegion);
+                        customFlightGeneration = customGeneration;
+                    }
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
                 }
                 catch (Exception exception)

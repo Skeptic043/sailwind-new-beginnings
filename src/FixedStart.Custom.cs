@@ -11,6 +11,17 @@ namespace NewBeginnings
         private static CustomStartSnapshot pendingCustomSnapshot;
         private static Action customCleanup;
         private static int customGeneration;
+        private static int customFlightGeneration = -1;
+        internal static bool CustomStartInFlight => customFlightGeneration == customGeneration;
+        private static bool scrambledWorldRequiresRestart;
+        private const string RestartRequired = "Restart the game before trying another new game. The previous failed start already moved the Scrambled Seas world.";
+
+        internal static bool TryGetStartBlock(out string reason)
+        {
+            reason = scrambledWorldRequiresRestart ? RestartRequired :
+                CustomStartInFlight ? "A starting location is already being prepared." : null;
+            return reason != null;
+        }
         private static readonly System.Reflection.MethodInfo MovePlayerFactory = AccessTools.Method(typeof(StartMenu), "MovePlayerToStartPos");
         private static readonly System.Reflection.MethodInfo AnchorGroundedMethod = AccessTools.Method(typeof(Anchor), "IsTouchingGround");
         private static readonly System.Reflection.MethodInfo SetAnchorMethod = AccessTools.Method(typeof(Anchor), "SetAnchor");
@@ -162,21 +173,22 @@ namespace NewBeginnings
         }
 
         internal static bool TryPreparePendingCustom(StartMenu menu, out IEnumerator sequence,
-            Func<Transform, IEnumerator> continuation = null)
+            Func<Transform, IEnumerator> continuation = null, bool worldMoved = false)
         {
             sequence = null;
             if (pending == null || !pending.Port.UsesCustomBerth || !ReferenceEquals(menu, pendingMenu)) return false;
             var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
             pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
-            sequence = PrepareCustomStart(menu, pair, options, snapshot, continuation);
+            sequence = PrepareCustomStart(menu, pair, options, snapshot, continuation, worldMoved);
             return true;
         }
 
         private static IEnumerator PrepareCustomStart(StartMenu menu, StartPair pair,
             StartingOptionsSettings options, CustomStartSnapshot snapshot,
-            Func<Transform, IEnumerator> continuation = null)
+            Func<Transform, IEnumerator> continuation = null, bool worldMoved = false)
         {
             var generation = customGeneration;
+            customFlightGeneration = generation;
             var failure = "Starting-location preparation was cancelled.";
             CustomPlacement placement = null;
             IEnumerator native = null;
@@ -186,6 +198,14 @@ namespace NewBeginnings
             {
                 if (cleaned || committed) return;
                 cleaned = true;
+                // Scrambled's startup has already moved the whole world before
+                // entering its coroutine factory. Our boat/menu rollback cannot
+                // undo that mutation. A second scramble of this world is unsafe.
+                if (worldMoved)
+                {
+                    scrambledWorldRequiresRestart = true;
+                    failure = RestartRequired + " " + failure;
+                }
                 try { placement?.Rollback(); }
                 catch (Exception exception) { Plugin.Instance?.Error("Boat rollback could not fully restore a disappeared scene object.", exception); }
                 finally
@@ -226,6 +246,9 @@ namespace NewBeginnings
                 {
                     var anchor = placement.Selected.Ropes.anchor;
                     var anchorDeadline = Time.realtimeSinceStartup + 4f;
+                    // OnLoad stores the normalized length. Native Update applies
+                    // it to the physical joint, including when contact was immediate.
+                    yield return null;
                     while (generation == customGeneration && anchor != null && !AnchorGrounded(anchor) &&
                         Time.realtimeSinceStartup < anchorDeadline && !GameState.currentlyLoading)
                         yield return new WaitForFixedUpdate();
@@ -258,7 +281,8 @@ namespace NewBeginnings
                 if (ReferenceEquals(customCleanup, cleanup)) customCleanup = null;
                 try { (native as IDisposable)?.Dispose(); }
                 catch (Exception exception) { Plugin.Instance?.Error("Native start iterator cleanup failed.", exception); }
-                cleanup();
+                try { cleanup(); }
+                finally { if (customFlightGeneration == generation) customFlightGeneration = -1; }
             }
         }
 
@@ -365,6 +389,7 @@ namespace NewBeginnings
                     // Only the bounded contact wait holds the hull. Successful
                     // completion releases it to normal native anchor physics.
                     s.Body.isKinematic = true;
+                    anchorBody.rotation = s.Berth.AnchorModel.AnchorRotation;
                     anchorBody.position = s.Berth.AnchorPosition;
                     anchorBody.isKinematic = false;
                     s.Ropes.anchor.OnLoad(false, s.Berth.AnchorLength);
@@ -385,6 +410,9 @@ namespace NewBeginnings
                 var s = Selected;
                 if (!AnchorGrounded(s.Ropes.anchor) || !StartDestinations.IsCurrent(s.Destination))
                 { reason = "The anchorage changed before native anchor setup."; return false; }
+                if (s.Berth.AnchorModel == null ||
+                    !s.Berth.AnchorModel.ReadyToSecure(s.Ropes, s.Body, s.Berth.AnchorLength,
+                        s.Berth.AnchorPosition, out reason)) return false;
                 SetAnchorMethod.Invoke(s.Ropes.anchor, null);
                 s.Body.isKinematic = bodyKinematic;
                 return s.Ropes.anchor.IsSet();
