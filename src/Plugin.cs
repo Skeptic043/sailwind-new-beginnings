@@ -1001,7 +1001,16 @@ namespace NewBeginnings
             bool newlyAdmittedLowDock)
         {
             if (docksideMarker == null) return false;
-            if (docksideFrontMooring == null || docksideBackMooring == null) return false;
+            if (docksideFrontMooring == null || docksideBackMooring == null)
+            {
+                // An anchored custom start has no dock pair. It still needs a
+                // verified wave upper bound, never just the sampler's mean sea
+                // level output. All ordinary surface and clearance rules apply.
+                if (docksideDestination == null || !docksideDestination.UsesCustomBerth ||
+                    !TrySeaUpperBound(out var upperBound)) return false;
+                return point.y >= upperBound + .35f &&
+                    point.y <= docksideMarker.position.y + (IsTerrainCollider(candidate) ? 6f : 3f);
+            }
             // Crest can fail to sample while the new-game scene settles. Native
             // berth moorings move with Scrambled Seas and provide a local height
             // reference. Shore terrain must rise above them; a dock collider may
@@ -1174,10 +1183,16 @@ namespace NewBeginnings
         // Reuse the dry-ground/player-clearance validator before any boat or
         // ownership change. This private probe frame is discarded on failure.
         internal bool TryFindStartShore(PortChoice destination, Vector3 seed, Vector3 berth,
-            out Vector3 ground, out Collider support)
+            out Vector3 ground, out Collider support) =>
+            TryFindStartShore(destination, seed, berth, out ground, out support, out _);
+
+        internal bool TryFindStartShore(PortChoice destination, Vector3 seed, Vector3 berth,
+            out Vector3 ground, out Collider support, out string failureReason,
+            Transform frontMooring = null, Transform backMooring = null)
         {
-            ground = Vector3.zero; support = null;
-            if (!StartDestinations.SceneryReady(destination)) return false;
+            ground = Vector3.zero; support = null; failureReason = null;
+            if (!StartDestinations.SceneryReady(destination))
+            { failureReason = "Selected scenery is not ready for the shore probe."; return false; }
             if (alternateDocksideAnchor == null)
                 alternateDocksideAnchor = new GameObject("New Beginnings shore preflight").transform;
             alternateDocksideAnchor.SetParent(destination.DockRoot, true);
@@ -1185,24 +1200,54 @@ namespace NewBeginnings
             docksideMarker = alternateDocksideAnchor;
             docksideDestination = destination;
             docksideIsland = destination.Island;
-            docksideFrontMooring = destination.PreferredFront != null ? destination.PreferredFront.transform : null;
-            docksideBackMooring = destination.PreferredBack != null ? destination.PreferredBack.transform : null;
+            // Automatically discovered ports have no author Preferred moorings.
+            // Keep the actual validated pair so the existing dry-ground fallback
+            // has the same physical references that the berth survey used.
+            docksideFrontMooring = frontMooring != null ? frontMooring :
+                destination.PreferredFront != null ? destination.PreferredFront.transform : null;
+            docksideBackMooring = backMooring != null ? backMooring :
+                destination.PreferredBack != null ? destination.PreferredBack.transform : null;
             docksideBerthLocal = docksideMarker.InverseTransformPoint(berth);
-            // Startup preflight already observed two frames of aligned scenery.
             sceneryLoadedFrame = Time.frameCount - 2;
-            foreach (var radius in new[] { 0f, 2f, 4f, 8f, 12f, 18f, 24f })
+            var summary = new SurfaceProbeSummary();
+            var tooFar = 0;
+            foreach (var sample in StartShoreSamples(seed, berth, destination.HiddenKey == "pirate"))
             {
-                var count = radius == 0f ? 1 : 16;
+                ++summary.Samples;
+                if (!ProbeDocksideSurface(sample, out ground, out support, summary)) continue;
+                if (Vector3.ProjectOnPlane(ground - berth, Vector3.up).magnitude <= 45f) return true;
+                ++tooFar;
+            }
+            failureReason = "No supported nearby dry landing: " + summary + $", beyond boat access distance {tooFar}.";
+            return false;
+        }
+
+        private static IEnumerable<Vector3> StartShoreSamples(Vector3 seed, Vector3 berth, bool pirate)
+        {
+            yield return seed;
+            if (pirate)
+            {
+                // Search toward land from the real dock/boat relationship first.
+                // These points move with the selected site's live world frame.
+                var inland = Vector3.ProjectOnPlane(seed - berth, Vector3.up);
+                if (inland.sqrMagnitude > 1f)
+                {
+                    inland.Normalize();
+                    var across = Vector3.Cross(Vector3.up, inland);
+                    foreach (var distance in new[] { 4f, 8f, 12f, 18f, 24f })
+                        foreach (var side in new[] { 0f, -2f, 2f })
+                            yield return seed + inland * distance + across * side;
+                }
+            }
+            foreach (var radius in new[] { 2f, 4f, 8f, 12f, 18f, 24f })
+            {
+                var count = pirate ? 8 : 16;
                 for (var index = 0; index < count; ++index)
                 {
                     var angle = index * Mathf.PI * 2f / count;
-                    var sample = seed + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
-                    if (ProbeDocksideSurface(sample, out ground, out support, null) &&
-                        Vector3.ProjectOnPlane(ground - berth, Vector3.up).magnitude <= 45f)
-                        return true;
+                    yield return seed + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
                 }
             }
-            return false;
         }
 
         private bool IsStaticDocksideCollider(Collider collider)

@@ -40,8 +40,14 @@ namespace NewBeginnings
 
         private sealed class Survey
         {
-            private int queries = 50000, candidates;
-            internal bool Exhausted => queries <= 0 || candidates >= 96;
+            private int queries, candidates;
+            private readonly int maximumCandidates;
+            internal Survey(bool pirate = false)
+            {
+                queries = pirate ? 8000 : 50000;
+                maximumCandidates = pirate ? 48 : 96;
+            }
+            internal bool Exhausted => queries <= 0 || candidates >= maximumCandidates;
             internal bool Query() { if (queries <= 0) return false; --queries; return true; }
             internal bool Candidate() { if (Exhausted) return false; ++candidates; return true; }
         }
@@ -110,7 +116,7 @@ namespace NewBeginnings
             if (!StartDestinations.IsCurrent(destination) || !StartDestinations.SceneryReady(destination) || Plugin.Instance == null)
                 return Fail("Starting location scenery is not ready.", out reason);
             if (!TryHull(body, ropes, out var hull, out reason) || !TryHeight(body, out var height, out reason)) return false;
-            var survey = new Survey();
+            var survey = new Survey(destination.HiddenKey == "pirate");
             if (destination.HiddenKey == "saffron")
             {
                 if (destination.Marker == null) return Fail("The offshore starting marker is missing.", out reason);
@@ -131,79 +137,147 @@ namespace NewBeginnings
             if (cleats.Length < 2) return Fail("No unclaimed pair of initialized dock cleats is available.", out reason);
             if (cleats.Length > 128) return Fail("This location needs an author-supplied dock scope to bound its berth survey.", out reason);
             var report = new DockReport { Cleats = cleats.Length };
+            var shoreFailures = new ShoreFailures();
             var pairs = (from a in cleats from b in cleats where a != b && a.spring != b.spring
                          let span = Vector3.ProjectOnPlane(a.transform.position - b.transform.position, Vector3.up).magnitude
                          where span >= 3f && span <= 80f && Mathf.Abs(a.transform.position.y - b.transform.position.y) <= 3f
                          orderby Mathf.Abs(span - 2f * (hull.HalfSegment + hull.Radius))
-                         select new { A = a, B = b }).Take(64);
+                         select new DockPair { A = a, B = b }).Take(64);
             // Pair nearby real dock endpoints, then check both water-facing sides.
             // The dock continuity test prevents treating separate shores as one quay.
-            foreach (var pair in pairs)
+            foreach (var candidate in DockCandidates(SupportedDockPairs(pairs, survey, report),
+                destination.HiddenKey == "pirate"))
                 {
-                    if (survey.Exhausted) return TryPirateFallback(destination, body, ropes, hull, height, cleats,
+                    if (destination.HiddenKey == "pirate" && !shoreFailures.CanTry(candidate.Pair)) continue;
+                    if (survey.Exhausted) return TryPirateFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
                         report.Describe(true), out plan, out reason);
-                    ++report.Pairs;
-                    var a = pair.A; var b = pair.B;
+                    var a = candidate.Pair.A; var b = candidate.Pair.B;
                     var delta = Vector3.ProjectOnPlane(a.transform.position - b.transform.position, Vector3.up);
-                    if (!DockContinuous(a, b, survey, out reason))
-                    { report.Reject(DockRejection.DockSupport, reason); continue; }
                     var forward = delta.normalized;
                     var right = Vector3.Cross(Vector3.up, forward);
                     var midpoint = (a.transform.position + b.transform.position) * .5f;
                     var rotation = Quaternion.LookRotation(forward, Vector3.up);
-                    foreach (var side in new[] { 1f, -1f })
-                        for (var extra = 0f; extra <= 6f; extra += 1.5f)
-                            foreach (var shift in new[] { 0f, -3f, 3f })
-                            {
-                                if (destination.Marker != null && (side != 1f || extra != 0f || shift != 0f)) continue;
-                                var center = midpoint + right * side * (hull.Radius + 2f + extra) + forward * shift;
-                                var position = center - rotation * hull.Center;
-                                var candidateRotation = rotation;
-                                if (destination.Marker != null)
-                                {
-                                    var heading = Vector3.ProjectOnPlane(destination.Marker.forward, Vector3.up);
-                                    if (!Finite(heading) || heading.sqrMagnitude < .5f) continue;
-                                    candidateRotation = Quaternion.LookRotation(heading.normalized, Vector3.up);
-                                    position = destination.Marker.position;
-                                }
-                                position.y = height;
-                                ++report.Poses;
-                                if (!RopePair(hull, position, candidateRotation, a, b, out var frontRope, out var backRope))
-                                { report.Reject(DockRejection.RopeReach, "No opposite-end rope pair reaches these cleats with native slack."); continue; }
-                                if (!survey.Candidate()) return TryPirateFallback(destination, body, ropes, hull, height, cleats,
-                                    report.Describe(true), out plan, out reason);
-                                if (!Clear(body, hull, position, candidateRotation, survey, out reason))
-                                { report.Reject(DockRejection.HullClearance, reason); continue; }
-                                if (!DepartureClear(body, hull, position, candidateRotation, survey, out reason))
-                                { report.Reject(DockRejection.Departure, reason); continue; }
-                                var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : midpoint;
-                                if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _))
-                                { report.Reject(DockRejection.DryShore, "No supported dry landing passed the nearby shore checks."); continue; }
-                                plan = Make(destination, position, candidateRotation, shore);
-                                plan.Front = a; plan.Back = b;
-                                plan.FrontSpring = a.spring; plan.BackSpring = b.spring;
-                                plan.FrontRope = frontRope; plan.BackRope = backRope;
-                                reason = null;
-                                return true;
-                            }
+                    var extra = candidate.Offset.x; var side = candidate.Offset.y; var shift = candidate.Offset.z;
+                    if (destination.Marker != null && (side != 1f || extra != 0f || shift != 0f)) continue;
+                    var center = midpoint + right * side * (hull.Radius + 2f + extra) + forward * shift;
+                    var position = center - rotation * hull.Center;
+                    var candidateRotation = rotation;
+                    if (destination.Marker != null)
+                    {
+                        var heading = Vector3.ProjectOnPlane(destination.Marker.forward, Vector3.up);
+                        if (!Finite(heading) || heading.sqrMagnitude < .5f) continue;
+                        candidateRotation = Quaternion.LookRotation(heading.normalized, Vector3.up);
+                        position = destination.Marker.position;
+                    }
+                    position.y = height;
+                    if (destination.HiddenKey == "pirate" && report.Poses >= 24)
+                        return TryPirateFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
+                            report.Describe(true), out plan, out reason);
+                    ++report.Poses;
+                    if (!RopePair(hull, position, candidateRotation, a, b, out var frontRope, out var backRope))
+                    { report.Reject(DockRejection.RopeReach, "No opposite-end rope pair reaches these cleats with native slack."); continue; }
+                    if (!survey.Candidate()) return TryPirateFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
+                        report.Describe(true), out plan, out reason);
+                    if (!Clear(body, hull, position, candidateRotation, survey, out reason))
+                    { report.Reject(DockRejection.HullClearance, reason); continue; }
+                    if (!DepartureClear(body, hull, position, candidateRotation, survey, out reason))
+                    { report.Reject(DockRejection.Departure, reason); continue; }
+                    var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : midpoint;
+                    if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _,
+                        out var shoreReason, a.transform, b.transform))
+                    {
+                        report.Reject(DockRejection.DryShore, shoreReason);
+                        if (destination.HiddenKey == "pirate")
+                        {
+                            shoreFailures.Reject(candidate.Pair);
+                            if (shoreFailures.Exhausted)
+                                return TryPirateFallback(destination, body, ropes, hull, height, cleats, survey, true,
+                                    report.Describe(false), out plan, out reason);
+                        }
+                        continue;
+                    }
+                    plan = Make(destination, position, candidateRotation, shore);
+                    plan.Front = a; plan.Back = b;
+                    plan.FrontSpring = a.spring; plan.BackSpring = b.spring;
+                    plan.FrontRope = frontRope; plan.BackRope = backRope;
+                    reason = null;
+                    return true;
                 }
-            return TryPirateFallback(destination, body, ropes, hull, height, cleats,
+            return TryPirateFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
                 report.Describe(survey.Exhausted), out plan, out reason);
         }
 
+        private sealed class DockPair { internal GPButtonDockMooring A, B; }
+        private sealed class DockCandidate { internal DockPair Pair; internal Vector3 Offset; }
+
+        private sealed class ShoreFailures
+        {
+            // Try a few different dock/heading references, but do not repeat
+            // the same shore search for each small offset of a failed pair.
+            private readonly HashSet<DockPair> pairs = new HashSet<DockPair>();
+            internal bool Any => pairs.Count != 0;
+            internal bool Exhausted => pairs.Count >= 3;
+            internal bool CanTry(DockPair pair) => !Exhausted && !pairs.Contains(pair);
+            internal void Reject(DockPair pair) => pairs.Add(pair);
+        }
+
+        private static IEnumerable<DockPair> SupportedDockPairs(IEnumerable<DockPair> pairs, Survey survey, DockReport report)
+        {
+            foreach (var pair in pairs)
+            {
+                if (survey.Exhausted) yield break;
+                ++report.Pairs;
+                if (DockContinuous(pair.A, pair.B, survey, out var reason)) yield return pair;
+                else report.Reject(DockRejection.DockSupport, reason);
+            }
+        }
+
+        private static IEnumerable<DockCandidate> DockCandidates(IEnumerable<DockPair> pairs, bool pirate)
+        {
+            if (pirate)
+            {
+                var supported = pairs.ToArray();
+                // Spend the smaller budget across docks and both headings
+                // before trying increasingly displaced poses at one pair.
+                foreach (var offset in DockOffsets(true))
+                    foreach (var pair in supported)
+                        yield return new DockCandidate { Pair = pair, Offset = offset };
+            }
+            else
+                foreach (var pair in pairs)
+                    foreach (var offset in DockOffsets(false))
+                        yield return new DockCandidate { Pair = pair, Offset = offset };
+        }
+
+        private static IEnumerable<Vector3> DockOffsets(bool pirate)
+        {
+            // Components are extra separation, dock side and along-dock shift.
+            // Pirate alternates shores before spending its smaller pose budget
+            // on wider offsets. Other destinations retain their original order.
+            for (var major = 0; major < (pirate ? 5 : 2); ++major)
+                for (var minor = 0; minor < (pirate ? 2 : 5); ++minor)
+                    foreach (var shift in new[] { 0f, -3f, 3f })
+                        yield return new Vector3((pirate ? major : minor) * 1.5f,
+                            (pirate ? minor : major) == 0 ? 1f : -1f, shift);
+        }
+
         private static bool TryPirateFallback(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
-            Hull hull, float height, GPButtonDockMooring[] cleats, string dockReason,
+            Hull hull, float height, GPButtonDockMooring[] cleats, Survey survey, bool mooredShoreFailed, string dockReason,
             out StartBerthPlan plan, out string reason)
         {
             plan = null;
             if (destination.HiddenKey != "pirate") return Fail(dockReason, out reason);
+            if (mooredShoreFailed)
+                return Fail(dockReason + " Anchorage not attempted: a moored berth fits, but its dry-shore validation failed.", out reason);
+            if (survey.Exhausted)
+                return Fail(dockReason + " Anchorage not attempted: the shared geometry survey budget is exhausted.", out reason);
             if (!TryLocalCleatCenter(cleats.Select(item => item.transform.position).ToArray(), out var origin))
                 return Fail(dockReason + " Anchorage: no bounded local cleat group supplies a shore reference.", out reason);
             // Pirate's two authored dock groups are about seventy metres apart.
             // Search around one local group, never their cross-dock midpoint.
             // This is a coordinate only: no marker, cleat or recovery is created.
             if (TryAnchored(destination, body, ropes, hull, height, origin, origin,
-                new Survey(), out plan, out var anchorReason))
+                survey, out plan, out var anchorReason))
             { reason = null; return true; }
             return Fail(dockReason + " Anchorage: " + anchorReason, out reason);
         }
@@ -243,13 +317,15 @@ namespace NewBeginnings
             var report = new AnchorReport();
             if (hull.Radius + 8f > MaximumSearchRadius)
                 return Fail("This hull exceeds the bounded offshore survey.", out reason);
-            for (var ring = 0; ring < 8; ++ring)
-                for (var bearing = 0; bearing < 12; ++bearing)
+            var rings = destination.HiddenKey == "pirate" ? 3 : 8;
+            var bearings = destination.HiddenKey == "pirate" ? 8 : 12;
+            for (var ring = 0; ring < rings; ++ring)
+                for (var bearing = 0; bearing < bearings; ++bearing)
                 {
                     // Spread the candidate budget over the whole radial range,
                     // so a blocked inner ring cannot consume every outer sample.
-                    var radius = Mathf.Lerp(hull.Radius + 8f, MaximumSearchRadius, ring / 7f);
-                    var angle = bearing * Mathf.PI * 2f / 12f;
+                    var radius = Mathf.Lerp(hull.Radius + 8f, MaximumSearchRadius, ring / (float)(rings - 1));
+                    var angle = bearing * Mathf.PI * 2f / bearings;
                     var radial = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
                     var rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, radial), Vector3.up);
                     var center = origin + radial * radius;
@@ -265,8 +341,8 @@ namespace NewBeginnings
                     { report.Reject(AnchorRejection.SwingClearance, reason); continue; }
                     if (!DepartureClear(body, hull, position, rotation, survey, out reason))
                     { report.Reject(AnchorRejection.Departure, reason); continue; }
-                    if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _))
-                    { report.Reject(AnchorRejection.DryShore, "No supported nearby dry landing passed the shore checks."); continue; }
+                    if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _, out var shoreReason))
+                    { report.Reject(AnchorRejection.DryShore, shoreReason); continue; }
                     plan = Make(destination, position, rotation, shore);
                     plan.Anchored = true;
                     plan.AnchorModel = model;
@@ -307,8 +383,10 @@ namespace NewBeginnings
                 front != plan.FrontRope || back != plan.BackRope)
                 return Fail("A planned mooring or its rope reach changed.", out reason);
             if (Plugin.Instance == null || !Plugin.Instance.TryFindStartShore(plan.Destination, plan.ShorePosition,
-                    plan.Position, out var shore, out _) || Vector3.Distance(shore, plan.ShorePosition) > .5f)
-                return Fail("The planned dry landing is no longer supported.", out reason);
+                    plan.Position, out var shore, out _, out reason,
+                    plan.Front != null ? plan.Front.transform : null, plan.Back != null ? plan.Back.transform : null) ||
+                    Vector3.Distance(shore, plan.ShorePosition) > .5f)
+                return Fail(reason ?? "The planned dry landing is no longer supported.", out reason);
             return true;
         }
 
