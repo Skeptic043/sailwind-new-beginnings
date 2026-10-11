@@ -1,5 +1,28 @@
 # Release notes
 
+## Version 1.2.4
+
+### Added
+
+- Automatic starting-location discovery for modded ports, including Better Ports' Bottleneck Isle.
+- An Include mod ports checkbox appears when added locations are detected. It starts disabled and adds those locations to Random Port regardless of the checked regions. Leave all regions unchecked for mod ports only, or select an added location manually without enabling the checkbox.
+- An optional [port-author API](PORT_AUTHORS.md) for specifying a preferred dock, berth or landing when automatic discovery needs more information.
+
+<details>
+<summary>Spoilers: additional starting locations</summary>
+
+- Fort Juniper is a separate starting location when Old Chronian is installed and qualifies for Shipyard ports only.
+- Pirate Island and Saffron Island are optional Small Islands starts. Both start disabled and can be enabled separately in the config's Spoilers section for manual or random selection. Include mod ports does not affect either island.
+- At Saffron, the player and supplies start on dry land with the boat anchored nearby.
+
+</details>
+
+### Changed
+
+- Shipyard ports only uses detected shipyards instead of a fixed list of vanilla ports.
+- Added locations without a normal starting berth check room for the boat, dry landing and supplies before granting the boat. If a suitable start cannot be found, the menu shows a reason.
+- A selected mod location remains selected when its provider is missing and is shown as unavailable until it returns or another location is chosen.
+
 ## Version 1.2.3
 
 ### Added
