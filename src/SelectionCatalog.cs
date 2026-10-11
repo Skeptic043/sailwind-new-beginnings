@@ -8,13 +8,13 @@ using UnityEngine;
 namespace NewBeginnings
 {
     internal enum BoatSize { Small = 1, Medium = 2, Large = 3 }
-    internal enum PortPool { AlAnkh, Emerald, Aestrin, FireFishLagoon, SmallIslands }
+    internal enum PortPool { AlAnkh, Emerald, Aestrin, FireFishLagoon, SmallIslands, Chronos }
 
     internal sealed class PortChoice
     {
         internal Port Port;
         internal RecoveryPort Recovery;
-        internal PortPool? Pool; // null means manual selection only (for example Chronos).
+        internal PortPool? Pool; // null means manual selection only unless this is an enabled mod site.
         internal string DisplayName;
         internal string Key;
         internal string SiteIdentity;
@@ -149,7 +149,7 @@ namespace NewBeginnings
                 { 18, Tuple.Create<string, PortPool?>("port M 18 Siren Song", PortPool.Aestrin) },
                 { 19, Tuple.Create<string, PortPool?>("port M 19 (Eastwind)", PortPool.Aestrin) },
                 { 20, Tuple.Create<string, PortPool?>("port M/E 20 Happy Bay", PortPool.SmallIslands) },
-                { 21, Tuple.Create<string, PortPool?>("port 21 M chronos", null) },
+                { 21, Tuple.Create<string, PortPool?>("port 21 M chronos", PortPool.Chronos) },
                 { 22, Tuple.Create<string, PortPool?>("port L 22 Lagoon Bay", PortPool.FireFishLagoon) },
                 { 23, Tuple.Create<string, PortPool?>("port L 23 Lagoon Fire Fish Town", PortPool.FireFishLagoon) },
                 { 24, Tuple.Create<string, PortPool?>("port L 24 Lagoon Onna", PortPool.FireFishLagoon) },
@@ -290,7 +290,7 @@ namespace NewBeginnings
                 }
             }
             // Keep the manual selectors in geographic groups. A port with no
-            // classified pool (including Chronos) remains selectable at the end.
+            // classified pool remains selectable at the end.
             result.Ports.Sort((left, right) =>
             {
                 var byPool = PoolSortKey(left.Pool).CompareTo(PoolSortKey(right.Pool));
@@ -385,7 +385,8 @@ namespace NewBeginnings
                 case PortPool.Aestrin: return 2;
                 case PortPool.FireFishLagoon: return 3;
                 case PortPool.SmallIslands: return 4;
-                default: return 5;
+                case PortPool.Chronos: return 5;
+                default: return 6;
             }
         }
 
@@ -578,7 +579,7 @@ namespace NewBeginnings
         // Config strings use semicolon-separated records. Boat sizes:
         // sceneIndex|exactGameObjectName|Small (or Medium/Large).
         // Geographic pools: portIndex|exactGameObjectName|AlAnkh (or Emerald,
-        // Aestrin, FireFishLagoon, SmallIslands).
+        // Aestrin, FireFishLagoon, SmallIslands, Chronos).
         // Exact names guard against future index reuse.
 
         private readonly Dictionary<int, Tuple<string, BoatSize>> boatSizes =

@@ -102,11 +102,11 @@ namespace NewBeginnings
 
         private static readonly PortPool[] PoolOrder =
             { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin,
-              PortPool.FireFishLagoon, PortPool.SmallIslands };
+              PortPool.FireFishLagoon, PortPool.SmallIslands, PortPool.Chronos };
         private static readonly BoatSize[] SizeOrder =
             { BoatSize.Small, BoatSize.Medium, BoatSize.Large };
         private static readonly string[] PoolLabels =
-            { "Al'Ankh", "Emerald", "Aestrin", "FFL", "Small Islands" };
+            { "Al'Ankh", "Emerald", "Aestrin", "FFL", "Small Islands", "Chronos" };
         private static readonly Color Ink = new Color(.06f, .035f, .02f, 1f);
         private static readonly Color MutedInk = new Color(.30f, .23f, .19f, 1f);
         private static readonly Color WarningInk = new Color(.30f, .055f, .025f, 1f);
@@ -434,7 +434,7 @@ namespace NewBeginnings
             shipyardPortsOnly = MakeButton(root, "Shipyard ports only", -1.05f, -.53f, 1.55f, .44f,
                 () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
             shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Spoiler location options still apply.";
-            includeModPorts = MakeButton(root, "Include mod ports", -1.05f, -.72f, 1.55f, .44f,
+            includeModPorts = MakeButton(root, "Include mod ports", -.39f, -.16f, .60f, .44f,
                 ToggleModPorts);
             includeModPorts.description = "Include detected mod locations regardless of region. Select a geographic pool before turning off the last enabled pool.";
             boatPrevious = MakeButton(root, "Previous boat", .27f, .19f, .28f, .52f,
@@ -443,9 +443,9 @@ namespace NewBeginnings
             boatNext = MakeButton(root, "Next boat", 1.83f, .19f, .28f, .52f,
                 () => CycleBoat(1));
 
-            var poolX = new[] { -1.65f, -1.05f, -.45f, -1.52f, -.72f };
-            var poolY = new[] { 0f, 0f, 0f, -.16f, -.16f };
-            var poolWidth = new[] { .55f, .55f, .55f, .55f, .95f };
+            var poolX = new[] { -1.77f, -1.29f, -.81f, -.33f, -1.62f, -.97f };
+            var poolY = new[] { 0f, 0f, 0f, 0f, -.16f, -.16f };
+            var poolWidth = new[] { .44f, .44f, .44f, .44f, .74f, .48f };
             portPools = new MenuUiButton[PoolOrder.Length];
             for (var i = 0; i < portPools.Length; ++i)
             {
@@ -472,7 +472,7 @@ namespace NewBeginnings
             var options = MakeButton(root, "Starting options", 1.05f, -.53f, 1.65f, .44f,
                 () => startingOptions?.Open());
             SetButtonText(options, "Starting options...");
-            status = MakeLabel(root, "Selection status", "", 0f, -.86f, .009f);
+            status = MakeLabel(root, "Selection status", "", 0f, -.64f, .009f);
             status.color = WarningInk;
         }
 
@@ -870,7 +870,7 @@ namespace NewBeginnings
             SetButtonVisible(includeModPorts, !EditingAny && hasModPorts);
             SetEnabled(includeModPorts, settings.RandomPort && hasModPorts &&
                 (!settings.IncludeModPorts || settings.PortPools.Count > 0));
-            SetButtonText(includeModPorts, (settings.IncludeModPorts ? "[x] " : "[ ] ") + "Include mod ports");
+            SetButtonText(includeModPorts, (settings.IncludeModPorts ? "[x] " : "[ ] ") + "Mod ports");
             SetEnabled(portPrevious, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
             SetEnabled(portNext, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
             SetEnabled(boatPrevious, !settings.RandomBoat && catalog.Boats.Count > 1);

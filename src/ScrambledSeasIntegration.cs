@@ -13,6 +13,7 @@ namespace NewBeginnings
         internal const string Id = "com.nandbrew.scrambledseas";
         private static bool installed;
         private static bool seamReady;
+        private static MethodInfo playerStartFactory;
 
         internal static bool IsInstalled => installed;
         internal static bool CanSelect => !installed || seamReady;
@@ -45,6 +46,7 @@ namespace NewBeginnings
                     patch.owner == Plugin.Id && patch.PatchMethod == prefix))
                     throw new InvalidOperationException("Harmony did not install the Scrambled Seas coroutine prefix.");
                 seamReady = true;
+                playerStartFactory = method;
                 Plugin.Instance.Report("Scrambled Seas startup seam patched; selected port and boat will be placed after world movement.");
             }
             catch (Exception exception)
@@ -56,9 +58,18 @@ namespace NewBeginnings
 
         // Harmony indexes refer to the factory's first two arguments. This runs
         // after WorldScrambler.Move but before its IEnumerator captures startPos.
-        private static void BeforePlayerStart(StartMenu __0, ref Transform __1)
+        private static bool BeforePlayerStart(StartMenu __0, ref Transform __1,
+            Transform __2, GameObject __3, ref IEnumerator __result)
         {
+            // Its factory replaces the native one completely. Defer this exact
+            // iterator until the custom island has loaded and passed preflight.
+            // Pending selection is consumed once, so invoking the factory again
+            // at handoff continues through its normal body without recursion.
+            if (FixedStart.TryPreparePendingCustom(__0, out var custom,
+                target => playerStartFactory.Invoke(null, new object[] { __0, target, __2, __3 }) as IEnumerator))
+            { __result = custom; return false; }
             FixedStart.ApplyPendingAtStart(__0, ref __1);
+            return true;
         }
     }
 }

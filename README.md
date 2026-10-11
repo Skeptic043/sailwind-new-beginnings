@@ -18,7 +18,7 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of the pool for random starts, then click Done to save changes. Shipyard Ports Only limits random starts to locations with a detected shipyard.
 
-When added ports are detected, Include mod ports appears in the new-game menu. It starts unchecked. Turning it on adds those locations to Random Port regardless of the region checkboxes, so you can leave every region unchecked for mod ports only. Shipyard restrictions and boat placement checks still apply. You can also choose an added location manually without enabling this checkbox.
+When added ports are detected, Mod ports appears with the Random Port pool checkboxes. It starts unchecked. Turning it on adds those locations to Random Port regardless of the region checkboxes, so you can leave every other pool unchecked for mod ports only. Shipyard restrictions and boat placement checks still apply. You can also choose an added location manually without enabling this checkbox. Chronos has its own unchecked pool option for including its original berth in random starts.
 
 Better Ports' Bottleneck Isle is discovered automatically. Added locations without a normal starting berth must have enough room for the selected boat, a dry landing and the supplies. If those checks fail, the start returns to the menu with a reason.
 
@@ -27,9 +27,9 @@ The starting options menu allows you to adjust your money, reputation, and equip
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
-Chronos's original starting berth is available through manual selection. Fort Juniper is a separate mod-added location when Old Chronian is installed.
+Chronos's original starting berth is available through manual selection and its separate Random Port pool option. Fort Juniper is a separate mod-added location when Old Chronian is installed.
 
-Pirate Island, the far-western hideout in Al'Ankh waters, and Saffron Island are optional Small Islands starts. Both are disabled by default. Enable `EnablePirateIsland` or `EnableSaffronIsland` in the config's `Spoilers` section to make them available for manual selection. For random starts, also enable Small Islands. Include mod ports does not affect either island.
+Pirate Island, the far-western hideout in Al'Ankh waters, and Saffron Island are optional Small Islands starts. Both are disabled by default. Open Spoilers in Configuration Manager and reveal the location switches to make them available for manual selection. They can also be enabled in the config file's `Spoilers` section. For random starts, also enable Small Islands. Mod ports does not affect either island.
 
 At Saffron, you and your supplies start on dry land with your boat anchored nearby. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
 

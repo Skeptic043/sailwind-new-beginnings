@@ -122,6 +122,9 @@ namespace NewBeginnings
                 var custom = SceneManager.GetSceneByPath(path);
                 return custom.IsValid() && custom.isLoaded;
             }
+            // Match native IslandHorizon.LoadIslandScene / RegisterLoadingFinished:
+            // SceneLoaded means requested, while this scene proves completion.
+            // Only native islands use their index as the actual scene build index.
             var native = SceneManager.GetSceneByBuildIndex(site.Island.islandIndex);
             if (native.IsValid() && native.isLoaded) return true;
             return false;

@@ -161,8 +161,20 @@ namespace NewBeginnings
             }
         }
 
+        internal static bool TryPreparePendingCustom(StartMenu menu, out IEnumerator sequence,
+            Func<Transform, IEnumerator> continuation = null)
+        {
+            sequence = null;
+            if (pending == null || !pending.Port.UsesCustomBerth || !ReferenceEquals(menu, pendingMenu)) return false;
+            var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
+            pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
+            sequence = PrepareCustomStart(menu, pair, options, snapshot, continuation);
+            return true;
+        }
+
         private static IEnumerator PrepareCustomStart(StartMenu menu, StartPair pair,
-            StartingOptionsSettings options, CustomStartSnapshot snapshot)
+            StartingOptionsSettings options, CustomStartSnapshot snapshot,
+            Func<Transform, IEnumerator> continuation = null)
         {
             var generation = customGeneration;
             var failure = "Starting-location preparation was cancelled.";
@@ -224,7 +236,8 @@ namespace NewBeginnings
                 }
                 if (!placement.Commit(out var target, out failure)) yield break;
                 TeleportNativeStartObserver(menu, target);
-                native = MovePlayerFactory.Invoke(menu, new object[] { target }) as IEnumerator;
+                native = continuation != null ? continuation(target) :
+                    MovePlayerFactory.Invoke(menu, new object[] { target }) as IEnumerator;
                 if (native == null) { failure = "The native start sequence is unavailable."; yield break; }
                 // Keep rollback until the native iterator actually grants this
                 // boat, rather than only until its IEnumerator is constructed.

@@ -301,13 +301,8 @@ namespace NewBeginnings
         {
             private static bool Prefix(StartMenu __instance, ref Transform startPos, ref IEnumerator __result)
             {
-                if (pending != null && pending.Port.UsesCustomBerth && ReferenceEquals(__instance, pendingMenu))
-                {
-                    var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
-                    pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
-                    __result = PrepareCustomStart(__instance, pair, options, snapshot);
-                    return false;
-                }
+                if (TryPreparePendingCustom(__instance, out var custom))
+                { __result = custom; return false; }
                 if (!nativeTweenSeamReady)
                 {
                     if (pending != null && ReferenceEquals(__instance, pendingMenu))
@@ -443,7 +438,7 @@ namespace NewBeginnings
 
         internal static bool ApplyPendingAtStart(StartMenu menu, ref Transform startPos)
         {
-            if (pending == null || !ReferenceEquals(menu, pendingMenu)) return false;
+            if (pending == null || !ReferenceEquals(menu, pendingMenu) || pending.Port.UsesCustomBerth) return false;
             var pair = pending;
             var options = pendingOptions;
             pending = null;

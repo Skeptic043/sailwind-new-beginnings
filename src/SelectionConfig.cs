@@ -17,6 +17,7 @@ namespace NewBeginnings
         private readonly ConfigEntry<bool> aestrin;
         private readonly ConfigEntry<bool> fireFishLagoon;
         private readonly ConfigEntry<bool> smallIslands;
+        private readonly ConfigEntry<bool> chronos;
         private readonly ConfigEntry<int> lastBoat;
         private readonly ConfigEntry<bool> randomBoat;
         private readonly ConfigEntry<bool> smallBoats;
@@ -47,9 +48,14 @@ namespace NewBeginnings
             includeModPorts = file.Bind("Random Port Pools", "IncludeModPorts", false,
                 "Include detected mod starting locations in random starts regardless of their geographic pool. Shipyard, spoiler and placement requirements still apply.");
             enablePirateIsland = file.Bind("Spoilers", "EnablePirateIsland", false,
-                "Enable Pirate Island as a manual starting location and in the Small Islands random pool.");
+                Hidden("Enable Pirate Island as a manual starting location and in the Small Islands random pool."));
             enableSaffronIsland = file.Bind("Spoilers", "EnableSaffronIsland", false,
-                "Enable Saffron Island as a manual starting location and in the Small Islands random pool.");
+                Hidden("Enable Saffron Island as a manual starting location and in the Small Islands random pool."));
+            var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland);
+            file.Bind("Advanced", "SpoilerOptions", "",
+                new ConfigDescription("Reveal optional hidden starting locations.", null,
+                    new ConfigurationManagerAttributes { CustomDrawer = spoilerMenu.Draw, Category = "Advanced",
+                        DispName = "Spoiler options", HideSettingName = true, HideDefaultButton = true }));
             alAnkh = file.Bind("Random Port Pools", "AlAnkh", true, "Include Al'Ankh ports.");
             emerald = file.Bind("Random Port Pools", "EmeraldArchipelago", true,
                 "Include Emerald Archipelago ports.");
@@ -58,6 +64,8 @@ namespace NewBeginnings
                 "Include Fire Fish Lagoon ports.");
             smallIslands = file.Bind("Random Port Pools", "SmallIslands", false,
                 "Include geographically separate small islands.");
+            chronos = file.Bind("Random Port Pools", "Chronos", false,
+                "Include ordinary Chronos in random starts. Fort Juniper follows IncludeModPorts separately.");
             lastBoat = file.Bind("Selection", "LastSelectedBoat", 10,
                 "Last manually selected boat scene index. Default: small dhow.");
             randomBoat = file.Bind("Selection", "RandomBoat", false,
@@ -72,11 +80,14 @@ namespace NewBeginnings
             boatSizeOverrides = file.Bind("Compatibility", "BoatSizeOverrides", "",
                 "Semicolon-separated sceneIndex|exactGameObjectName|Small/Medium/Large records.");
             portPoolOverrides = file.Bind("Compatibility", "PortPoolOverrides", "",
-                "Semicolon-separated portIndex|exactGameObjectName|AlAnkh/Emerald/Aestrin/FireFishLagoon/SmallIslands records.");
+                "Semicolon-separated portIndex|exactGameObjectName|AlAnkh/Emerald/Aestrin/FireFishLagoon/SmallIslands/Chronos records.");
 
             Read();
             Save();
         }
+
+        private static ConfigDescription Hidden(string description) => new ConfigDescription(description, null,
+            new ConfigurationManagerAttributes { Browsable = false });
 
         // Startup and live reloads (Configuration Manager or a reread file) share
         // this read, so validation, fallbacks and warnings are identical. The
@@ -101,6 +112,7 @@ namespace NewBeginnings
             if (aestrin.Value) Settings.PortPools.Add(PortPool.Aestrin);
             if (fireFishLagoon.Value) Settings.PortPools.Add(PortPool.FireFishLagoon);
             if (smallIslands.Value) Settings.PortPools.Add(PortPool.SmallIslands);
+            if (chronos.Value) Settings.PortPools.Add(PortPool.Chronos);
             Settings.BoatSizes.Clear();
             if (smallBoats.Value) Settings.BoatSizes.Add(BoatSize.Small);
             if (mediumBoats.Value) Settings.BoatSizes.Add(BoatSize.Medium);
@@ -136,6 +148,7 @@ namespace NewBeginnings
             aestrin.Value = Settings.PortPools.Contains(PortPool.Aestrin);
             fireFishLagoon.Value = Settings.PortPools.Contains(PortPool.FireFishLagoon);
             smallIslands.Value = Settings.PortPools.Contains(PortPool.SmallIslands);
+            chronos.Value = Settings.PortPools.Contains(PortPool.Chronos);
             lastBoat.Value = Settings.BoatSceneIndex;
             randomBoat.Value = Settings.RandomBoat;
             smallBoats.Value = Settings.BoatSizes.Contains(BoatSize.Small);
