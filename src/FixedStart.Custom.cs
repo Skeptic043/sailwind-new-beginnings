@@ -41,6 +41,7 @@ namespace NewBeginnings
 
         internal static void CancelCustomStart()
         {
+            PirateStationKeeper.RemoveActive();
             ++customGeneration;
             var cleanup = customCleanup; customCleanup = null;
             var snapshot = pendingCustomSnapshot;
@@ -266,6 +267,11 @@ namespace NewBeginnings
                 // boat, rather than only until its IEnumerator is constructed.
                 while (generation == customGeneration && menu != null && !GameState.currentlyLoading)
                 {
+                    if (placement.Selected.Berth.PirateOffshore &&
+                        (!StartDestinations.IsCurrent(placement.Selected.Destination) || placement.Selected.Body == null ||
+                         placement.Selected.Ropes == null || placement.Selected.Ropes.anchor == null ||
+                         placement.Selected.Ropes.anchor.GetComponent<Rigidbody>() == null))
+                    { failure = "The offshore starting boat or its native anchor disappeared."; break; }
                     if (!placement.Selected.Boat.isPurchased() &&
                         PurchaseUiField.GetValue(placement.Selected.Boat) as GameObject == null)
                     { failure = "The selected boat became unavailable before the native grant."; break; }
@@ -293,7 +299,7 @@ namespace NewBeginnings
             try
             {
                 if (!NativeRecoveryReady(out reason) ||
-                    !TryResolve(pair.Port, pair.Boat.Index, out var selected, out reason)) return false;
+                    !TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out reason)) return false;
                 if (selected.Boat != pair.Boat.Boat || selected.Saveable != pair.Boat.Saveable)
                 { reason = "The selected boat changed while scenery loaded."; return false; }
                 if (selected.Saveable.GetComponent<BoatDamage>() == null ||
@@ -341,12 +347,14 @@ namespace NewBeginnings
             private readonly Vector3 anchorLocal, anchorVelocity, anchorAngularVelocity;
             private readonly Quaternion anchorRotation;
             private readonly Vector3 anchorBoatLocal;
+            private readonly Quaternion anchorBoatRotation;
             private readonly float anchorLength, anchorDrag;
-            private readonly bool anchorKinematic;
+            private readonly bool anchorKinematic, anchorWasSet;
             private readonly PurchasableBoat[] starters;
             private readonly Transform starterBoat, lastBoat, lastOwnedBoat;
             private readonly Port lastPort;
             private ProbeVelocityGuard guard;
+            private PirateStationKeeper stationKeeper;
             private PickupableBoatMooringRope frontRope, backRope;
             private bool moved, rolledBack, changedNative;
 
@@ -357,11 +365,15 @@ namespace NewBeginnings
                 localPosition = body.transform.localPosition; localRotation = body.transform.localRotation;
                 velocity = body.velocity; angularVelocity = body.angularVelocity; bodyKinematic = body.isKinematic;
                 var anchor = selected.Ropes.anchor;
-                if (anchor == null || anchor.IsSet()) throw new InvalidOperationException("The original boat anchor must be unset.");
+                if (anchor == null) throw new InvalidOperationException("The native anchor is unavailable.");
+                anchorWasSet = anchor.IsSet();
+                if (anchorWasSet && !selected.Berth.PirateOffshore)
+                    throw new InvalidOperationException("The original boat anchor must be unset.");
                 anchorBody = anchor.GetComponent<Rigidbody>();
                 if (anchorBody == null) throw new InvalidOperationException("The native anchor body is unavailable.");
                 anchorParent = anchor.transform.parent; anchorLocal = anchor.transform.localPosition; anchorRotation = anchor.transform.localRotation;
                 anchorBoatLocal = body.transform.InverseTransformPoint(anchor.transform.position);
+                anchorBoatRotation = Quaternion.Inverse(body.rotation) * anchorBody.rotation;
                 anchorVelocity = anchorBody.velocity; anchorAngularVelocity = anchorBody.angularVelocity;
                 anchorKinematic = anchorBody.isKinematic; anchorDrag = anchorBody.drag; anchorLength = anchor.GetRopeLength();
                 ropePositions = selected.Ropes.ropes.Select(rope => new RopePosition { Rope = rope,
@@ -380,6 +392,7 @@ namespace NewBeginnings
                 if (!s.Berth.Revalidate(s.Body, s.Ropes, out var reason)) throw new InvalidOperationException(reason);
                 guard = new ProbeVelocityGuard(s.Saveable);
                 moved = true;
+                if (anchorWasSet) ReleaseAnchorMethod.Invoke(s.Ropes.anchor, null);
                 s.Ropes.UnmoorAllRopes(); s.Ropes.GetAnchorController().ResetAnchor();
                 s.Body.transform.SetPositionAndRotation(s.Berth.Position, s.Berth.Rotation);
                 s.Body.position = s.Berth.Position; s.Body.rotation = s.Berth.Rotation;
@@ -394,6 +407,11 @@ namespace NewBeginnings
                     anchorBody.isKinematic = false;
                     s.Ropes.anchor.OnLoad(false, s.Berth.AnchorLength);
                 }
+                else if (s.Berth.Mode == StartBerthMode.OffshoreHeld)
+                {
+                    StowOffshoreAnchor();
+                    stationKeeper = PirateStationKeeper.Attach(s.Body, s.Berth.Frame);
+                }
                 else
                 {
                     anchorBody.position = s.Body.transform.TransformPoint(anchorBoatLocal);
@@ -401,6 +419,26 @@ namespace NewBeginnings
                     MoorAt(frontRope, s.FrontMooring, s.Body); MoorAt(backRope, s.BackMooring, s.Body);
                 }
                 anchorBody.velocity = Vector3.zero; anchorBody.angularVelocity = Vector3.zero;
+                Physics.SyncTransforms();
+            }
+
+            private void StowOffshoreAnchor()
+            {
+                var s = Selected;
+                var rotation = s.Body.rotation * anchorBoatRotation;
+                var joint = AccessTools.Field(typeof(RopeControllerAnchor), "joint")?.GetValue(s.Ropes.GetAnchorController()) as ConfigurableJoint;
+                if (!PirateStationKeeper.TryStowedPosition(s.Body, anchorBody, joint, rotation, out var position))
+                    throw new InvalidOperationException("The native anchor joint cannot provide a finite stowed pose.");
+                // A deployed anchor's original pose belongs only to rollback.
+                // Retracting at the physical joint endpoint avoids a zero-length
+                // line connected across the old seabed-to-hull separation.
+                if (s.Ropes.anchor.IsSet()) ReleaseAnchorMethod.Invoke(s.Ropes.anchor, null);
+                s.Ropes.GetAnchorController().ResetAnchor();
+                anchorBody.rotation = rotation;
+                anchorBody.position = position;
+                anchorBody.velocity = Vector3.zero; anchorBody.angularVelocity = Vector3.zero;
+                anchorBody.isKinematic = false;
+                s.Body.isKinematic = false;
                 Physics.SyncTransforms();
             }
 
@@ -433,7 +471,7 @@ namespace NewBeginnings
                     GameState.lastVisitedPort = s.Port;
                     Plugin.Instance.BeginPlayerStartTracking(menu, target);
                     StarterCargo.Arm(s); StartingValues.Arm(s);
-                    if (!s.Berth.Anchored)
+                    if (s.Berth.Mode == StartBerthMode.Moored)
                     {
                         StarterMooring.Arm(menu, s, frontRope, backRope);
                     }
@@ -449,6 +487,7 @@ namespace NewBeginnings
             {
                 if (rolledBack) return;
                 rolledBack = true;
+                PirateStationKeeper.Remove(stationKeeper);
                 var s = Selected;
                 try
                 {
@@ -471,7 +510,8 @@ namespace NewBeginnings
                         anchorBody.velocity = anchorVelocity; anchorBody.angularVelocity = anchorAngularVelocity;
                         anchorBody.isKinematic = anchorKinematic; anchorBody.drag = anchorDrag;
                     }
-                    if (s.Ropes?.anchor != null) s.Ropes.anchor.OnLoad(false, anchorLength);
+                    if (s.Ropes?.anchor != null && (!anchorWasSet || anchorBody != null))
+                        s.Ropes.anchor.OnLoad(anchorWasSet, anchorLength);
                     foreach (var saved in ropePositions)
                     {
                         if (saved.Rope == null) continue;

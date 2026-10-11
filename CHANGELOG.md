@@ -14,7 +14,7 @@
 
 - Fort Juniper is a separate starting location when Old Chronian is installed and qualifies for Shipyard ports only.
 - Pirate Island and Saffron Island are optional Small Islands starts. Both start disabled behind the Configuration Manager spoiler reveal and can be enabled separately for manual or random selection. Mod ports does not affect either island.
-- Pirate Island tries its existing docks first, then looks for room to anchor near one dock when the selected boat does not fit alongside.
+- Pirate Island allows Small boats at its existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until the player boards them.
 - At Saffron, the player and supplies start on dry land with the boat anchored nearby.
 
 </details>
@@ -24,6 +24,7 @@
 - Shipyard ports only uses detected shipyards instead of a fixed list of vanilla ports.
 - Added locations without a normal starting berth check room for the boat, dry landing and supplies before granting the boat. If a suitable start cannot be found, the menu shows a reason.
 - A selected mod location remains selected when its provider is missing and is shown as unavailable until it returns or another location is chosen.
+- Pirate Island's offshore starts use the best available surveyed position. If no surveyed position passes the clearance checks, the start still proceeds at a bounded outer position and writes a warning to the log.
 
 ### Fixed
 

@@ -454,7 +454,7 @@ namespace NewBeginnings
             pendingOptions = null;
             try
             {
-                if (!TryResolve(pair.Port, pair.Boat.Index, out var selected, out var reason) ||
+                if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason) ||
                     !ReferenceEquals(selected.Port, pair.Port.Port) ||
                     !ReferenceEquals(selected.Recovery, pair.Port.Recovery) ||
                     !ReferenceEquals(selected.Boat, pair.Boat.Boat) ||
@@ -544,7 +544,7 @@ namespace NewBeginnings
         {
             if (selected.Destination != null && selected.Destination.UsesCustomBerth)
             {
-                if (!StartBerthPlanner.TryPlan(selected.Destination, selected.Body, selected.Ropes,
+                if (!StartBerthPlanner.TryPlan(selected.Destination, selected.Body, selected.Ropes, selected.Size,
                     out var plan, out reason)) return false;
                 selected.Berth = plan;
                 selected.FrontMooring = plan.Front;
@@ -589,7 +589,7 @@ namespace NewBeginnings
             return true;
         }
 
-        private static bool TryResolve(PortChoice destination, int boatSceneIndex, out ResolvedStart result, out string reason)
+        private static bool TryResolve(PortChoice destination, int boatSceneIndex, BoatSize? size, out ResolvedStart result, out string reason)
         {
             result = null;
             reason = null;
@@ -651,7 +651,7 @@ namespace NewBeginnings
             NativeBerth.Plan nativeBerth = null;
             if (!custom) NativeBerth.TryResolve(port, boat, saveable, body, ropes, out nativeBerth);
             var relocation = new ResolvedStart { Port = port, Recovery = recovery,
-                Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes };
+                Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes, Size = size };
             if (nativeBerth == null && !TryResolveRelocation(relocation, out reason)) return false;
             frontMooring = nativeBerth != null ? nativeBerth.Front : relocation.FrontMooring;
             backMooring = nativeBerth != null ? nativeBerth.Back : relocation.BackMooring;
@@ -673,7 +673,7 @@ namespace NewBeginnings
             {
                 Port = port, Recovery = recovery, Destination = destination, Berth = relocation.Berth, Boat = boat, Saveable = saveable,
                 Body = body, Ropes = ropes, FrontMooring = frontMooring,
-                BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth
+                BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth, Size = size
             };
             return true;
         }
