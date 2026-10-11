@@ -143,32 +143,73 @@ namespace NewBeginnings
                 .Concat(ModEquipment.Discover(directory)).ToArray();
         }
 
-        // Read-only upper bound for a new shore's required space. Reserve loose
-        // items and possible packing carriers, so packing cannot enlarge the
-        // accepted footprint. Do not instantiate or initialize equipment here.
-        internal static IEnumerable<ShipItem> ShorePreflightItems(StartingOptionsSettings options, int nativeCount)
+        internal sealed class ShorePreflightLoadout
+        {
+            internal long NativeItems, ExtraItems, PackedItems, LooseItems, CarrierCrates, WallHookBoxes;
+            private readonly List<KeyValuePair<ShipItem, long>> groups = new List<KeyValuePair<ShipItem, long>>();
+            internal void Reserve(ShipItem item, long count) => groups.Add(new KeyValuePair<ShipItem, long>(item, count));
+            internal IEnumerable<ShipItem> Items
+            {
+                get
+                {
+                    foreach (var group in groups)
+                        for (long index = 0; index < group.Value; ++index) yield return group.Key;
+                }
+            }
+            internal string Summary => $"native={NativeItems}, extras={ExtraItems}, planned packed={PackedItems}, " +
+                $"loose={LooseItems}, carrier crates={CarrierCrates}, wall-hook boxes={WallHookBoxes}, " +
+                $"ground footprints={LooseItems + CarrierCrates}";
+        }
+
+        // Match Append's frozen packing roster without cloning, activating or
+        // buying anything. Packed contents reserve their actual carrier only.
+        // Native difficulty removals may reduce this conservative final roster.
+        internal static ShorePreflightLoadout ShorePreflightItems(StartingOptionsSettings options,
+            IEnumerable<ShipItem> nativeItems)
         {
             if (options == null) throw new InvalidOperationException("Starting supplies settings are unavailable.");
-            if (!TryValidateSelection(options.EquipmentQuantities.Keys, out var reason))
+            var settings = options.Copy();
+            settings.NormalizeEquipment();
+            if (!settings.TryValidate(out var reason) ||
+                !TryValidateSelection(settings.EquipmentQuantities.Keys, out reason))
                 throw new InvalidOperationException(reason);
+            var result = new ShorePreflightLoadout();
+            foreach (var item in (nativeItems ?? throw new InvalidOperationException("Native supplies are unavailable.")).Distinct())
+            {
+                if (item == null) throw new InvalidOperationException("A native supply became unavailable.");
+                ++result.NativeItems;
+                if (CanPack(item, IsNativeStarterMap(item))) ++result.PackedItems;
+                else { ++result.LooseItems; result.Reserve(item, 1); }
+            }
             var directory = Directory;
-            long count = nativeCount;
             foreach (var entry in GetCatalog())
             {
-                if (!options.EquipmentQuantities.TryGetValue(entry.Key, out var quantity)) continue;
+                if (!settings.EquipmentQuantities.TryGetValue(entry.Key, out var quantity)) continue;
                 var prefab = Resolve(directory, entry);
                 if (prefab == null) throw new InvalidOperationException("Selected equipment became unavailable.");
                 var item = prefab.GetComponent<ShipItem>();
-                count += quantity;
-                for (var index = 0; index < quantity; ++index) yield return item;
+                result.ExtraItems += quantity;
+                // A wall-hook bundle already owns a dedicated box. Its hooks
+                // are never members of the general packing candidate roster.
+                if (entry.Key == WallHooksKey)
+                {
+                    result.WallHookBoxes += quantity;
+                    result.LooseItems += quantity;
+                    result.Reserve(item, quantity);
+                }
+                else if (CanPack(item, entry.AllowScaledPacking)) result.PackedItems += quantity;
+                else { result.LooseItems += quantity; result.Reserve(item, quantity); }
             }
-            var carrier = Resolve(directory, new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", ""));
-            var capacity = CarrierCapacity(carrier);
-            if (count > 0 && capacity <= 0)
-                throw new InvalidOperationException("Possible packing carriers cannot be measured safely.");
-            if (capacity > 0)
-                for (long index = 0; index < (count + capacity - 1) / capacity; ++index)
-                    yield return carrier.GetComponent<ShipItem>();
+            if (result.PackedItems > 0)
+            {
+                var carrier = Resolve(directory, new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", ""));
+                var capacity = CarrierCapacity(carrier);
+                if (capacity <= 0)
+                    throw new InvalidOperationException("Packing carriers cannot be measured safely. " + result.Summary);
+                result.CarrierCrates = (result.PackedItems + capacity - 1) / capacity;
+                result.Reserve(carrier.GetComponent<ShipItem>(), result.CarrierCrates);
+            }
+            return result;
         }
 
         private static GameObject Resolve(PrefabsDirectory directory, EquipmentEntry entry)
@@ -430,15 +471,17 @@ namespace NewBeginnings
             }
         }
 
-        private static bool CanPack(ShipItem item)
+        private static bool CanPack(ShipItem item) =>
+            CanPack(item, ScaledPackingTools.Contains(item) || ScaledStarterMaps.Contains(item));
+
+        private static bool CanPack(ShipItem item, bool allowScaledPacking)
         {
-            // Native regional starter maps are authored at scale .95. Those
-            // captured native objects and selected Kemy tools can use native
-            // inventory scale; other authored scaled equipment remains loose.
+            // The same pure predicate classifies inactive startup objects and
+            // read-only preflight prefabs. Explicit supported scale exceptions
+            // are supplied by Append's sets or the corresponding catalog entry.
             return item != null && !item.big &&
                 ((item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f ||
-                 ((ScaledPackingTools.Contains(item) || ScaledStarterMaps.Contains(item)) &&
-                  ModEquipment.ValidScale(item.transform.localScale)));
+                 (allowScaledPacking && ModEquipment.ValidScale(item.transform.localScale)));
         }
 
         internal static bool TryPack(ResolvedStart selected, Action<ShipItem> prepare, out string reason)

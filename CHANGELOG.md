@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- Custom shore starts now reserve space for the final packed starter-supply footprint instead of counting packable items as both loose cargo and crate contents.
 - Addressed Pirate Island falling back to a regional start when Scrambled Seas handled the new-game transition before its scenery could load.
 - Addressed Pirate Island rejecting every dock while the precise ocean-height sample was still initializing. Dock checks now use the live maximum water bound until the precise sample is ready.
 - Pirate Island's automatic dock starts now pass their selected moorings into the dry-ground check, allowing that same water-bound fallback to validate nearby shore.

@@ -679,19 +679,20 @@ namespace NewBeginnings
             return result.ToArray();
         }
 
-        // Reserve dry land for the complete uncompressed loadout before a new
-        // berth is mutated. Native difficulty removals may reduce this bound.
+        // Reserve dry land for the final loose items and packing carriers before
+        // a berth is mutated. Native difficulty removals may reduce this bound.
         // Uses the same land probing and slot separation as actual placement.
         internal static bool TryPreflightShoreCapacity(ResolvedStart selected, Vector3 ground, out string reason)
         {
             reason = null;
             RefreshBoatWalkRoots();
             var native = selected.Options?.StandardSupplies == false ? Array.Empty<ShipItem>() : CollectItems(selected.StarterSet.transform);
+            var loadout = AdditionalEquipment.ShorePreflightItems(selected.Options, native);
             var reserved = new List<GroundSlot>();
-            foreach (var item in native.Concat(AdditionalEquipment.ShorePreflightItems(selected.Options, native.Length)))
+            foreach (var item in loadout.Items)
             {
                 if (!TryPreflightEnvelope(item, out var radius, out var height))
-                { reason = "The full shore loadout cannot be measured safely."; return false; }
+                { reason = "The final shore loadout cannot be measured safely. " + loadout.Summary; return false; }
                 var found = false;
                 foreach (var distance in new[] { 0.8f, 1.3f, 1.9f, 2.5f, 3.1f, 3.7f, 4.3f })
                 {
@@ -718,7 +719,7 @@ namespace NewBeginnings
                     if (found) break;
                 }
                 if (!found)
-                { reason = "The complete supplies and possible packing crates do not fit this shore. Reduce the loadout or choose another start."; return false; }
+                { reason = $"The final supplies do not fit this shore: reserved={reserved.Count}, " + loadout.Summary + ". Reduce the loadout or choose another start."; return false; }
             }
             return true;
         }
