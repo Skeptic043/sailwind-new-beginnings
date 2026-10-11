@@ -47,6 +47,27 @@ namespace NewBeginnings
         }
 
         private enum DockRejection { DockSupport, RopeReach, HullClearance, Departure, DryShore }
+        private enum AnchorRejection { HullClearance, AnchorContact, SwingClearance, Departure, DryShore }
+
+        private sealed class AnchorReport
+        {
+            internal int Poses;
+            private readonly int[] rejected = new int[5];
+            private string last;
+            internal void Reject(AnchorRejection stage, string reason)
+            {
+                ++rejected[(int)stage];
+                last = stage + ": " + reason;
+            }
+            internal string Describe(bool exhausted)
+            {
+                var stages = string.Join(", ", Enum.GetValues(typeof(AnchorRejection)).Cast<AnchorRejection>()
+                    .Select(stage => stage + "=" + rejected[(int)stage]));
+                return "No safe anchorage and nearby dry landing fit this boat at this location. " +
+                    $"Survey: poses={Poses}, rejected {stages}, budgetExhausted={exhausted}. " +
+                    (last == null ? "No offshore pose was surveyed." : "Last rejection: " + last);
+            }
+        }
 
         // Keep the failed stage when the survey moves on to another candidate.
         // This is bounded per attempt and does not change candidate acceptance.
@@ -219,7 +240,7 @@ namespace NewBeginnings
         {
             plan = null; reason = null;
             if (!StartAnchorModel.TryCreate(ropes, body, out var model, out reason)) return false;
-            string last = null;
+            var report = new AnchorReport();
             if (hull.Radius + 8f > MaximumSearchRadius)
                 return Fail("This hull exceeds the bounded offshore survey.", out reason);
             for (var ring = 0; ring < 8; ++ring)
@@ -234,14 +255,18 @@ namespace NewBeginnings
                     var center = origin + radial * radius;
                     var position = center - rotation * hull.Center;
                     position.y = height;
-                    if (!survey.Candidate()) return Fail("No safe anchorage was found within the bounded offshore survey. " + last, out reason);
-                    if (!Clear(body, hull, position, rotation, survey, out reason) ||
-                        !TryAnchor(model, position, rotation, survey, out var anchor, out var length, out reason) ||
-                        !AnchorSwingClear(body, model, hull, position, rotation, anchor, length, survey, out reason) ||
-                        !DepartureClear(body, hull, position, rotation, survey, out reason))
-                    { last = reason; continue; }
+                    if (!survey.Candidate()) return Fail(report.Describe(true), out reason);
+                    ++report.Poses;
+                    if (!Clear(body, hull, position, rotation, survey, out reason))
+                    { report.Reject(AnchorRejection.HullClearance, reason); continue; }
+                    if (!TryAnchor(model, position, rotation, survey, out var anchor, out var length, out reason))
+                    { report.Reject(AnchorRejection.AnchorContact, reason); continue; }
+                    if (!AnchorSwingClear(body, model, hull, position, rotation, anchor, length, survey, out reason))
+                    { report.Reject(AnchorRejection.SwingClearance, reason); continue; }
+                    if (!DepartureClear(body, hull, position, rotation, survey, out reason))
+                    { report.Reject(AnchorRejection.Departure, reason); continue; }
                     if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _))
-                    { last = "No supported nearby dry landing passed the shore checks."; continue; }
+                    { report.Reject(AnchorRejection.DryShore, "No supported nearby dry landing passed the shore checks."); continue; }
                     plan = Make(destination, position, rotation, shore);
                     plan.Anchored = true;
                     plan.AnchorModel = model;
@@ -250,7 +275,7 @@ namespace NewBeginnings
                     reason = null;
                     return true;
                 }
-            return Fail("No safe anchorage and nearby dry landing fit this boat at this location. " + last, out reason);
+            return Fail(report.Describe(survey.Exhausted), out reason);
         }
 
         internal static bool Revalidate(StartBerthPlan plan, Rigidbody body, BoatMooringRopes ropes, out string reason)
@@ -341,7 +366,7 @@ namespace NewBeginnings
                 if (!Ground(point, point.y + 2f, 6f, survey, out var support))
                     return Fail(survey.Exhausted ? "The bounded geometry survey is exhausted." :
                         "No continuous static support was found between the cleats.", out reason);
-                if (Plugin.Instance == null || !Plugin.Instance.TryStartSeaHeight(support.point, out var sea))
+                if (Plugin.Instance == null || !Plugin.Instance.TryStartDockWaterline(support.point, out var sea))
                     return Fail("The waterline at the dock support is unavailable.", out reason);
                 if (support.point.y < sea + .1f)
                     return Fail("Support between the cleats is below the dry dock clearance.", out reason);
@@ -373,6 +398,26 @@ namespace NewBeginnings
         internal static bool RopeFits(float distance, float maximumSquared) => Finite(distance) && distance >= 0f &&
             Finite(maximumSquared) && maximumSquared > 0f && distance + 1f <= Mathf.Sqrt(maximumSquared);
 
+        private static string DescribeObstacle(Collider obstacle)
+        {
+            if (obstacle == null) return "an unavailable collider";
+            var parts = new List<string>();
+            var current = obstacle.transform;
+            for (var depth = 0; current != null && depth < 8; ++depth, current = current.parent)
+                parts.Add(DiagnosticLabel(current.name));
+            if (current != null) parts.Add("...");
+            parts.Reverse();
+            return DiagnosticLabel(obstacle.GetType().Name) + " '" +
+                DiagnosticLabel(obstacle.gameObject.scene.name) + ":" + string.Join("/", parts) + "'";
+        }
+
+        private static string DiagnosticLabel(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "?";
+            return new string(value.Take(48).Select(character => char.IsControl(character) ? '?' : character).ToArray()) +
+                (value.Length > 48 ? "..." : "");
+        }
+
         private static bool Clear(Rigidbody own, Hull hull, Vector3 position, Quaternion rotation, Survey survey, out string reason)
         {
             reason = null;
@@ -384,7 +429,7 @@ namespace NewBeginnings
             if (!survey.Query()) return Fail("The bounded geometry survey is exhausted.", out reason);
             foreach (var obstacle in Physics.OverlapCapsule(a, b, hull.Radius + HullMargin, ~0, QueryTriggerInteraction.Ignore))
                 if (obstacle != null && obstacle.attachedRigidbody != own && !obstacle.transform.IsChildOf(own.transform))
-                    return Fail("The planned hull overlaps scenery or another physical object.", out reason);
+                    return Fail("The planned hull overlaps " + DescribeObstacle(obstacle) + ".", out reason);
             // Disabled resident hull capsules still reserve space on loaded islands.
             var footprint = new BerthClearance.Footprint { A = new Vector2(a.x, a.z), B = new Vector2(b.x, b.z), Radius = hull.Radius };
             if (!ResidentsClear(own, footprint, out reason)) return false;
@@ -457,7 +502,7 @@ namespace NewBeginnings
                 new Vector3(radius + HullMargin, hull.Radius + HullMargin, radius + HullMargin),
                 Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
                 if (obstacle != null && obstacle.attachedRigidbody != own && !obstacle.transform.IsChildOf(own.transform))
-                    return Fail("The native anchor's swing area overlaps shore or scenery.", out reason);
+                    return Fail("The native anchor's swing area overlaps " + DescribeObstacle(obstacle) + ".", out reason);
             var flat = new Vector2(anchor.x, anchor.z);
             if (!ResidentsClear(own, new BerthClearance.Footprint { A = flat, B = flat, Radius = radius }, out reason)) return false;
             foreach (var local in DepthSamples(0f, radius))
@@ -502,7 +547,7 @@ namespace NewBeginnings
             foreach (var hit in Physics.CapsuleCastAll(center + offset, center - offset,
                 hull.Radius + HullMargin, forward, distance, ~0, QueryTriggerInteraction.Ignore))
                 if (hit.collider != null && hit.collider.attachedRigidbody != own && !hit.collider.transform.IsChildOf(own.transform))
-                    return Fail("The immediate departure corridor is blocked.", out reason);
+                    return Fail("The immediate departure corridor is blocked by " + DescribeObstacle(hit.collider) + ".", out reason);
             // Endpoint occupancy also includes disabled resident hulls, which
             // physics casts alone cannot establish are absent.
             return Clear(own, hull, position + forward * distance, rotation, survey, out reason);

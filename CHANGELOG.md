@@ -28,6 +28,8 @@
 ### Fixed
 
 - Addressed Pirate Island falling back to a regional start when Scrambled Seas handled the new-game transition before its scenery could load.
+- Addressed Pirate Island rejecting every dock while the precise ocean-height sample was still initializing. Dock checks now use the live maximum water bound until the precise sample is ready.
+- Failed Pirate anchorage checks now report rejection counts and include the blocking collider when a collision check rejects the last candidate.
 - Native-anchor starts now use the boat's physical joint attachments, including the layout used by the Santa Maria and vanilla Mediterranean boats.
 - After Scrambled Seas has moved the world, a failed custom start now requires a game restart. This prevents repeated New Game clicks from moving the same world again.
 

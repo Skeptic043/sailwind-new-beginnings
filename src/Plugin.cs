@@ -1162,6 +1162,15 @@ namespace NewBeginnings
 
         internal bool TryStartSeaHeight(Vector3 point, out float height) => TrySeaHeight(point, out height);
 
+        internal bool TryStartDockWaterline(Vector3 point, out float height)
+        {
+            // Crest can return false while leaving only mean sea level in its
+            // output. That is not a wave-clearance proof. Use the existing live
+            // displacement bound until an exact sample is available.
+            if (TrySeaHeight(point, out height)) return true;
+            return TrySeaUpperBound(out height);
+        }
+
         // Reuse the dry-ground/player-clearance validator before any boat or
         // ownership change. This private probe frame is discarded on failure.
         internal bool TryFindStartShore(PortChoice destination, Vector3 seed, Vector3 berth,
