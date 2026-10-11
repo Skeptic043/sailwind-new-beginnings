@@ -235,6 +235,8 @@ namespace NewBeginnings
 
         private void Update()
         {
+            if (GameState.currentlyLoading) FixedStart.ClearStartTiming();
+            else if (GameState.playing || WaitingForPlayerInput()) FixedStart.ReportGameplayReached();
             if (docksideMarker != null && GameState.currentlyLoading)
             {
                 // A cargo anchor can outlive the temporary player target.

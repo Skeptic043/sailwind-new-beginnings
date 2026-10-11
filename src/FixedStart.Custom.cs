@@ -14,6 +14,7 @@ namespace NewBeginnings
         private static int customFlightGeneration = -1;
         internal static bool CustomStartInFlight => customFlightGeneration == customGeneration;
         private static bool scrambledWorldRequiresRestart;
+        private static float startSelectedAt = -1f;
         private const string RestartRequired = "Restart the game before trying another new game. The previous failed start already moved the Scrambled Seas world.";
 
         internal static bool TryGetStartBlock(out string reason)
@@ -32,6 +33,19 @@ namespace NewBeginnings
         private static readonly System.Reflection.FieldInfo ControllerPointerField = AccessTools.Field(typeof(MouseButtonPointer), "controllerPointer");
         private static bool AnchorGrounded(Anchor anchor) => anchor != null && AnchorGroundedMethod != null &&
             (bool)AnchorGroundedMethod.Invoke(anchor, null);
+
+        // Startup timing spans every mod's work, not only New Beginnings.
+        internal static void MarkStartSelected() => startSelectedAt = Time.realtimeSinceStartup;
+        internal static void ClearStartTiming() => startSelectedAt = -1f;
+        private static string SinceSelection() => startSelectedAt < 0f ? "" :
+            $" {Time.realtimeSinceStartup - startSelectedAt:F1} s after start selection";
+        internal static void ReportGameplayReached()
+        {
+            if (startSelectedAt < 0f) return;
+            // Sailwind's F prompt waits for the player, so stop timing there.
+            Plugin.Instance?.Report("New game reached the start prompt or gameplay" + SinceSelection() + ".");
+            startSelectedAt = -1f;
+        }
 
         private static void CleanupCustom(Action cleanup)
         {
@@ -218,6 +232,7 @@ namespace NewBeginnings
                     CleanupCustom(StartingValues.Cancel);
                     CleanupCustom(LeopardStarterRig.Cancel);
                     CleanupCustom(() => snapshot?.Restore(failure));
+                    ClearStartTiming();
                     Plugin.Instance?.Warn(failure);
                 }
             };
@@ -242,6 +257,7 @@ namespace NewBeginnings
                 if (generation != customGeneration || menu == null || GameState.currentlyLoading) yield break;
                 if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
                 { failure = "The selected island scenery did not become ready. No starting boat was granted."; yield break; }
+                Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
                 if (!TryPrepareCustom(menu, pair, options, out placement, out failure)) yield break;
                 if (placement.Selected.Berth.Anchored)
                 {
@@ -276,7 +292,11 @@ namespace NewBeginnings
                         PurchaseUiField.GetValue(placement.Selected.Boat) as GameObject == null)
                     { failure = "The selected boat became unavailable before the native grant."; break; }
                     if (!native.MoveNext()) break;
-                    if (placement.Selected.Boat.isPurchased()) { committed = true; customCleanup = null; }
+                    if (!committed && placement.Selected.Boat.isPurchased())
+                    {
+                        committed = true; customCleanup = null;
+                        Plugin.Instance?.Report("Starting boat granted" + SinceSelection() + ".");
+                    }
                     yield return native.Current;
                 }
                 if (placement.Selected.Boat.isPurchased()) { committed = true; customCleanup = null; }

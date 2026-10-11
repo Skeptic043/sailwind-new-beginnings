@@ -248,9 +248,11 @@ namespace NewBeginnings
                         customFlightGeneration = customGeneration;
                     }
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
+                    MarkStartSelected();
                 }
                 catch (Exception exception)
                 {
+                    ClearStartTiming();
                     pending = null;
                     pendingMenu = null;
                     pendingOptions = null;

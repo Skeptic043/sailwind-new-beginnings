@@ -24,7 +24,7 @@
 - Shipyard ports only uses detected shipyards instead of a fixed list of vanilla ports.
 - Added locations without a normal starting berth check room for the boat, dry landing and supplies before granting the boat. If a suitable start cannot be found, the menu shows a reason.
 - A selected mod location remains selected when its provider is missing and is shown as unavailable until it returns or another location is chosen.
-- Pirate Island's offshore starts use the best available surveyed position. If no surveyed position passes the clearance checks, the start still proceeds at a bounded outer position and writes a warning to the log.
+- Pirate Island's offshore starts use a fixed open-water position southeast of the island, outside its enclosed inner lagoon, with the bow facing east. If the clearance checks cannot confirm that position, the start still proceeds and writes a warning to the log.
 
 ### Fixed
 

@@ -263,7 +263,7 @@ namespace NewBeginnings
                 var landing = Make(destination, seed, Quaternion.identity, shore);
                 landing.Front = pair.A; landing.Back = pair.B;
                 landing.FrontSpring = pair.A.spring; landing.BackSpring = pair.B.spring;
-                if (TryPirateOffshoreCandidates(destination, body, ropes, hull, height, origin, survey,
+                if (TryPirateOffshoreCandidates(destination, body, ropes, hull, height, survey,
                         landing, out plan, out var anchorReason))
                 { reason = null; return true; }
                 return Fail("Pirate requires an offshore start for this boat. " + anchorReason, out reason);
@@ -282,49 +282,33 @@ namespace NewBeginnings
             return plan;
         }
 
+        // Island-local hull center for Pirate's offshore hold. It lies in deep
+        // open water southeast of the enclosed inner lagoon, which cannot hold
+        // a medium or large hull. The bow faces island-local east.
+        private static readonly Vector3 PirateOffshoreCenter = new Vector3(60.7f, 0f, -77.8f);
+
         private static bool TryPirateOffshoreCandidates(PortChoice destination, Rigidbody body,
-            BoatMooringRopes ropes, Hull hull, float height, Vector3 origin, Survey survey,
+            BoatMooringRopes ropes, Hull hull, float height, Survey survey,
             StartBerthPlan landing, out StartBerthPlan plan, out string reason)
         {
             plan = null; reason = null;
-            // The outer reference is deterministic even when the query budget
-            // cannot prove any pose. It is never a hull-at-dock fallback.
-            var outerRotation = Quaternion.LookRotation(Vector3.right, Vector3.up);
-            var outerPosition = origin + Vector3.forward * MaximumSearchRadius - outerRotation * hull.Center;
-            outerPosition.y = height;
-            if (!Finite(outerPosition) || !Finite(landing.ShorePosition))
+            var frame = destination.DockRoot;
+            var heading = frame.rotation * Vector3.right;
+            heading.y = 0f;
+            if (!Finite(heading) || heading.sqrMagnitude < .5f)
+                return Fail("Pirate's island frame is not level enough for the offshore hold.", out reason);
+            var rotation = Quaternion.LookRotation(heading.normalized, Vector3.up);
+            var position = frame.TransformPoint(PirateOffshoreCenter) - rotation * hull.Center;
+            position.y = height;
+            if (!Finite(position) || !Finite(landing.ShorePosition))
                 return Fail("Pirate offshore pose or retained landing is not finite.", out reason);
-            var fallback = PirateOffshorePlan(destination, outerPosition, outerRotation, landing);
-            StartBerthPlan best = null;
-            var poses = 0; var hullRejected = 0; var departureRejected = 0;
-            string lastFailure = null;
-            for (var ring = 0; ring < 3 && !survey.Exhausted; ++ring)
-                for (var bearing = 0; bearing < 8 && !survey.Exhausted; ++bearing)
-                {
-                    var radius = Mathf.Lerp(Mathf.Min(hull.Radius + 8f, MaximumSearchRadius), MaximumSearchRadius, ring / 2f);
-                    var angle = bearing * Mathf.PI * 2f / 8;
-                    var radial = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
-                    var rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, radial), Vector3.up);
-                    var position = origin + radial * radius - rotation * hull.Center;
-                    position.y = height;
-                    if (!survey.Candidate()) break;
-                    ++poses;
-                    if (!Clear(body, hull, position, rotation, survey, out var problem))
-                    { ++hullRejected; lastFailure = problem; continue; }
-                    var candidate = PirateOffshorePlan(destination, position, rotation, landing);
-                    if (DepartureClear(body, hull, position, rotation, survey, out problem))
-                    { plan = candidate; return true; }
-                    ++departureRejected; lastFailure = problem;
-                    if (best == null)
-                    {
-                        best = candidate;
-                        best.OffshoreDiagnostics = "Pirate offshore hold has clear hull space, but departure clearance was not verified: " + problem;
-                    }
-                }
-            plan = best ?? fallback;
-            if (best == null)
-                plan.OffshoreDiagnostics = "Pirate is attempting the finite outer offshore hold with hull clearance unverified. " +
-                    $"Offshore survey poses={poses}, HullClearance={hullRejected}, Departure={departureRejected}, budgetExhausted={survey.Exhausted}. Last failure: {lastFailure ?? "none"}";
+            plan = PirateOffshorePlan(destination, position, rotation, landing);
+            // Safety checks only report on this fixed hold. They never cancel it.
+            string problem = "the bounded geometry survey is exhausted";
+            if (!survey.Candidate() || !Clear(body, hull, position, rotation, survey, out problem))
+                plan.OffshoreDiagnostics = "Pirate offshore hold is using its fixed open-water position with hull clearance unverified: " + problem;
+            else if (!DepartureClear(body, hull, position, rotation, survey, out problem))
+                plan.OffshoreDiagnostics = "Pirate offshore hold has clear hull space, but departure clearance was not verified: " + problem;
             return true;
         }
 
