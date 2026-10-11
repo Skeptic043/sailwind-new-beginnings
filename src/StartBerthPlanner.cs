@@ -238,7 +238,7 @@ namespace NewBeginnings
             {
                 var supported = pairs.ToArray();
                 // Spend the smaller budget across docks and both headings
-                // before trying increasingly displaced poses at one pair.
+                // before trying more offsets at one pair.
                 foreach (var offset in DockOffsets(true))
                     foreach (var pair in supported)
                         yield return new DockCandidate { Pair = pair, Offset = offset };
@@ -252,12 +252,13 @@ namespace NewBeginnings
         private static IEnumerable<Vector3> DockOffsets(bool pirate)
         {
             // Components are extra separation, dock side and along-dock shift.
-            // Pirate alternates shores before spending its smaller pose budget
-            // on wider offsets. Other destinations retain their original order.
+            // Pirate's narrow dock lies against terrain. Survey its widest
+            // supported separations first so the smaller pose budget reaches
+            // clear water. Other destinations retain their original order.
             for (var major = 0; major < (pirate ? 5 : 2); ++major)
                 for (var minor = 0; minor < (pirate ? 2 : 5); ++minor)
                     foreach (var shift in new[] { 0f, -3f, 3f })
-                        yield return new Vector3((pirate ? major : minor) * 1.5f,
+                        yield return new Vector3((pirate ? 4 - major : minor) * 1.5f,
                             (pirate ? minor : major) == 0 ? 1f : -1f, shift);
         }
 

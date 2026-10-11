@@ -31,6 +31,7 @@
 - Addressed Pirate Island rejecting every dock while the precise ocean-height sample was still initializing. Dock checks now use the live maximum water bound until the precise sample is ready.
 - Pirate Island's automatic dock starts now pass their selected moorings into the dry-ground check, allowing that same water-bound fallback to validate nearby shore.
 - Pirate Island placement now shares a strict search budget across docking and anchoring, checks distinct dock directions first and avoids repeating failed shore searches.
+- Pirate Island checks the widest supported dock offsets first so its bounded survey reaches open water before testing positions closer to shore.
 - Failed Pirate anchorage checks now report rejection counts and include the blocking collider when a collision check rejects the last candidate.
 - Native-anchor starts now use the boat's physical joint attachments, including the layout used by the Santa Maria and vanilla Mediterranean boats.
 - After Scrambled Seas has moved the world, a failed custom start now requires a game restart. This prevents repeated New Game clicks from moving the same world again.
