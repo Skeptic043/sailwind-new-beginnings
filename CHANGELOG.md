@@ -6,7 +6,7 @@
 
 - Automatic starting-location discovery for modded ports, including Better Ports' Bottleneck Isle.
 - A Mod ports checkbox appears with the Random Port pool checkboxes when added locations are detected. It starts disabled and adds those locations regardless of the checked regions. Leave every other pool unchecked for mod ports only, or select an added location manually without enabling the checkbox.
-- A separate Chronos pool option for including its original berth in Random Port. It starts disabled.
+- A separate option for including Chronos's original berth in Random Port. It starts disabled and appears in the Configuration Manager spoiler reveal.
 - An optional [port-author API](PORT_AUTHORS.md) for specifying a preferred dock, berth or landing when automatic discovery needs more information.
 
 <details>
@@ -15,7 +15,7 @@
 - Fort Juniper is a separate starting location when Old Chronian is installed and qualifies for Shipyard ports only.
 - Pirate Island and Saffron Island are optional Small Islands starts. Both start disabled behind the Configuration Manager spoiler reveal and can be enabled separately for manual or random selection. Mod ports does not affect either island.
 - Pirate Island allows Small boats at its existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until the player boards them.
-- At Saffron, the player and supplies start on dry land with the boat anchored nearby.
+- At Saffron, the player and supplies start on dry land. The boat waits in open water off the east coast and is held in place until the player boards it.
 
 </details>
 
@@ -25,13 +25,16 @@
 - Added locations without a normal starting berth check room for the boat, dry landing and supplies before granting the boat. If a suitable start cannot be found, the menu shows a reason.
 - A selected mod location remains selected when its provider is missing and is shown as unavailable until it returns or another location is chosen.
 - Pirate Island's offshore starts use a fixed open-water position southeast of the island, outside its enclosed inner lagoon, with the bow facing east. If the clearance checks cannot confirm that position, the start still proceeds and writes a warning to the log.
+- Start menu messages, such as an unavailable port and boat combination, now appear above the New Beginnings title.
 
 ### Fixed
 
+- Docks that sit close to the waterline, such as Bottleneck Isle's, are no longer rejected while the precise ocean-height sample is still initializing.
+- Large harbours with many moorings, such as Fort Juniper, now consider berths along each pier instead of only mooring pairs that span water between separate piers.
 - Custom shore starts now reserve space for the final packed starter-supply footprint instead of counting packable items as both loose cargo and crate contents.
 - Addressed Pirate Island falling back to a regional start when Scrambled Seas handled the new-game transition before its scenery could load.
-- Addressed Pirate Island rejecting every dock while the precise ocean-height sample was still initializing. Dock checks now use the live maximum water bound until the precise sample is ready.
-- Pirate Island's automatic dock starts now pass their selected moorings into the dry-ground check, allowing that same water-bound fallback to validate nearby shore.
+- Addressed Pirate Island rejecting every dock while the precise ocean-height sample was still initializing.
+- Pirate Island's automatic dock starts now pass their selected moorings into the dry-ground check, so nearby shore can be validated before the precise ocean-height sample is ready.
 - Pirate Island placement now shares a strict search budget across docking and anchoring, checks distinct dock directions first and avoids repeating failed shore searches.
 - Pirate Island checks the widest supported dock offsets first so its bounded survey reaches open water before testing positions closer to shore.
 - Failed Pirate anchorage checks now report rejection counts and include the blocking collider when a collision check rejects the last candidate.

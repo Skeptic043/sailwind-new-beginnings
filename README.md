@@ -27,11 +27,11 @@ The starting options menu allows you to adjust your money, reputation, and equip
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
-Chronos's original starting berth is available through manual selection and its separate Random Port pool option. Fort Juniper is a separate mod-added location when Old Chronian is installed.
+Chronos's original starting berth is available through manual selection. To include it in Random Port, use the option in the Configuration Manager spoiler reveal. Fort Juniper is a separate mod-added location when Old Chronian is installed.
 
 Pirate Island, the far-western hideout in Al'Ankh waters, and Saffron Island are optional Small Islands starts. Both are disabled by default. Open Spoilers in Configuration Manager and reveal the location switches to make them available for manual selection. They can also be enabled in the config file's `Spoilers` section. For random starts, also enable Small Islands. Mod ports does not affect either island.
 
-At Pirate Island, Small boats can use the existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land with your boat anchored nearby. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
+At Pirate Island, Small boats can use the existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land. Your boat waits in open water off the east coast and is held in place until you board it. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
 
 </details>
 

@@ -225,6 +225,7 @@ namespace NewBeginnings
                 catch (Exception exception) { Plugin.Instance?.Error("Boat rollback could not fully restore a disappeared scene object.", exception); }
                 finally
                 {
+                    StartupProfiler.Cancel();
                     CleanupCustom(() => Plugin.Instance?.CancelBoatSettle());
                     CleanupCustom(() => Plugin.Instance?.CancelPlayerStartTracking());
                     CleanupCustom(() => Plugin.Instance?.ClearDocksideSurface());
@@ -258,7 +259,11 @@ namespace NewBeginnings
                 if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
                 { failure = "The selected island scenery did not become ready. No starting boat was granted."; yield break; }
                 Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
-                if (!TryPrepareCustom(menu, pair, options, out placement, out failure)) yield break;
+                var profiled = StartupProfiler.Enter();
+                bool prepared;
+                try { prepared = TryPrepareCustom(menu, pair, options, out placement, out failure); }
+                finally { StartupProfiler.Exit(profiled); }
+                if (!prepared) yield break;
                 if (placement.Selected.Berth.Anchored)
                 {
                     var anchor = placement.Selected.Ropes.anchor;
@@ -274,7 +279,12 @@ namespace NewBeginnings
                     { failure = "The anchor could not establish seabed contact. No starting boat was granted."; yield break; }
                     if (!placement.SecureAnchor(out failure)) yield break;
                 }
-                if (!placement.Commit(out var target, out failure)) yield break;
+                profiled = StartupProfiler.Enter();
+                bool placed;
+                Transform target;
+                try { placed = placement.Commit(out target, out failure); }
+                finally { StartupProfiler.Exit(profiled); }
+                if (!placed) yield break;
                 TeleportNativeStartObserver(menu, target);
                 native = continuation != null ? continuation(target) :
                     MovePlayerFactory.Invoke(menu, new object[] { target }) as IEnumerator;
@@ -283,7 +293,7 @@ namespace NewBeginnings
                 // boat, rather than only until its IEnumerator is constructed.
                 while (generation == customGeneration && menu != null && !GameState.currentlyLoading)
                 {
-                    if (placement.Selected.Berth.PirateOffshore &&
+                    if (placement.Selected.Berth.OffshoreHeld &&
                         (!StartDestinations.IsCurrent(placement.Selected.Destination) || placement.Selected.Body == null ||
                          placement.Selected.Ropes == null || placement.Selected.Ropes.anchor == null ||
                          placement.Selected.Ropes.anchor.GetComponent<Rigidbody>() == null))
@@ -387,7 +397,7 @@ namespace NewBeginnings
                 var anchor = selected.Ropes.anchor;
                 if (anchor == null) throw new InvalidOperationException("The native anchor is unavailable.");
                 anchorWasSet = anchor.IsSet();
-                if (anchorWasSet && !selected.Berth.PirateOffshore)
+                if (anchorWasSet && !selected.Berth.OffshoreHeld)
                     throw new InvalidOperationException("The original boat anchor must be unset.");
                 anchorBody = anchor.GetComponent<Rigidbody>();
                 if (anchorBody == null) throw new InvalidOperationException("The native anchor body is unavailable.");

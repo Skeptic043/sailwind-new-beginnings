@@ -95,10 +95,15 @@ namespace NewBeginnings
             Plugin.Instance?.DebugLog($"Dockside starter supplies armed for region {selected.Region}: {Captured.Count} native items captured.");
         }
 
+        internal static bool Armed => armed != null;
+        internal static string Stage => armed != null ? placementStage ?? "waiting for dockside supplies" : null;
+
         internal static void Disarm()
         {
             if (armed != null && placementStage != null)
                 Plugin.Instance?.DebugLog("Dockside supply setup released at stage: " + placementStage + ".");
+            if (armed != null)
+                StartupProfiler.Finish(Time.realtimeSinceStartup, "supplies " + (placementStage ?? "released"));
             armed = null;
             placementStage = null;
             readyAt = -1f;
@@ -173,7 +178,7 @@ namespace NewBeginnings
             if (Time.realtimeSinceStartup - readyAt < 0.75f) return;
             fallbackScheduled = true;
             Plugin.Instance?.DebugLog($"Dockside supply fallback scheduled (starter coroutine observed: {wrapperObserved}).");
-            Plugin.Instance?.StartCoroutine(PlaceCaptured(selected));
+            Plugin.Instance?.StartCoroutine(StartupProfiler.Measure(PlaceCaptured(selected)));
         }
 
         // Observe only Difficulty's synchronous starter adjustment. Receipt of
@@ -347,7 +352,7 @@ namespace NewBeginnings
             if (ReferenceEquals(armed, selected)) nativeStarterCompleted = true;
             if (ReferenceEquals(armed, selected) && !placementClaimed)
             {
-                var placement = PlaceCaptured(selected);
+                var placement = StartupProfiler.Measure(PlaceCaptured(selected));
                 while (placement.MoveNext()) yield return placement.Current;
             }
         }

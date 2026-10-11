@@ -51,7 +51,10 @@ namespace NewBeginnings
                 Hidden("Enable Pirate Island as a manual starting location and in the Small Islands random pool."));
             enableSaffronIsland = file.Bind("Spoilers", "EnableSaffronIsland", false,
                 Hidden("Enable Saffron Island as a manual starting location and in the Small Islands random pool."));
-            var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland);
+            // Same key as before, so existing choices carry over. Shown only in the spoiler drawer.
+            chronos = file.Bind("Random Port Pools", "Chronos", false,
+                Hidden("Include ordinary Chronos in random starts. Fort Juniper follows IncludeModPorts separately."));
+            var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland, chronos);
             file.Bind("Advanced", "SpoilerOptions", "",
                 new ConfigDescription("Reveal optional hidden starting locations.", null,
                     new ConfigurationManagerAttributes { CustomDrawer = spoilerMenu.Draw, Category = "Advanced",
@@ -64,8 +67,6 @@ namespace NewBeginnings
                 "Include Fire Fish Lagoon ports.");
             smallIslands = file.Bind("Random Port Pools", "SmallIslands", false,
                 "Include geographically separate small islands.");
-            chronos = file.Bind("Random Port Pools", "Chronos", false,
-                "Include ordinary Chronos in random starts. Fort Juniper follows IncludeModPorts separately.");
             lastBoat = file.Bind("Selection", "LastSelectedBoat", 10,
                 "Last manually selected boat scene index. Default: small dhow.");
             randomBoat = file.Bind("Selection", "RandomBoat", false,

@@ -235,6 +235,16 @@ namespace NewBeginnings
 
         private void Update()
         {
+            StartupProfiler.Tick(Time.realtimeSinceStartup, Time.frameCount, GameState.currentlyLoading,
+                GameState.playing, StarterCargo.Armed, StarterCargo.Stage ??
+                (GameState.playing || WaitingForPlayerInput() ? "after the start prompt" : "new-game transition"));
+            var profiled = StartupProfiler.Enter();
+            try { UpdateCore(); }
+            finally { StartupProfiler.Exit(profiled); }
+        }
+
+        private void UpdateCore()
+        {
             if (GameState.currentlyLoading) FixedStart.ClearStartTiming();
             else if (GameState.playing || WaitingForPlayerInput()) FixedStart.ReportGameplayReached();
             if (docksideMarker != null && GameState.currentlyLoading)
@@ -1036,6 +1046,24 @@ namespace NewBeginnings
         private bool TrySeaUpperBound(out float upperBound)
         {
             upperBound = 0f;
+            if (!TryMeanSeaLevel(out var seaLevel) || oceanMaxDisplacementProperty == null) return false;
+            try
+            {
+                var ocean = oceanInstanceProperty.GetValue(null, null);
+                if (ocean == null || !(oceanMaxDisplacementProperty.GetValue(ocean, null) is float maxVertical) ||
+                    !IsFinite(maxVertical) || maxVertical < 0f)
+                    return false;
+                // Wave providers may not have reported displacement on the
+                // first startup frame. Keep a metre of clearance in that case.
+                upperBound = seaLevel + Mathf.Max(1f, maxVertical);
+                return IsFinite(upperBound);
+            }
+            catch { return false; }
+        }
+
+        private bool TryMeanSeaLevel(out float seaLevel)
+        {
+            seaLevel = 0f;
             if (!seaBoundInitialized)
             {
                 seaBoundInitialized = true;
@@ -1048,20 +1076,14 @@ namespace NewBeginnings
                         "MaxVertDisplacement");
                 }
             }
-            if (oceanInstanceProperty == null || oceanSeaLevelProperty == null ||
-                oceanMaxDisplacementProperty == null) return false;
+            if (oceanInstanceProperty == null || oceanSeaLevelProperty == null) return false;
             try
             {
                 var ocean = oceanInstanceProperty.GetValue(null, null);
-                if (ocean == null ||
-                    !(oceanSeaLevelProperty.GetValue(ocean, null) is float seaLevel) ||
-                    !(oceanMaxDisplacementProperty.GetValue(ocean, null) is float maxVertical) ||
-                    !IsFinite(seaLevel) || !IsFinite(maxVertical) || maxVertical < 0f)
+                if (ocean == null || !(oceanSeaLevelProperty.GetValue(ocean, null) is float level) || !IsFinite(level))
                     return false;
-                // Wave providers may not have reported displacement on the
-                // first startup frame. Keep a metre of clearance in that case.
-                upperBound = seaLevel + Mathf.Max(1f, maxVertical);
-                return IsFinite(upperBound);
+                seaLevel = level;
+                return true;
             }
             catch { return false; }
         }
@@ -1173,13 +1195,16 @@ namespace NewBeginnings
 
         internal bool TryStartSeaHeight(Vector3 point, out float height) => TrySeaHeight(point, out height);
 
-        internal bool TryStartDockWaterline(Vector3 point, out float height)
+        // Dock continuity classifies static structure, not wave clearance, so
+        // it uses mean sea level. A deck may sit up to a metre below its cleats,
+        // as the dock-landing rule allows. Player and cargo surfaces keep their
+        // own wave checks.
+        internal bool TryStartDockSupportFloor(float lowerCleat, out float floor)
         {
-            // Crest can return false while leaving only mean sea level in its
-            // output. That is not a wave-clearance proof. Use the existing live
-            // displacement bound until an exact sample is available.
-            if (TrySeaHeight(point, out height)) return true;
-            return TrySeaUpperBound(out height);
+            floor = 0f;
+            if (!IsFinite(lowerCleat) || !TryMeanSeaLevel(out var seaLevel)) return false;
+            floor = Mathf.Max(seaLevel + .1f, lowerCleat - 1f);
+            return true;
         }
 
         // Reuse the dry-ground/player-clearance validator before any boat or
@@ -1521,8 +1546,8 @@ namespace NewBeginnings
             var generation = ++settleGeneration;
             try
             {
-                StartCoroutine(SettleBoat(menu, selected, berthOffset, berthRotation,
-                    generation, probeGuard));
+                StartCoroutine(StartupProfiler.Measure(SettleBoat(menu, selected, berthOffset, berthRotation,
+                    generation, probeGuard)));
             }
             catch
             {

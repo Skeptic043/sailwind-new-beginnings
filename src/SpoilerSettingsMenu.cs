@@ -7,13 +7,14 @@ namespace NewBeginnings
     internal sealed class SpoilerSettingsMenu
     {
         private readonly SelectionSettings settings;
-        private readonly ConfigEntry<bool> pirate, saffron;
+        private readonly ConfigEntry<bool> pirate, saffron, chronos;
         private bool expanded, revealed;
         private GUIStyle noteStyle;
 
-        internal SpoilerSettingsMenu(SelectionSettings settings, ConfigEntry<bool> pirate, ConfigEntry<bool> saffron)
+        internal SpoilerSettingsMenu(SelectionSettings settings, ConfigEntry<bool> pirate, ConfigEntry<bool> saffron,
+            ConfigEntry<bool> chronos)
         {
-            this.settings = settings; this.pirate = pirate; this.saffron = saffron;
+            this.settings = settings; this.pirate = pirate; this.saffron = saffron; this.chronos = chronos;
         }
 
         internal void Draw(ConfigEntryBase entry)
@@ -36,6 +37,10 @@ namespace NewBeginnings
                 if (allowPirate != pirate.Value) pirate.Value = allowPirate;
                 var allowSaffron = GUILayout.Toggle(saffron.Value, "Enable Saffron Island");
                 if (allowSaffron != saffron.Value) saffron.Value = allowSaffron;
+                GUILayout.Label("Chronos is always available manually. This adds it to Random Port.",
+                    noteStyle, GUILayout.ExpandWidth(true));
+                var includeChronos = GUILayout.Toggle(chronos.Value, "Include Chronos in Random Port");
+                if (includeChronos != chronos.Value) chronos.Value = includeChronos;
             }
         }
     }

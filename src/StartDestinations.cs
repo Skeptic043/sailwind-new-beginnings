@@ -76,7 +76,7 @@ namespace NewBeginnings
                         DockRoot = forts[0].Root, Region = chronos.Region, IsModded = true, HasShipyard = true,
                         Yard = forts[0].Yard,
                         Key = "site:oldchronian|fort-juniper", SiteIdentity = "site:oldchronian|fort-juniper",
-                        DisplayName = "Fort Juniper (Chronos)" });
+                        DisplayName = "Fort Juniper" });
             }
             foreach (var registration in StartPorts.Snapshot())
             {

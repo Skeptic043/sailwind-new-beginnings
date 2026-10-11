@@ -100,13 +100,14 @@ namespace NewBeginnings
         private const float SeasContentWidth = .90f;
         private const int EditorRowsPerPage = 4;
 
+        // Chronos is a spoiler pool, set only from the Configuration Manager spoiler drawer.
         private static readonly PortPool[] PoolOrder =
             { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin,
-              PortPool.FireFishLagoon, PortPool.SmallIslands, PortPool.Chronos };
+              PortPool.FireFishLagoon, PortPool.SmallIslands };
         private static readonly BoatSize[] SizeOrder =
             { BoatSize.Small, BoatSize.Medium, BoatSize.Large };
         private static readonly string[] PoolLabels =
-            { "Al'Ankh", "Emerald", "Aestrin", "FFL", "Small Islands", "Chronos" };
+            { "Al'Ankh", "Emerald", "Aestrin", "FFL", "Small Islands" };
         private static readonly Color Ink = new Color(.06f, .035f, .02f, 1f);
         private static readonly Color MutedInk = new Color(.30f, .23f, .19f, 1f);
         private static readonly Color WarningInk = new Color(.30f, .055f, .025f, 1f);
@@ -436,7 +437,7 @@ namespace NewBeginnings
             shipyardPortsOnly = MakeButton(root, "Shipyard ports only", -1.05f, -.53f, 1.55f, .44f,
                 () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
             shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Spoiler location options still apply.";
-            includeModPorts = MakeButton(root, "Include mod ports", -.39f, -.16f, .60f, .44f,
+            includeModPorts = MakeButton(root, "Include mod ports", -.91f, -.16f, .60f, .44f,
                 ToggleModPorts);
             includeModPorts.description = "Include detected mod locations regardless of region. Select a geographic pool before turning off the last enabled pool.";
             boatPrevious = MakeButton(root, "Previous boat", .27f, .19f, .28f, .52f,
@@ -445,9 +446,9 @@ namespace NewBeginnings
             boatNext = MakeButton(root, "Next boat", 1.83f, .19f, .28f, .52f,
                 () => CycleBoat(1));
 
-            var poolX = new[] { -1.77f, -1.29f, -.81f, -.33f, -1.62f, -.97f };
-            var poolY = new[] { 0f, 0f, 0f, 0f, -.16f, -.16f };
-            var poolWidth = new[] { .44f, .44f, .44f, .44f, .74f, .48f };
+            var poolX = new[] { -1.77f, -1.29f, -.81f, -.33f, -1.62f };
+            var poolY = new[] { 0f, 0f, 0f, 0f, -.16f };
+            var poolWidth = new[] { .44f, .44f, .44f, .44f, .74f };
             portPools = new MenuUiButton[PoolOrder.Length];
             for (var i = 0; i < portPools.Length; ++i)
             {
@@ -474,7 +475,8 @@ namespace NewBeginnings
             var options = MakeButton(root, "Starting options", 1.05f, -.53f, 1.65f, .44f,
                 () => startingOptions?.Open());
             SetButtonText(options, "Starting options...");
-            status = MakeLabel(root, "Selection status", "", 0f, -.64f, .009f);
+            // Shown above the title, clear of the lower controls.
+            status = MakeLabel(root, "Selection status", "", 0f, .88f, .009f);
             status.color = WarningInk;
         }
 

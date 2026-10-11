@@ -22,9 +22,9 @@ namespace NewBeginnings
         internal SpringJoint FrontSpring, BackSpring;
         internal StartBerthMode Mode;
         internal bool Anchored { get => Mode == StartBerthMode.Anchored; set => Mode = value ? StartBerthMode.Anchored : StartBerthMode.Moored; }
-        internal bool PirateOffshore => RetainedDockLanding && Destination.HiddenKey == "pirate" && Mode == StartBerthMode.OffshoreHeld;
+        internal bool OffshoreHeld => Mode == StartBerthMode.OffshoreHeld;
         internal string OffshoreDiagnostics;
-        // Pirate offshore plans keep these cleats as landing references only.
+        // Pirate's offshore plan keeps its dock cleats as landing references only.
         internal bool RetainedDockLanding;
         internal float AnchorLength;
         internal StartAnchorModel AnchorModel;
@@ -125,8 +125,8 @@ namespace NewBeginnings
                 var milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0 /
                     System.Diagnostics.Stopwatch.Frequency;
                 Plugin.Instance.Report(PiratePlanMessage(plan.Mode, milliseconds));
-                if (!string.IsNullOrEmpty(plan.OffshoreDiagnostics)) Plugin.Instance.Warn(plan.OffshoreDiagnostics);
             }
+            if (accepted && !string.IsNullOrEmpty(plan.OffshoreDiagnostics)) Plugin.Instance.Warn(plan.OffshoreDiagnostics);
             return accepted;
         }
 
@@ -147,10 +147,13 @@ namespace NewBeginnings
             var survey = new Survey(destination.HiddenKey == "pirate");
             if (destination.HiddenKey == "saffron")
             {
-                if (destination.Marker == null) return Fail("The offshore starting marker is missing.", out reason);
-                return TryAnchored(destination, body, ropes, hull, height, destination.Marker.position,
-                    destination.ShoreMarker != null ? destination.ShoreMarker.position : destination.Marker.position,
-                    survey, out plan, out reason);
+                // Saffron's authored marker is on land. Land beside it and hold the
+                // boat in open water off the east coast.
+                if (destination.Marker == null) return Fail("The Saffron starting marker is missing.", out reason);
+                var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : destination.Marker.position;
+                if (!Plugin.Instance.TryFindStartShore(destination, seed, seed, out var shore, out _, out reason)) return false;
+                return TryFixedOffshoreHold(destination, body, hull, height, SaffronOffshoreCenter, Vector3.forward,
+                    survey, Make(destination, seed, Quaternion.identity, shore), out plan, out reason);
             }
 
             var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
@@ -172,10 +175,12 @@ namespace NewBeginnings
                          let span = Vector3.ProjectOnPlane(a.transform.position - b.transform.position, Vector3.up).magnitude
                          where span >= 3f && span <= 80f && Mathf.Abs(a.transform.position.y - b.transform.position.y) <= 3f
                          orderby Mathf.Abs(span - 2f * (hull.HalfSegment + hull.Radius))
-                         select new DockPair { A = a, B = b }).Take(64);
+                         select new DockPair { A = a, B = b });
             // Pair nearby real dock endpoints, then check both water-facing sides.
             // The dock continuity test prevents treating separate shores as one quay.
-            foreach (var candidate in DockCandidates(SupportedDockPairs(pairs, survey, report),
+            // Keep the first 64 supported pairs. At a large harbour the pairs
+            // closest to hull length often span water between separate piers.
+            foreach (var candidate in DockCandidates(SupportedDockPairs(pairs, survey, report).Take(64),
                 destination.HiddenKey == "pirate"))
                 {
                     if (destination.HiddenKey == "pirate" && !shoreFailures.CanTry(candidate.Pair)) continue;
@@ -263,52 +268,54 @@ namespace NewBeginnings
                 var landing = Make(destination, seed, Quaternion.identity, shore);
                 landing.Front = pair.A; landing.Back = pair.B;
                 landing.FrontSpring = pair.A.spring; landing.BackSpring = pair.B.spring;
-                if (TryPirateOffshoreCandidates(destination, body, ropes, hull, height, survey,
-                        landing, out plan, out var anchorReason))
+                if (TryFixedOffshoreHold(destination, body, hull, height, PirateOffshoreCenter, Vector3.right,
+                        survey, landing, out plan, out var anchorReason))
                 { reason = null; return true; }
                 return Fail("Pirate requires an offshore start for this boat. " + anchorReason, out reason);
             }
             return Fail("Pirate requires an offshore start for this boat, but no validated dock landing was found within the bounded survey.", out reason);
         }
 
-        private static StartBerthPlan PirateOffshorePlan(PortChoice destination, Vector3 position,
+        private static StartBerthPlan OffshorePlan(PortChoice destination, Vector3 position,
             Quaternion rotation, StartBerthPlan landing)
         {
             var plan = Make(destination, position, rotation, landing.ShorePosition);
             plan.Mode = StartBerthMode.OffshoreHeld;
-            plan.RetainedDockLanding = true;
+            plan.RetainedDockLanding = landing.Front != null && landing.Back != null;
             plan.Front = landing.Front; plan.Back = landing.Back;
             plan.FrontSpring = landing.FrontSpring; plan.BackSpring = landing.BackSpring;
             return plan;
         }
 
-        // Island-local hull center for Pirate's offshore hold. It lies in deep
-        // open water southeast of the enclosed inner lagoon, which cannot hold
-        // a medium or large hull. The bow faces island-local east.
+        // Island-local hull centers for the fixed offshore holds, chosen from
+        // installed terrain. Pirate's lies in deep water southeast of its
+        // enclosed inner lagoon with the bow east. Saffron's lies off the east
+        // coast, 62 m east of its on-land marker, with the bow north.
         private static readonly Vector3 PirateOffshoreCenter = new Vector3(60.7f, 0f, -77.8f);
+        private static readonly Vector3 SaffronOffshoreCenter = new Vector3(262.7f, 0f, 169.9f);
 
-        private static bool TryPirateOffshoreCandidates(PortChoice destination, Rigidbody body,
-            BoatMooringRopes ropes, Hull hull, float height, Survey survey,
+        private static bool TryFixedOffshoreHold(PortChoice destination, Rigidbody body, Hull hull, float height,
+            Vector3 localCenter, Vector3 localForward, Survey survey,
             StartBerthPlan landing, out StartBerthPlan plan, out string reason)
         {
             plan = null; reason = null;
-            var frame = destination.DockRoot;
-            var heading = frame.rotation * Vector3.right;
+            var frame = destination.Island.transform;
+            var heading = frame.rotation * localForward;
             heading.y = 0f;
             if (!Finite(heading) || heading.sqrMagnitude < .5f)
-                return Fail("Pirate's island frame is not level enough for the offshore hold.", out reason);
+                return Fail(destination.DisplayName + "'s island frame is not level enough for the offshore hold.", out reason);
             var rotation = Quaternion.LookRotation(heading.normalized, Vector3.up);
-            var position = frame.TransformPoint(PirateOffshoreCenter) - rotation * hull.Center;
+            var position = frame.TransformPoint(localCenter) - rotation * hull.Center;
             position.y = height;
             if (!Finite(position) || !Finite(landing.ShorePosition))
-                return Fail("Pirate offshore pose or retained landing is not finite.", out reason);
-            plan = PirateOffshorePlan(destination, position, rotation, landing);
+                return Fail(destination.DisplayName + " offshore pose or landing is not finite.", out reason);
+            plan = OffshorePlan(destination, position, rotation, landing);
             // Safety checks only report on this fixed hold. They never cancel it.
             string problem = "the bounded geometry survey is exhausted";
             if (!survey.Candidate() || !Clear(body, hull, position, rotation, survey, out problem))
-                plan.OffshoreDiagnostics = "Pirate offshore hold is using its fixed open-water position with hull clearance unverified: " + problem;
+                plan.OffshoreDiagnostics = destination.DisplayName + " offshore hold is using its fixed open-water position with hull clearance unverified: " + problem;
             else if (!DepartureClear(body, hull, position, rotation, survey, out problem))
-                plan.OffshoreDiagnostics = "Pirate offshore hold has clear hull space, but departure clearance was not verified: " + problem;
+                plan.OffshoreDiagnostics = destination.DisplayName + " offshore hold has clear hull space, but departure clearance was not verified: " + problem;
             return true;
         }
 
@@ -326,14 +333,25 @@ namespace NewBeginnings
             internal void Reject(DockPair pair) => pairs.Add(pair);
         }
 
+        private const int MaximumScannedPairs = 256;
+
         private static IEnumerable<DockPair> SupportedDockPairs(IEnumerable<DockPair> pairs, Survey survey, DockReport report)
         {
-            foreach (var pair in pairs)
+            // Both orders of one physical pair share the same dock between them.
+            var checkedPairs = new Dictionary<long, bool>();
+            foreach (var pair in pairs.Take(MaximumScannedPairs))
             {
                 if (survey.Exhausted) yield break;
                 ++report.Pairs;
-                if (DockContinuous(pair.A, pair.B, survey, out var reason)) yield return pair;
-                else report.Reject(DockRejection.DockSupport, reason);
+                var a = pair.A.GetInstanceID(); var b = pair.B.GetInstanceID();
+                var key = ((long)Math.Min(a, b) << 32) | (uint)Math.Max(a, b);
+                if (!checkedPairs.TryGetValue(key, out var supported))
+                {
+                    supported = DockContinuous(pair.A, pair.B, survey, out var reason);
+                    checkedPairs[key] = supported;
+                    if (!supported) report.Reject(DockRejection.DockSupport, reason);
+                }
+                if (supported) yield return pair;
             }
         }
 
@@ -472,7 +490,7 @@ namespace NewBeginnings
                 return Fail(reason ?? "The berth moved away from the verified waterline.", out reason);
             if (!Finite(plan.Position) || !Finite(plan.ShorePosition) || !IsFiniteRotation(plan.Rotation))
                 return Fail("The offshore plan has a non-finite pose.", out reason);
-            if (!plan.PirateOffshore && (!Clear(body, hull, plan.Position, plan.Rotation, survey, out reason) ||
+            if (!plan.OffshoreHeld && (!Clear(body, hull, plan.Position, plan.Rotation, survey, out reason) ||
                 !DepartureClear(body, hull, plan.Position, plan.Rotation, survey, out reason))) return false;
             if (plan.Anchored)
             {
@@ -496,7 +514,7 @@ namespace NewBeginnings
                  plan.Front.spring != plan.FrontSpring || plan.Back.spring != plan.BackSpring))
                 return Fail("The retained dock landing references changed.", out reason);
             if (Plugin.Instance == null || !Plugin.Instance.TryFindStartShore(plan.Destination, plan.ShorePosition,
-                    plan.PirateOffshore ? plan.ShorePosition : plan.Position, out var shore, out _, out reason,
+                    plan.OffshoreHeld ? plan.ShorePosition : plan.Position, out var shore, out _, out reason,
                     plan.Front != null ? plan.Front.transform : null, plan.Back != null ? plan.Back.transform : null) ||
                     Vector3.Distance(shore, plan.ShorePosition) > .5f)
                 return Fail(reason ?? "The planned dry landing is no longer supported.", out reason);
@@ -554,16 +572,17 @@ namespace NewBeginnings
         {
             reason = null;
             var steps = Mathf.CeilToInt(Vector3.Distance(a.transform.position, b.transform.position) / 2f);
+            var lowerCleat = Mathf.Min(a.transform.position.y, b.transform.position.y);
+            if (Plugin.Instance == null || !Plugin.Instance.TryStartDockSupportFloor(lowerCleat, out var floor))
+                return Fail("Sea level at the dock is unavailable.", out reason);
             for (var i = 0; i <= steps; ++i)
             {
                 var point = Vector3.Lerp(a.transform.position, b.transform.position, (float)i / steps);
                 if (!Ground(point, point.y + 2f, 6f, survey, out var support))
                     return Fail(survey.Exhausted ? "The bounded geometry survey is exhausted." :
                         "No continuous static support was found between the cleats.", out reason);
-                if (Plugin.Instance == null || !Plugin.Instance.TryStartDockWaterline(support.point, out var sea))
-                    return Fail("The waterline at the dock support is unavailable.", out reason);
-                if (support.point.y < sea + .1f)
-                    return Fail("Support between the cleats is below the dry dock clearance.", out reason);
+                if (support.point.y < floor)
+                    return Fail("Support between the cleats is below the dock deck clearance.", out reason);
             }
             return true;
         }
