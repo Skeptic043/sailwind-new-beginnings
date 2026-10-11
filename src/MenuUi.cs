@@ -62,6 +62,7 @@ namespace NewBeginnings
         private TextMesh status;
         private MenuUiButton randomPort;
         private MenuUiButton shipyardPortsOnly;
+        private MenuUiButton includeModPorts;
         private MenuUiButton randomBoat;
         private MenuUiButton portPrevious;
         private MenuUiButton portNext;
@@ -90,6 +91,8 @@ namespace NewBeginnings
         private int editorPage;
         private bool built;
         private bool seasLayout;
+        private float nextDiscoveryRefresh;
+        private int registrationRevision = -1;
         internal const float StartingOptionsOffsetY = .35f;
         private const float VerticalOffset = 1.15f;
         private const float SeasMenuOffsetX = 1.12f;
@@ -206,6 +209,14 @@ namespace NewBeginnings
         private void Update()
         {
             if (!built) return;
+            // Optional providers can initialize after the menu opens. Keep the
+            // catalog live only while this panel is active, without saving settings.
+            if (registrationRevision != StartPorts.Revision || Time.realtimeSinceStartup >= nextDiscoveryRefresh)
+            {
+                registrationRevision = StartPorts.Revision;
+                nextDiscoveryRefresh = Time.realtimeSinceStartup + 2f;
+                RefreshCatalog();
+            }
             HideNativeRegionChoice();
             ApplyContinueState();
             if (EditingAny)
@@ -422,7 +433,10 @@ namespace NewBeginnings
                 () => CyclePort(1));
             shipyardPortsOnly = MakeButton(root, "Shipyard ports only", -1.05f, -.53f, 1.55f, .44f,
                 () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
-            shipyardPortsOnly.description = "Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay in the checked regions. Ignores individual island exclusions without changing them.";
+            shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Spoiler location options still apply.";
+            includeModPorts = MakeButton(root, "Include mod ports", -1.05f, -.72f, 1.55f, .44f,
+                ToggleModPorts);
+            includeModPorts.description = "Include detected mod locations regardless of region. Select a geographic pool before turning off the last enabled pool.";
             boatPrevious = MakeButton(root, "Previous boat", .27f, .19f, .28f, .52f,
                 () => CycleBoat(-1));
             boatValue = MakeValuePanel(root, "Selected boat", 1.05f, .19f, out _);
@@ -458,7 +472,7 @@ namespace NewBeginnings
             var options = MakeButton(root, "Starting options", 1.05f, -.53f, 1.65f, .44f,
                 () => startingOptions?.Open());
             SetButtonText(options, "Starting options...");
-            status = MakeLabel(root, "Selection status", "", 0f, -.64f, .009f);
+            status = MakeLabel(root, "Selection status", "", 0f, -.86f, .009f);
             status.color = WarningInk;
         }
 
@@ -570,7 +584,7 @@ namespace NewBeginnings
         }
 
         private PortChoice[] EditorPorts() => catalog == null ? new PortChoice[0] :
-            catalog.Ports.Where(item => item.Pool.HasValue).ToArray();
+            catalog.VisiblePorts(settings).Where(item => item.Pool.HasValue || item.IsModded).ToArray();
 
         private BoatChoice[] EditorBoats() => catalog == null ? new BoatChoice[0] :
             catalog.Boats.Where(item => item.Size.HasValue).ToArray();
@@ -785,12 +799,21 @@ namespace NewBeginnings
 
         private void CyclePort(int direction)
         {
-            if (settings.RandomPort || catalog == null || catalog.Ports.Count == 0) return;
-            var current = catalog.Ports.FindIndex(item => item.Index == settings.PortIndex);
+            if (settings.RandomPort || catalog == null) return;
+            var ports = catalog.VisiblePorts(settings).ToList();
+            if (ports.Count == 0) return;
+            var current = ports.FindIndex(IsSelectedPort);
             if (current < 0) current = direction > 0 ? -1 : 0;
-            settings.PortIndex = catalog.Ports[(current + direction + catalog.Ports.Count) % catalog.Ports.Count].Index;
+            var selected = ports[(current + direction + ports.Count) % ports.Count];
+            settings.DestinationKey = selected.Key;
+            settings.PortIndex = selected.Index;
             Changed();
         }
+
+        private bool IsSelectedPort(PortChoice port) =>
+            string.IsNullOrEmpty(settings.DestinationKey)
+                ? port.SiteIdentity == null && port.Index == settings.PortIndex
+                : string.Equals(port.Key, settings.DestinationKey, StringComparison.Ordinal);
 
         private void CycleBoat(int direction)
         {
@@ -805,6 +828,14 @@ namespace NewBeginnings
         {
             if (!settings.RandomPort) return;
             if (settings.SetPortPool(pool, !settings.PortPools.Contains(pool))) Changed();
+        }
+
+        private void ToggleModPorts()
+        {
+            if (!settings.RandomPort || catalog == null || !catalog.Ports.Any(item => item.IsModded)) return;
+            if (settings.IncludeModPorts && settings.PortPools.Count == 0) return;
+            settings.IncludeModPorts = !settings.IncludeModPorts;
+            Changed();
         }
 
         private void ToggleBoatSize(BoatSize size)
@@ -822,9 +853,10 @@ namespace NewBeginnings
         private void RefreshDisplay()
         {
             if (catalog == null) return;
-            var port = catalog.Ports.FirstOrDefault(item => item.Index == settings.PortIndex);
+            var visiblePorts = catalog.VisiblePorts(settings).ToList();
+            var port = visiblePorts.FirstOrDefault(IsSelectedPort);
             var boat = catalog.Boats.FirstOrDefault(item => item.Index == settings.BoatSceneIndex);
-            portValue.text = port != null ? Trim(port.DisplayName, 19) : "No port";
+            portValue.text = port != null ? Trim(port.DisplayName, 19) : "Unavailable";
             boatValue.text = boat != null ? Trim(boat.DisplayName, 19) : "No boat";
             portValue.color = settings.RandomPort ? MutedInk : Ink;
             boatValue.color = settings.RandomBoat ? MutedInk : Ink;
@@ -834,8 +866,13 @@ namespace NewBeginnings
             SetButtonVisible(shipyardPortsOnly, !EditingAny);
             SetEnabled(shipyardPortsOnly, settings.RandomPort);
             SetButtonText(shipyardPortsOnly, (settings.ShipyardPortsOnly ? "[x] " : "[ ] ") + "Shipyard ports only");
-            SetEnabled(portPrevious, !settings.RandomPort && catalog.Ports.Count > 1);
-            SetEnabled(portNext, !settings.RandomPort && catalog.Ports.Count > 1);
+            var hasModPorts = catalog.Ports.Any(item => item.IsModded);
+            SetButtonVisible(includeModPorts, !EditingAny && hasModPorts);
+            SetEnabled(includeModPorts, settings.RandomPort && hasModPorts &&
+                (!settings.IncludeModPorts || settings.PortPools.Count > 0));
+            SetButtonText(includeModPorts, (settings.IncludeModPorts ? "[x] " : "[ ] ") + "Include mod ports");
+            SetEnabled(portPrevious, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
+            SetEnabled(portNext, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
             SetEnabled(boatPrevious, !settings.RandomBoat && catalog.Boats.Count > 1);
             SetEnabled(boatNext, !settings.RandomBoat && catalog.Boats.Count > 1);
             SetButtonText(portPrevious, "<");
@@ -850,7 +887,7 @@ namespace NewBeginnings
                 var checkedPool = settings.PortPools.Contains(PoolOrder[i]);
                 SetButtonText(portPools[i], (checkedPool ? "[x] " : "[ ] ") + PoolLabels[i]);
                 SetEnabled(portPools[i], settings.RandomPort &&
-                    (!checkedPool || settings.PortPools.Count > 1));
+                    (!checkedPool || settings.PortPools.Count > 1 || settings.IncludeModPorts));
             }
             for (var i = 0; i < boatSizes.Length; ++i)
             {

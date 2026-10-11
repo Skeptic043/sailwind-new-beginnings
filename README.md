@@ -16,14 +16,22 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 ## How it works
 
-Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of the pool for random starts, then click Done to save changes. The Shipyard Ports Only checkbox will only allow ports with shipyards to be chosen from your region selection as your spawn location.
+Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of the pool for random starts, then click Done to save changes. Shipyard Ports Only limits random starts to locations with a detected shipyard.
+
+When added ports are detected, Include mod ports appears in the new-game menu. It starts unchecked. Turning it on adds those locations to Random Port regardless of the region checkboxes, so you can leave every region unchecked for mod ports only. Shipyard restrictions and boat placement checks still apply. You can also choose an added location manually without enabling this checkbox.
+
+Better Ports' Bottleneck Isle is discovered automatically. Added locations without a normal starting berth must have enough room for the selected boat, a dry landing and the supplies. If those checks fail, the start returns to the menu with a reason.
 
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
 
 <details>
-<summary>Spoiler: a manually selected location</summary>
+<summary>Spoilers: additional starting locations</summary>
 
-Chronos is never randomly picked and must be manually chosen.
+Chronos's original starting berth is available through manual selection. Fort Juniper is a separate mod-added location when Old Chronian is installed.
+
+Pirate Island, the far-western hideout in Al'Ankh waters, and Saffron Island are optional Small Islands starts. Both are disabled by default. Enable `EnablePirateIsland` or `EnableSaffronIsland` in the config's `Spoilers` section to make them available for manual selection. For random starts, also enable Small Islands. Include mod ports does not affect either island.
+
+At Saffron, you and your supplies start on dry land with your boat anchored nearby. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
 
 </details>
 
@@ -38,6 +46,8 @@ Boats that need to be moved away from their normal starting locations receive up
 The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`. After launching once, settings can also be changed in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
 Once startup finishes, including mooring setup and the one-time hull repair, New Beginnings no longer moves the player, boat or supplies or changes their state, and can be safely uninstalled.
+
+Port authors can optionally [register a preferred starting site](PORT_AUTHORS.md) when automatic dock discovery needs more information.
 
 ## Compatibility and limitations
 
@@ -65,7 +75,7 @@ Port and boat selection has been tested with [Scrambled Seas: NANDbrew Edition](
 
 Boats from other mods that aren't on this list are sorted into Small, Medium or Large by hull size when possible, so they can come up in Random Boat. Any that can't be measured stay available for manual selection.
 
-Every port has been tested with at least one large boat, but this does not mean every hull fits every port, particularly HMS Leopard. Large ships can take a moment to settle, and some ports don't have enough room for them. Use Island Exclusions to leave cramped ports out of random starts, exclude particular boats, or disable the Large size pool.
+The original vanilla port selection has been tested with at least one large boat at each port, but this does not mean every hull fits every port, particularly HMS Leopard. Large ships can take a moment to settle, and some ports don't have enough room for them. Use Island Exclusions to leave cramped ports out of random starts, exclude particular boats, or disable the Large size pool.
 
 Ports with limited room for large ship spawns include (but are not limited to):
 

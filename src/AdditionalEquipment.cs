@@ -143,6 +143,34 @@ namespace NewBeginnings
                 .Concat(ModEquipment.Discover(directory)).ToArray();
         }
 
+        // Read-only upper bound for a new shore's required space. Reserve loose
+        // items and possible packing carriers, so packing cannot enlarge the
+        // accepted footprint. Do not instantiate or initialize equipment here.
+        internal static IEnumerable<ShipItem> ShorePreflightItems(StartingOptionsSettings options, int nativeCount)
+        {
+            if (options == null) throw new InvalidOperationException("Starting supplies settings are unavailable.");
+            if (!TryValidateSelection(options.EquipmentQuantities.Keys, out var reason))
+                throw new InvalidOperationException(reason);
+            var directory = Directory;
+            long count = nativeCount;
+            foreach (var entry in GetCatalog())
+            {
+                if (!options.EquipmentQuantities.TryGetValue(entry.Key, out var quantity)) continue;
+                var prefab = Resolve(directory, entry);
+                if (prefab == null) throw new InvalidOperationException("Selected equipment became unavailable.");
+                var item = prefab.GetComponent<ShipItem>();
+                count += quantity;
+                for (var index = 0; index < quantity; ++index) yield return item;
+            }
+            var carrier = Resolve(directory, new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", ""));
+            var capacity = CarrierCapacity(carrier);
+            if (count > 0 && capacity <= 0)
+                throw new InvalidOperationException("Possible packing carriers cannot be measured safely.");
+            if (capacity > 0)
+                for (long index = 0; index < (count + capacity - 1) / capacity; ++index)
+                    yield return carrier.GetComponent<ShipItem>();
+        }
+
         private static GameObject Resolve(PrefabsDirectory directory, EquipmentEntry entry)
         {
             if (directory?.directory == null || entry.Index >= directory.directory.Length) return null;

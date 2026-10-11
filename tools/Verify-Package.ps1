@@ -46,7 +46,7 @@ foreach ($dependency in $manifest.dependencies) {
 if (-not ($manifest.dependencies | Where-Object { $_ -cmatch '^BepInEx-BepInExPack-' })) {
     throw 'manifest.dependencies must include BepInEx-BepInExPack.'
 }
-foreach ($name in @('README.md','CHANGELOG.md','LICENSE','BUILD.md')) { Read-ReleaseText $name | Out-Null }
+foreach ($name in @('README.md','CHANGELOG.md','LICENSE','BUILD.md','PORT_AUTHORS.md')) { Read-ReleaseText $name | Out-Null }
 $changes = Read-ReleaseText 'CHANGELOG.md'
 if ($changes -notmatch ('(?m)^#{1,3}\s+(?:Version\s+)?\[?v?' + [regex]::Escape($version) + '(?:\]|\s|$)')) {
     throw "CHANGELOG.md must have a heading for $version."
@@ -98,7 +98,7 @@ if (-not $SkipAssembly) {
     } finally { $pe.Dispose(); $stream.Dispose() }
 } elseif ($PluginZip -or $SourceZip) { throw 'Archive verification cannot skip DLL metadata.' }
 
-$releaseNames = @('manifest.json','icon.png','README.md','CHANGELOG.md','LICENSE')
+$releaseNames = @('manifest.json','icon.png','README.md','CHANGELOG.md','LICENSE','PORT_AUTHORS.md')
 $pluginEntries = @($releaseNames | ForEach-Object { [pscustomobject]@{ Source=(Join-Path $ProjectRoot $_); Name=$_ } })
 $pluginEntries += [pscustomobject]@{ Source=$dllPath; Name='BepInEx/plugins/NewBeginnings/NewBeginnings.dll' }
 # Exact public source allowlist: never recursively archive the working directory.

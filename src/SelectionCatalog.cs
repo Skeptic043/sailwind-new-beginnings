@@ -16,8 +16,18 @@ namespace NewBeginnings
         internal RecoveryPort Recovery;
         internal PortPool? Pool; // null means manual selection only (for example Chronos).
         internal string DisplayName;
-        internal int Index => Port.portIndex;
-        internal string IdentityName => Port.gameObject.name;
+        internal string Key;
+        internal string SiteIdentity;
+        internal IslandHorizon Island;
+        internal Transform DockRoot, Marker, ShoreMarker, SceneryRoot;
+        internal GPButtonDockMooring PreferredFront, PreferredBack;
+        internal Shipyard Yard;
+        internal int Region;
+        internal bool IsModded, HasShipyard;
+        internal string HiddenKey;
+        internal bool UsesCustomBerth => Recovery == null || SiteIdentity != null;
+        internal int Index => Port != null ? Port.portIndex : -1;
+        internal string IdentityName => SiteIdentity ?? (Port != null ? Port.gameObject.name : Key);
     }
 
     internal sealed class BoatChoice
@@ -165,8 +175,8 @@ namespace NewBeginnings
 
             var registered = RecoveryPortsField.GetValue(null) as List<RecoveryPort>;
             var seenPortIndexes = new HashSet<int>();
-            if (Port.ports == null || registered == null)
-                result.Rejections.Add("Ports or recovery berths have not registered yet.");
+            if (Port.ports == null)
+                result.Rejections.Add("Ports have not registered yet.");
             else
             {
                 foreach (var port in Port.ports.Where(item => item != null))
@@ -197,15 +207,15 @@ namespace NewBeginnings
                         result.Rejections.Add($"Port {index} does not match Port.ports registration.");
                         continue;
                     }
-                    if ((int)port.region < 0 || (int)port.region > 2)
+                    if (!StartDestinations.ValidPort(port))
                     {
                         result.Rejections.Add($"Port {index} has an unsupported starter region.");
                         continue;
                     }
-                    var berths = registered.Where(item => item != null && item.parentPort == port &&
+                    var berths = (registered ?? new List<RecoveryPort>()).Where(item => item != null && item.parentPort == port &&
                         item.gameObject.scene.IsValid() && item.gameObject.scene.isLoaded && item.enabled &&
                         item.boatPos != null && item.mooringFront != null && item.mooringBack != null).ToArray();
-                    if (berths.Length != 1)
+                    if (berths.Length > 1)
                     {
                         result.Rejections.Add($"Port {index} has {berths.Length} complete direct recovery berths; expected one.");
                         continue;
@@ -214,13 +224,14 @@ namespace NewBeginnings
                     result.Ports.Add(new PortChoice
                     {
                         Port = port,
-                        Recovery = berths[0],
+                        Recovery = berths.FirstOrDefault(),
                         Pool = FindPool(port, overrides),
                         DisplayName = string.IsNullOrEmpty(name) ? port.gameObject.name : name
                     });
                 }
             }
 
+            StartDestinations.Complete(result);
             var seenBoatIndexes = new HashSet<int>();
             foreach (var boat in Resources.FindObjectsOfTypeAll<PurchasableBoat>())
             {
@@ -283,7 +294,7 @@ namespace NewBeginnings
             result.Ports.Sort((left, right) =>
             {
                 var byPool = PoolSortKey(left.Pool).CompareTo(PoolSortKey(right.Pool));
-                return byPool != 0 ? byPool : left.Index.CompareTo(right.Index);
+                return byPool != 0 ? byPool : string.Compare(left.DisplayName, right.DisplayName, StringComparison.OrdinalIgnoreCase);
             });
             result.Boats.Sort(CompareBoats);
             return result;
@@ -452,10 +463,15 @@ namespace NewBeginnings
                 dinghyIndex == index;
         }
 
-        private static bool IsShipyardPort(PortChoice port) =>
-            (port.Index == 0 || port.Index == 9 || port.Index == 15 || port.Index == 22) &&
-            KnownPorts.TryGetValue(port.Index, out var known) &&
-            string.Equals(port.IdentityName, known.Item1, StringComparison.OrdinalIgnoreCase);
+        internal static bool IsKnownPort(Port port) => port != null &&
+            KnownPorts.TryGetValue(port.portIndex, out var known) &&
+            string.Equals(port.name, known.Item1, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsShipyardPort(PortChoice port) => port.HasShipyard;
+
+        internal IEnumerable<PortChoice> VisiblePorts(SelectionSettings settings) => Ports.Where(item =>
+            item.HiddenKey != "pirate" || settings.EnablePirateIsland).Where(item =>
+            item.HiddenKey != "saffron" || settings.EnableSaffronIsland);
 
         internal bool TryChoose(SelectionSettings settings,
             IndividualExclusions individualExclusions, System.Random random,
@@ -468,17 +484,20 @@ namespace NewBeginnings
                 reason = "Selection settings or random source are missing.";
                 return false;
             }
-            if (settings.RandomPort && settings.PortPools.Count == 0 ||
+            if (settings.RandomPort && settings.PortPools.Count == 0 && !settings.IncludeModPorts ||
                 settings.RandomBoat && settings.BoatSizes.Count == 0)
             {
                 reason = "At least one random port pool and boat size pool must remain selected.";
                 return false;
             }
             var ports = settings.RandomPort
-                ? Ports.Where(item => item.Pool.HasValue && settings.PortPools.Contains(item.Pool.Value) &&
+                ? VisiblePorts(settings).Where(item => (item.IsModded ? settings.IncludeModPorts :
+                    item.Pool.HasValue && settings.PortPools.Contains(item.Pool.Value)) &&
                     (settings.ShipyardPortsOnly ? IsShipyardPort(item) :
                      individualExclusions == null || !individualExclusions.IsPortExcluded(item))).ToArray()
-                : Ports.Where(item => item.Index == settings.PortIndex).ToArray();
+                : VisiblePorts(settings).Where(item => string.IsNullOrEmpty(settings.DestinationKey)
+                    ? item.SiteIdentity == null && item.Index == settings.PortIndex
+                    : item.Key == settings.DestinationKey).ToArray();
             var boats = settings.RandomBoat
                 ? Boats.Where(item => item.Size.HasValue && settings.BoatSizes.Contains(item.Size.Value) &&
                     (individualExclusions == null || !individualExclusions.IsBoatExcluded(item))).ToArray()
@@ -486,12 +505,12 @@ namespace NewBeginnings
             if (ports.Length == 0)
             {
                 reason = settings.RandomPort && settings.ShipyardPortsOnly
-                    ? "No validated shipyard ports match the checked regions."
+                    ? "No shipyard starting locations match the enabled pools."
                     : settings.RandomPort && Ports.Any(item => item.Pool.HasValue &&
                     settings.PortPools.Contains(item.Pool.Value))
                     ? "Every island in the checked pools is individually excluded from random starts."
-                    : settings.RandomPort ? "No validated ports match the checked geographic pools."
-                    : $"Selected port {settings.PortIndex} is not a validated port.";
+                    : settings.RandomPort ? "No starting locations match the enabled pools."
+                    : "The selected starting location is unavailable or disabled.";
                 return false;
             }
             if (boats.Length == 0)
@@ -518,7 +537,7 @@ namespace NewBeginnings
             if (chosen != null) return true;
             reason = settings.RandomPort && settings.ShipyardPortsOnly
                 ? "No selected boat has a usable berth at the checked shipyard ports."
-                : "No selected boat and port pair has a usable, unoccupied recovery berth.";
+                : "No selected boat and location pair has a usable starting berth.";
             return false;
         }
     }
@@ -529,6 +548,10 @@ namespace NewBeginnings
         internal bool ShipyardPortsOnly { get; set; }
         internal bool RandomBoat { get; set; }
         internal int PortIndex { get; set; }
+        internal string DestinationKey { get; set; }
+        internal bool IncludeModPorts { get; set; }
+        internal bool EnablePirateIsland { get; set; }
+        internal bool EnableSaffronIsland { get; set; }
         internal int BoatSceneIndex { get; set; }
         internal readonly HashSet<PortPool> PortPools = new HashSet<PortPool>
             { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin };
@@ -537,7 +560,7 @@ namespace NewBeginnings
 
         internal bool SetPortPool(PortPool pool, bool enabled)
         {
-            if (!enabled && PortPools.Count == 1 && PortPools.Contains(pool)) return false;
+            if (!enabled && !IncludeModPorts && PortPools.Count == 1 && PortPools.Contains(pool)) return false;
             if (enabled) PortPools.Add(pool); else PortPools.Remove(pool);
             return true;
         }

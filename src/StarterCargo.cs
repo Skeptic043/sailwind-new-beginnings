@@ -150,7 +150,7 @@ namespace NewBeginnings
             var selected = armed;
             if (selected == null) return;
             if (GameState.currentlyLoading ||
-                selected.Port == null || !selected.Port.gameObject.scene.isLoaded)
+                selected.Island == null || !selected.Island.gameObject.scene.isLoaded)
             {
                 if (GameState.playing && !GameState.currentlyLoading)
                     FailAndDisarm("the selected game or port scene changed before supply placement");
@@ -414,7 +414,7 @@ namespace NewBeginnings
                     placementStage = "planning a complete dockside layout";
                     if (TryPlaceAll(selected, ground, groundCollider, out lastReason))
                     {
-                        var localGround = selected.Recovery.transform.InverseTransformPoint(ground);
+                        var localGround = selected.ShoreFrame.InverseTransformPoint(ground);
                         placementStage = "waiting for native physics to settle the first layout";
                         // Allow the native physics body to take over before
                         // checking that every item is still at the wharf.
@@ -677,6 +677,80 @@ namespace NewBeginnings
                 if (item != null) result.Add(item);
             }
             return result.ToArray();
+        }
+
+        // Reserve dry land for the complete uncompressed loadout before a new
+        // berth is mutated. Native difficulty removals may reduce this bound.
+        // Uses the same land probing and slot separation as actual placement.
+        internal static bool TryPreflightShoreCapacity(ResolvedStart selected, Vector3 ground, out string reason)
+        {
+            reason = null;
+            RefreshBoatWalkRoots();
+            var native = selected.Options?.StandardSupplies == false ? Array.Empty<ShipItem>() : CollectItems(selected.StarterSet.transform);
+            var reserved = new List<GroundSlot>();
+            foreach (var item in native.Concat(AdditionalEquipment.ShorePreflightItems(selected.Options, native.Length)))
+            {
+                if (!TryPreflightEnvelope(item, out var radius, out var height))
+                { reason = "The full shore loadout cannot be measured safely."; return false; }
+                var found = false;
+                foreach (var distance in new[] { 0.8f, 1.3f, 1.9f, 2.5f, 3.1f, 3.7f, 4.3f })
+                {
+                    for (var bearing = 0; bearing < 24 && !found; ++bearing)
+                    {
+                        var angle = bearing * Mathf.PI * 2f / 24f;
+                        var sample = ground + new Vector3(Mathf.Cos(angle) * distance, 0f, Mathf.Sin(angle) * distance);
+                        if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var point, out var support) ||
+                            !IsVerifiedLandCollider(support) || Mathf.Abs(point.y - ground.y) > .45f) continue;
+                        var slot = new GroundSlot { Point = point, Radius = radius, LargeSupport = true };
+                        if (!IsSlotClear(slot, reserved)) continue;
+                        var supported = true;
+                        foreach (var offset in new[] { Vector3.right * radius, Vector3.left * radius, Vector3.forward * radius, Vector3.back * radius })
+                            if (!Plugin.Instance.TryProbeDocksideCargoSurface(point + offset, out var edge, out var edgeCollider) ||
+                                !IsVerifiedLandCollider(edgeCollider) || Mathf.Abs(edge.y - point.y) > (IsNativeCup(item) ? .02f : .15f))
+                            { supported = false; break; }
+                        if (!supported) continue;
+                        var center = point + Vector3.up * (height * .5f + .06f);
+                        var overlaps = Physics.OverlapBox(center, new Vector3(radius, height * .5f, radius), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+                        if (overlaps.Any(other => other != null && other != support && !other.CompareTag("Player") &&
+                            other.bounds.max.y > point.y + .08f)) continue;
+                        reserved.Add(slot); found = true;
+                    }
+                    if (found) break;
+                }
+                if (!found)
+                { reason = "The complete supplies and possible packing crates do not fit this shore. Reduce the loadout or choose another start."; return false; }
+            }
+            return true;
+        }
+
+        private static bool TryPreflightEnvelope(ShipItem item, out float radius, out float height)
+        {
+            radius = height = 0f;
+            if (item == null) return false;
+            var collider = item.GetComponent<Collider>();
+            Bounds local;
+            if (collider is BoxCollider box) local = new Bounds(box.center, box.size);
+            else if (collider is SphereCollider sphere) local = new Bounds(sphere.center, Vector3.one * sphere.radius * 2f);
+            else if (collider is CapsuleCollider capsule)
+            {
+                var size = Vector3.one * capsule.radius * 2f; size[capsule.direction] = Mathf.Max(capsule.height, size[capsule.direction]);
+                local = new Bounds(capsule.center, size);
+            }
+            else if (collider is MeshCollider mesh && mesh.sharedMesh != null) local = mesh.sharedMesh.bounds;
+            else return false;
+            // Enclose all yaw orientations. This also works on inactive prefabs
+            // whose Collider.bounds is empty and never activates their scripts.
+            var scale = item.transform.lossyScale;
+            // Native loose-item initialization resets root scale to one. A
+            // serialized miniature must not understate the later envelope.
+            scale = new Vector3(Mathf.Max(1f, Mathf.Abs(scale.x)),
+                Mathf.Max(1f, Mathf.Abs(scale.y)), Mathf.Max(1f, Mathf.Abs(scale.z)));
+            var extent = Vector3.Scale(local.extents, scale);
+            var center = Vector3.Scale(local.center, scale);
+            radius = Mathf.Max(.18f, new Vector2(Mathf.Abs(center.x) + Mathf.Abs(extent.x),
+                Mathf.Abs(center.z) + Mathf.Abs(extent.z)).magnitude);
+            height = Mathf.Max(.1f, Mathf.Abs(extent.y) * 2f);
+            return !float.IsNaN(radius) && !float.IsInfinity(radius) && !float.IsNaN(height) && !float.IsInfinity(height);
         }
 
         private static bool IsCurrent(ResolvedStart selected)
@@ -1000,7 +1074,7 @@ namespace NewBeginnings
                 RejectedAnchorGround.Clear();
                 PlannedGround.Clear();
                 foreach (var plannedItem in planned)
-                    PlannedGround[plannedItem.Key] = selected.Recovery.transform.InverseTransformPoint(plannedItem.Value);
+                    PlannedGround[plannedItem.Key] = selected.ShoreFrame.InverseTransformPoint(plannedItem.Value);
                 Plugin.Instance?.DebugLog($"Dockside supply layout: {AuthoredName(anchor)} at {anchorGround}, " +
                     (foodSupport == null ? "no food support" :
                         $"food support {AuthoredName(foodSupport)} at {foodGround}") +
@@ -1116,7 +1190,7 @@ namespace NewBeginnings
         {
             selected = Vector3.zero;
             selectedRotation = PlacementRotation(item);
-            var marker = armed?.Recovery?.transform;
+            var marker = armed?.ShoreFrame;
             if (marker == null) return false;
             var directions = GroundDirections(marker);
             var radius = LooseFootprintRadius(item);
@@ -1235,7 +1309,7 @@ namespace NewBeginnings
             selected = Vector3.zero;
             reason = "no nearby clear wharf/shore point supports " +
                 AuthoredName(support);
-            var marker = armed?.Recovery?.transform;
+            var marker = armed?.ShoreFrame;
             if (marker == null) return false;
             var directions = GroundDirections(marker);
             var radii = otherGroup.HasValue ?
@@ -1277,7 +1351,7 @@ namespace NewBeginnings
             // the same dock has room elsewhere. Advance the next attempt to
             // another anchor instead of repeating that exact dead end.
             if (RejectedAnchorGround.Count >= 12) RejectedAnchorGround.Clear();
-            RejectedAnchorGround.Add(selected.Recovery.transform.InverseTransformPoint(ground));
+            RejectedAnchorGround.Add(selected.ShoreFrame.InverseTransformPoint(ground));
         }
 
         private static bool AreAnchorCandidatesNear(Vector3 left, Vector3 right) =>
@@ -1547,8 +1621,8 @@ namespace NewBeginnings
         // Both the recovery marker and native loose items follow world shifts.
         // Store evidence/retry points relative to that marker across physics yields.
         private static Vector3 GroundToWorld(ResolvedStart selected, Vector3 localGround) =>
-            selected?.Recovery == null ? localGround :
-                selected.Recovery.transform.TransformPoint(localGround);
+            selected?.ShoreFrame == null ? localGround :
+                selected.ShoreFrame.TransformPoint(localGround);
 
         private static int CountLive() => Captured.Count(item => item != null);
     }

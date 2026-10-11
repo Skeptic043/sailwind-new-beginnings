@@ -47,6 +47,7 @@ namespace NewBeginnings
         private float nextDocksideSurfaceProbe;
         private float distantSurfaceSeenAt = -1f;
         private IslandHorizon docksideIsland;
+        private PortChoice docksideDestination;
         private bool searchOasisPierExtension;
         private int sceneryLoadedFrame = -1;
         private readonly List<Transform> boatWalkRoots = new List<Transform>();
@@ -699,6 +700,14 @@ namespace NewBeginnings
                 state = "island scenery identity unavailable";
                 return false;
             }
+            if (docksideDestination != null && docksideDestination.UsesCustomBerth)
+            {
+                if (!StartDestinations.SceneryReady(docksideDestination))
+                { sceneryLoadedFrame = -1; state = "waiting for selected island scenery"; return false; }
+                if (sceneryLoadedFrame < 0) sceneryLoadedFrame = Time.frameCount;
+                state = "waiting for selected scenery alignment";
+                return Time.frameCount > sceneryLoadedFrame + 1;
+            }
             // IslandHorizon.SceneLoaded flips before LoadSceneAsync finishes.
             // Follow its native RegisterLoadingFinished check, then allow the
             // scenery root's first Update to align with its live island.
@@ -1151,6 +1160,42 @@ namespace NewBeginnings
             }
         }
 
+        internal bool TryStartSeaHeight(Vector3 point, out float height) => TrySeaHeight(point, out height);
+
+        // Reuse the dry-ground/player-clearance validator before any boat or
+        // ownership change. This private probe frame is discarded on failure.
+        internal bool TryFindStartShore(PortChoice destination, Vector3 seed, Vector3 berth,
+            out Vector3 ground, out Collider support)
+        {
+            ground = Vector3.zero; support = null;
+            if (!StartDestinations.SceneryReady(destination)) return false;
+            if (alternateDocksideAnchor == null)
+                alternateDocksideAnchor = new GameObject("New Beginnings shore preflight").transform;
+            alternateDocksideAnchor.SetParent(destination.DockRoot, true);
+            alternateDocksideAnchor.position = seed;
+            docksideMarker = alternateDocksideAnchor;
+            docksideDestination = destination;
+            docksideIsland = destination.Island;
+            docksideFrontMooring = destination.PreferredFront != null ? destination.PreferredFront.transform : null;
+            docksideBackMooring = destination.PreferredBack != null ? destination.PreferredBack.transform : null;
+            docksideBerthLocal = docksideMarker.InverseTransformPoint(berth);
+            // Startup preflight already observed two frames of aligned scenery.
+            sceneryLoadedFrame = Time.frameCount - 2;
+            foreach (var radius in new[] { 0f, 2f, 4f, 8f, 12f, 18f, 24f })
+            {
+                var count = radius == 0f ? 1 : 16;
+                for (var index = 0; index < count; ++index)
+                {
+                    var angle = index * Mathf.PI * 2f / count;
+                    var sample = seed + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+                    if (ProbeDocksideSurface(sample, out ground, out support, null) &&
+                        Vector3.ProjectOnPlane(ground - berth, Vector3.up).magnitude <= 45f)
+                        return true;
+                }
+            }
+            return false;
+        }
+
         private bool IsStaticDocksideCollider(Collider collider)
         {
             if (collider.isTrigger ||
@@ -1256,7 +1301,7 @@ namespace NewBeginnings
         internal Transform MakeTemporaryStart(ResolvedStart selected, Quaternion rotation,
             Vector3? shorePosition, Vector3 berthPosition)
         {
-            var dockMarker = selected.Recovery.transform;
+            var dockMarker = selected.ShoreFrame;
             if (dockMarker == null) throw new ArgumentNullException(nameof(dockMarker));
             if (temporaryStart != null) Destroy(temporaryStart.gameObject);
             ClearDocksideSurface();
@@ -1278,14 +1323,15 @@ namespace NewBeginnings
                 dockMarker.position + Vector3.up * 1.05f, rotation);
             temporaryStart = marker.transform;
             docksideMarker = dockMarker;
-            docksideIsland = selected.Port.GetComponentInParent<IslandHorizon>();
-            searchOasisPierExtension = selected.Port.portIndex == 6 &&
+            docksideIsland = selected.Island;
+            docksideDestination = selected.Destination;
+            searchOasisPierExtension = selected.Port != null && selected.Port.portIndex == 6 &&
                 string.Equals(selected.Port.gameObject.name, "port A/M 6 (Oasis)", StringComparison.Ordinal);
-            docksideFrontMooring = selected.FrontMooring.transform;
-            docksideBackMooring = selected.BackMooring.transform;
+            docksideFrontMooring = selected.FrontMooring != null ? selected.FrontMooring.transform : null;
+            docksideBackMooring = selected.BackMooring != null ? selected.BackMooring.transform : null;
             // Preserve the native probing direction outside alternate berths.
             docksideBerthLocal = dockMarker.InverseTransformPoint(shorePosition.HasValue
-                ? berthPosition : selected.Recovery.boatPos.position);
+                ? berthPosition : selected.BerthFrame.position);
             docksideSurfaceCollider = null;
             nextDocksideSurfaceProbe = 0f;
             unresolvedPlayingAt = -1f;
@@ -1389,6 +1435,7 @@ namespace NewBeginnings
             nextDocksideSurfaceProbe = 0f;
             distantSurfaceSeenAt = -1f;
             docksideIsland = null;
+            docksideDestination = null;
             searchOasisPierExtension = false;
             sceneryLoadedFrame = -1;
             lastSurfaceProbeSummary = null;
@@ -1410,7 +1457,7 @@ namespace NewBeginnings
             // Seas. Retain the berth offset in the recovery marker's frame so
             // later floating-origin shifts cannot pull the boat back to old
             // world coordinates.
-            var marker = selected.Recovery.boatPos;
+            var marker = selected.BerthFrame;
             var berthOffset = marker.InverseTransformPoint(position);
             var berthRotation = Quaternion.Inverse(marker.rotation) * rotation;
             activeProbeGuard?.Restore();
@@ -1456,7 +1503,7 @@ namespace NewBeginnings
                     yield break;
                 try
                 {
-                    var marker = selected.Recovery.boatPos;
+                    var marker = selected.BerthFrame;
                     if (marker == null)
                     {
                         Warn("Boat settling was cancelled because the selected recovery marker disappeared.");
@@ -1465,21 +1512,21 @@ namespace NewBeginnings
                     var position = marker.TransformPoint(berthOffset);
                     var rotation = marker.rotation * berthRotation;
                     if (!IsFinite(position) || !IsFinite(rotation) ||
-                        !IsFinite(selected.Port.transform.position) ||
+                        !IsFinite(selected.ShoreFrame.position) ||
                         temporaryStart != null && !IsFinite(temporaryStart.position))
                     {
                         Warn("Boat settling stopped because a port, berth or player target became non-finite after world movement.");
                         yield break;
                     }
-                    DebugLog($"Start settle coordinates: port {selected.Port.transform.position}, berth {position}, hull {selected.Body.position}, player target {(temporaryStart != null ? temporaryStart.position.ToString() : "gone")}.");
+                    DebugLog($"Start settle coordinates: location {selected.ShoreFrame.position}, berth {position}, hull {selected.Body.position}, player target {(temporaryStart != null ? temporaryStart.position.ToString() : "gone")}.");
                     selected.Saveable.transform.SetPositionAndRotation(position, rotation);
                     selected.Body.position = position;
                     selected.Body.rotation = rotation;
                     selected.Body.velocity = Vector3.zero;
                     selected.Body.angularVelocity = Vector3.zero;
                     Physics.SyncTransforms();
-                    if (selected.FrontMooring.spring.connectedBody != selected.Body ||
-                        selected.BackMooring.spring.connectedBody != selected.Body)
+                    if (selected.Berth?.Anchored != true && (selected.FrontMooring.spring.connectedBody != selected.Body ||
+                        selected.BackMooring.spring.connectedBody != selected.Body))
                         Warn("Boat moved after placement, but one of its dock springs disconnected before ownership.");
                     placementCompleted = true;
                 }
@@ -1520,6 +1567,7 @@ namespace NewBeginnings
         private void OnDestroy()
         {
             Config.SettingChanged -= OnConfigSettingChanged;
+            FixedStart.CancelCustomStart();
             StartingValues.Cancel();
             CancelBoatSettle();
             CancelPlayerStartTracking();

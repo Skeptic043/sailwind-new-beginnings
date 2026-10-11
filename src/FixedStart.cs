@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -12,6 +13,11 @@ namespace NewBeginnings
     {
         public Port Port;
         public RecoveryPort Recovery;
+        internal PortChoice Destination;
+        internal StartBerthPlan Berth;
+        internal Transform ShoreFrame => Recovery != null ? Recovery.transform : Destination?.DockRoot;
+        internal Transform BerthFrame => Recovery != null ? Recovery.boatPos : Berth?.Frame;
+        internal IslandHorizon Island => Destination?.Island ?? Port?.GetComponentInParent<IslandHorizon>();
         public PurchasableBoat Boat;
         public SaveableObject Saveable;
         public Rigidbody Body;
@@ -66,7 +72,7 @@ namespace NewBeginnings
         }
     }
 
-    internal static class FixedStart
+    internal static partial class FixedStart
     {
         private sealed class RopePosition
         {
@@ -149,6 +155,12 @@ namespace NewBeginnings
                         plugin.Warn("New game blocked by New Beginnings selection: " + reason);
                         return false;
                     }
+                    if (pair.Port.UsesCustomBerth && (!nativeTweenSeamReady ||
+                        !TryGetNativeStartActors(__instance, out _, out _)))
+                    {
+                        activeUi.ShowBlockedStart("The native player-start sequence is unavailable for this location.");
+                        return false;
+                    }
                     acceptedButtonPair = pair;
                     acceptedButtonMenu = __instance;
                     return true;
@@ -178,7 +190,7 @@ namespace NewBeginnings
         [HarmonyBefore(ScrambledSeasIntegration.Id)]
         private static class BeginPatch
         {
-            private static void Prefix(StartMenu __instance)
+            private static bool Prefix(StartMenu __instance)
             {
                 var buttonPair = ReferenceEquals(acceptedButtonMenu, __instance)
                     ? acceptedButtonPair : null;
@@ -188,6 +200,7 @@ namespace NewBeginnings
                 pending = null;
                 pendingMenu = null;
                 pendingOptions = null;
+                CancelCustomStart();
                 StartingValues.Cancel();
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
@@ -197,29 +210,35 @@ namespace NewBeginnings
                 Plugin.Instance?.ClearDocksideSurface();
                 StarterCargo.Disarm();
                 var plugin = Plugin.Instance;
-                if (plugin == null || !ScrambledSeasIntegration.CanSelect || useNativeStart) return;
+                if (plugin == null || !ScrambledSeasIntegration.CanSelect || useNativeStart) return true;
 
                 object previousRegion = null;
                 var regionUpdated = false;
+                var customStart = false;
                 try
                 {
                     var pair = buttonPair;
                     if (pair == null && !plugin.TryChooseStart(out pair, out var reason))
                     {
                         plugin.Warn("New Beginnings skipped; vanilla new game will run. " + reason);
-                        return;
+                        return true;
                     }
+                    customStart = pair.Port.UsesCustomBerth;
+                    if (customStart && !nativeTweenSeamReady)
+                        throw new InvalidOperationException("The native player-start seam is unavailable.");
                     // Scrambled Seas may move every island, recovery marker and boat
                     // in its own prefix. Keep identities here; resolve coordinates and
                     // mutate the boat only in the selected coroutine factory.
                     previousRegion = CurrentRegionField.GetValue(__instance);
-                    CurrentRegionField.SetValue(__instance, (int)pair.Port.Port.region);
+                    CurrentRegionField.SetValue(__instance, pair.Port.Region);
                     regionUpdated = true;
                     pending = pair;
                     pendingMenu = __instance;
                     pendingOptions = plugin.StartOptions.Copy();
                     if (!pendingOptions.TryValidate(out var optionsReason))
                         throw new InvalidOperationException(optionsReason);
+                    if (pair.Port.UsesCustomBerth)
+                        pendingCustomSnapshot = new CustomStartSnapshot(__instance, (int)previousRegion);
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
                 }
                 catch (Exception exception)
@@ -235,14 +254,23 @@ namespace NewBeginnings
                             plugin.Error("Native start region could not be restored after selection failed.", restoreException);
                         }
                     }
+                    if (customStart)
+                    {
+                        CancelCustomStart();
+                        MenuUi.ActiveFor(__instance)?.ShowBlockedStart(exception.Message);
+                        plugin.Error("The selected starting location could not be prepared. No regional start was substituted.", exception);
+                        return false;
+                    }
                     plugin.Error("New Beginnings selection failed; vanilla new game will run.", exception);
                 }
+                return true;
             }
 
             private static Exception Finalizer(Exception __exception)
             {
                 if (__exception != null)
                 {
+                    CancelCustomStart();
                     pending = null;
                     pendingMenu = null;
                     pendingOptions = null;
@@ -260,6 +288,7 @@ namespace NewBeginnings
                 // Scrambled Seas can abort an external scramble before it creates
                 // its player coroutine. A normal start consumes pending synchronously.
                 if (!ReferenceEquals(pendingMenu, __instance)) return;
+                CancelCustomStart();
                 pending = null;
                 pendingMenu = null;
                 pendingOptions = null;
@@ -270,8 +299,15 @@ namespace NewBeginnings
         [HarmonyPatch(typeof(StartMenu), "MovePlayerToStartPos")]
         private static class StartPositionPatch
         {
-            private static void Prefix(StartMenu __instance, ref Transform startPos)
+            private static bool Prefix(StartMenu __instance, ref Transform startPos, ref IEnumerator __result)
             {
+                if (pending != null && pending.Port.UsesCustomBerth && ReferenceEquals(__instance, pendingMenu))
+                {
+                    var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
+                    pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
+                    __result = PrepareCustomStart(__instance, pair, options, snapshot);
+                    return false;
+                }
                 if (!nativeTweenSeamReady)
                 {
                     if (pending != null && ReferenceEquals(__instance, pendingMenu))
@@ -281,7 +317,7 @@ namespace NewBeginnings
                         pendingOptions = null;
                         Plugin.Instance?.Warn("New Beginnings skipped this native start because its camera tween seam was not verified; the regional game start will run.");
                     }
-                    return;
+                    return true;
                 }
                 if (pending != null && ReferenceEquals(__instance, pendingMenu) &&
                     !TryGetNativeStartActors(__instance, out _, out _))
@@ -290,10 +326,11 @@ namespace NewBeginnings
                     pendingMenu = null;
                     pendingOptions = null;
                     Plugin.Instance?.Warn("New Beginnings skipped this native start because its observer or controller is unavailable; the regional game start will run.");
-                    return;
+                    return true;
                 }
                 if (ApplyPendingAtStart(__instance, ref startPos))
                     TeleportNativeStartObserver(__instance, startPos);
+                return true;
             }
         }
 
@@ -414,7 +451,7 @@ namespace NewBeginnings
             pendingOptions = null;
             try
             {
-                if (!TryResolve(pair.Port.Index, pair.Boat.Index, out var selected, out var reason) ||
+                if (!TryResolve(pair.Port, pair.Boat.Index, out var selected, out var reason) ||
                     !ReferenceEquals(selected.Port, pair.Port.Port) ||
                     !ReferenceEquals(selected.Recovery, pair.Port.Recovery) ||
                     !ReferenceEquals(selected.Boat, pair.Boat.Boat) ||
@@ -480,6 +517,11 @@ namespace NewBeginnings
         // the selected pair before any movement.
         internal static bool IsPairViable(PortChoice port, BoatChoice boat)
         {
+            if (port != null && port.UsesCustomBerth)
+                return StartDestinations.IsCurrent(port) && boat?.Saveable != null &&
+                    boat.Boat != null && !boat.Boat.isPurchased() &&
+                    StartBerthPlanner.CanInspect(boat.Saveable.GetComponent<Rigidbody>(),
+                        boat.Saveable.GetComponent<BoatMooringRopes>(), out _);
             if (port?.Port == null || port.Recovery == null || boat?.Boat == null ||
                 boat.Saveable == null || port.Recovery.parentPort != port.Port ||
                 port.Recovery.boatPos == null || port.Recovery.mooringFront == null ||
@@ -497,6 +539,15 @@ namespace NewBeginnings
         // boat mutation is permitted until these relocation-only guards pass.
         private static bool TryResolveRelocation(ResolvedStart selected, out string reason)
         {
+            if (selected.Destination != null && selected.Destination.UsesCustomBerth)
+            {
+                if (!StartBerthPlanner.TryPlan(selected.Destination, selected.Body, selected.Ropes,
+                    out var plan, out reason)) return false;
+                selected.Berth = plan;
+                selected.FrontMooring = plan.Front;
+                selected.BackMooring = plan.Back;
+                return true;
+            }
             reason = null;
             var recovery = selected.Recovery;
             var ropes = selected.Ropes;
@@ -535,18 +586,22 @@ namespace NewBeginnings
             return true;
         }
 
-        private static bool TryResolve(int portIndex, int boatSceneIndex, out ResolvedStart result, out string reason)
+        private static bool TryResolve(PortChoice destination, int boatSceneIndex, out ResolvedStart result, out string reason)
         {
             result = null;
             reason = null;
+            if (destination == null || !StartDestinations.IsCurrent(destination))
+            { reason = "The selected starting location is no longer loaded."; return false; }
+            var portIndex = destination.Index;
+            var custom = destination.UsesCustomBerth;
             var ports = Port.ports;
-            if (ports == null || portIndex < 0 || portIndex >= ports.Length || ports[portIndex] == null ||
-                ports[portIndex].portIndex != portIndex)
+            if (!custom && (ports == null || portIndex < 0 || portIndex >= ports.Length || ports[portIndex] == null ||
+                ports[portIndex].portIndex != portIndex))
             {
                 reason = $"Port {portIndex} is not registered.";
                 return false;
             }
-            var port = ports[portIndex];
+            var port = destination.Port;
             if (portIndex == 7 && string.Equals(port.gameObject.name,
                 "port 7 (test port)", StringComparison.OrdinalIgnoreCase))
             {
@@ -554,17 +609,17 @@ namespace NewBeginnings
                 return false;
             }
             var registered = RecoveryPortsField.GetValue(null) as List<RecoveryPort>;
-            var recovery = registered?.FirstOrDefault(item => item != null && item.parentPort == port &&
+            var recovery = custom ? null : registered?.FirstOrDefault(item => item != null && item.parentPort == port &&
                 item.boatPos != null && item.mooringFront != null && item.mooringBack != null);
-            if (recovery == null)
+            if (!custom && recovery == null)
             {
                 reason = $"Port {portIndex} has no complete registered recovery berth.";
                 return false;
             }
-            var frontMooring = recovery.mooringFront.GetComponent<GPButtonDockMooring>();
-            var backMooring = recovery.mooringBack.GetComponent<GPButtonDockMooring>();
-            if (frontMooring == null || backMooring == null || frontMooring == backMooring ||
-                frontMooring.spring == null || backMooring.spring == null)
+            var frontMooring = recovery != null ? recovery.mooringFront.GetComponent<GPButtonDockMooring>() : null;
+            var backMooring = recovery != null ? recovery.mooringBack.GetComponent<GPButtonDockMooring>() : null;
+            if (!custom && (frontMooring == null || backMooring == null || frontMooring == backMooring ||
+                frontMooring.spring == null || backMooring.spring == null))
             {
                 reason = $"Port {portIndex} has no initialized pair of dock springs.";
                 return false;
@@ -590,13 +645,14 @@ namespace NewBeginnings
             }
             var body = saveable.GetComponent<Rigidbody>();
             var ropes = saveable.GetComponent<BoatMooringRopes>();
-            NativeBerth.TryResolve(port, boat, saveable, body, ropes, out var nativeBerth);
+            NativeBerth.Plan nativeBerth = null;
+            if (!custom) NativeBerth.TryResolve(port, boat, saveable, body, ropes, out nativeBerth);
             var relocation = new ResolvedStart { Port = port, Recovery = recovery,
-                Boat = boat, Saveable = saveable, Body = body, Ropes = ropes };
+                Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes };
             if (nativeBerth == null && !TryResolveRelocation(relocation, out reason)) return false;
             frontMooring = nativeBerth != null ? nativeBerth.Front : relocation.FrontMooring;
             backMooring = nativeBerth != null ? nativeBerth.Back : relocation.BackMooring;
-            var region = (int)port.region;
+            var region = destination.Region;
             if (region < 0 || region > 2)
             {
                 reason = $"Port {portIndex} has unsupported region {port.region}.";
@@ -612,7 +668,7 @@ namespace NewBeginnings
             }
             result = new ResolvedStart
             {
-                Port = port, Recovery = recovery, Boat = boat, Saveable = saveable,
+                Port = port, Recovery = recovery, Destination = destination, Berth = relocation.Berth, Boat = boat, Saveable = saveable,
                 Body = body, Ropes = ropes, FrontMooring = frontMooring,
                 BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth
             };
@@ -1033,10 +1089,10 @@ namespace NewBeginnings
         internal static bool IsSelectionStillActive(StartMenu menu, ResolvedStart selected)
         {
             if (menu == null || selected == null || selected.Boat == null || selected.Saveable == null ||
-                selected.Port == null || selected.Recovery == null || selected.Body == null ||
+                selected.ShoreFrame == null || selected.Body == null ||
                 selected.Ropes == null || selected.StarterSet == null ||
-                !selected.Port.gameObject.scene.isLoaded || !selected.Saveable.gameObject.scene.isLoaded ||
-                selected.Recovery.parentPort != selected.Port ||
+                !selected.ShoreFrame.gameObject.scene.isLoaded || !selected.Saveable.gameObject.scene.isLoaded ||
+                (selected.Recovery != null ? selected.Recovery.parentPort != selected.Port : !StartDestinations.IsCurrent(selected.Destination)) ||
                 selected.StarterSet.starterBoat != selected.Saveable.transform)
                 return false;
             var starters = StartingBoatsField.GetValue(menu) as PurchasableBoat[];

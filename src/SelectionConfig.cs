@@ -6,8 +6,12 @@ namespace NewBeginnings
     {
         private readonly ConfigFile file;
         private readonly ConfigEntry<int> lastPort;
+        private readonly ConfigEntry<string> lastDestination;
         private readonly ConfigEntry<bool> randomPort;
         private readonly ConfigEntry<bool> shipyardPortsOnly;
+        private readonly ConfigEntry<bool> includeModPorts;
+        private readonly ConfigEntry<bool> enablePirateIsland;
+        private readonly ConfigEntry<bool> enableSaffronIsland;
         private readonly ConfigEntry<bool> alAnkh;
         private readonly ConfigEntry<bool> emerald;
         private readonly ConfigEntry<bool> aestrin;
@@ -34,10 +38,18 @@ namespace NewBeginnings
             this.file = file;
             lastPort = file.Bind("Selection", "LastSelectedPort", 2,
                 "Last manually selected port index. Default: Neverdin.");
+            lastDestination = file.Bind("Selection", "LastSelectedDestination", "",
+                "Stable identity of the last manually selected starting location. Empty uses LastSelectedPort. Missing locations retain their selection until you choose another.");
             randomPort = file.Bind("Selection", "RandomPort", false,
-                "Choose a random port from the checked geographic pools.");
+                "Choose a random starting location from the checked geographic pools and enabled mod ports.");
             shipyardPortsOnly = file.Bind("Selection", "ShipyardPortsOnly", false,
-                "When Random Port is enabled, limit checked regions to Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay. Ignore individual island exclusions without changing them.");
+                "When Random Port is enabled, limit eligible locations to detected shipyards. Ignore individual island exclusions without changing them. Spoiler location options still apply.");
+            includeModPorts = file.Bind("Random Port Pools", "IncludeModPorts", false,
+                "Include detected mod starting locations in random starts regardless of their geographic pool. Shipyard, spoiler and placement requirements still apply.");
+            enablePirateIsland = file.Bind("Spoilers", "EnablePirateIsland", false,
+                "Enable Pirate Island as a manual starting location and in the Small Islands random pool.");
+            enableSaffronIsland = file.Bind("Spoilers", "EnableSaffronIsland", false,
+                "Enable Saffron Island as a manual starting location and in the Small Islands random pool.");
             alAnkh = file.Bind("Random Port Pools", "AlAnkh", true, "Include Al'Ankh ports.");
             emerald = file.Bind("Random Port Pools", "EmeraldArchipelago", true,
                 "Include Emerald Archipelago ports.");
@@ -54,7 +66,7 @@ namespace NewBeginnings
             mediumBoats = file.Bind("Random Boat Sizes", "Medium", true, "Include medium boats.");
             largeBoats = file.Bind("Random Boat Sizes", "Large", true, "Include large boats.");
             excludedRandomPorts = file.Bind("Individual Random Exclusions", "Ports", "",
-                "Exact runtime names of ports excluded from random starts, encoded and separated by semicolons. Edit with the new-game menu.");
+                "Exact runtime port names or stable site identities excluded from random starts, encoded and separated by semicolons. Edit with the new-game menu.");
             excludedRandomBoats = file.Bind("Individual Random Exclusions", "Boats", "",
                 "Exact runtime names of boats excluded from random starts, encoded and separated by semicolons. Edit with the new-game menu.");
             boatSizeOverrides = file.Bind("Compatibility", "BoatSizeOverrides", "",
@@ -73,8 +85,12 @@ namespace NewBeginnings
         {
             warnings.Begin();
             Settings.PortIndex = lastPort.Value;
+            Settings.DestinationKey = lastDestination.Value ?? "";
             Settings.RandomPort = randomPort.Value;
             Settings.ShipyardPortsOnly = shipyardPortsOnly.Value;
+            Settings.IncludeModPorts = includeModPorts.Value;
+            Settings.EnablePirateIsland = enablePirateIsland.Value;
+            Settings.EnableSaffronIsland = enableSaffronIsland.Value;
             Settings.BoatSceneIndex = lastBoat.Value;
             Settings.RandomBoat = randomBoat.Value;
             IndividualExclusions.ReplaceWith(NewBeginnings.IndividualExclusions.Load(
@@ -89,7 +105,7 @@ namespace NewBeginnings
             if (smallBoats.Value) Settings.BoatSizes.Add(BoatSize.Small);
             if (mediumBoats.Value) Settings.BoatSizes.Add(BoatSize.Medium);
             if (largeBoats.Value) Settings.BoatSizes.Add(BoatSize.Large);
-            if (Settings.PortPools.Count == 0)
+            if (Settings.PortPools.Count == 0 && !Settings.IncludeModPorts)
             {
                 Settings.PortPools.Add(PortPool.AlAnkh);
                 warnings.Warn("Every random port pool was disabled; Al'Ankh was restored.");
@@ -109,8 +125,12 @@ namespace NewBeginnings
         internal void Save()
         {
             lastPort.Value = Settings.PortIndex;
+            lastDestination.Value = Settings.DestinationKey ?? "";
             randomPort.Value = Settings.RandomPort;
             shipyardPortsOnly.Value = Settings.ShipyardPortsOnly;
+            includeModPorts.Value = Settings.IncludeModPorts;
+            enablePirateIsland.Value = Settings.EnablePirateIsland;
+            enableSaffronIsland.Value = Settings.EnableSaffronIsland;
             alAnkh.Value = Settings.PortPools.Contains(PortPool.AlAnkh);
             emerald.Value = Settings.PortPools.Contains(PortPool.Emerald);
             aestrin.Value = Settings.PortPools.Contains(PortPool.Aestrin);
