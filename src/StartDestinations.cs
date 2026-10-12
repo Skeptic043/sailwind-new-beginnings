@@ -107,14 +107,47 @@ namespace NewBeginnings
             return null;
         }
 
+        private static PortChoice readySite;
+        private static int readyFrame = -1;
+        private static bool readyResult;
+
+        // Shore and supply surface probes ask this hundreds of times per frame.
+        // Scene loading and object destruction only complete between frames.
         internal static bool SceneryReady(PortChoice site)
+        {
+            var frame = Time.frameCount;
+            if (ReferenceEquals(site, readySite) && frame == readyFrame) return readyResult;
+            readyResult = CheckSceneryReady(site);
+            readySite = site; readyFrame = frame;
+            return readyResult;
+        }
+
+        private static bool customIslandsResolved;
+        private static System.Reflection.FieldInfo customIslandScenes;
+
+        // Look up the optional CustomIslandAPI by assembly name, once. A
+        // TypeByName miss scans every assembly and logs a stack trace for each
+        // assembly that cannot list its types, which froze startup for seconds.
+        private static IDictionary CustomIslandScenes()
+        {
+            if (!customIslandsResolved)
+            {
+                customIslandsResolved = true;
+                var assembly = AppDomain.CurrentDomain.GetAssemblies()
+                    .FirstOrDefault(item => item.GetName().Name == "CustomIslandAPI");
+                var manager = assembly?.GetType("CustomIslandAPI.IslandManager", false);
+                customIslandScenes = manager != null ? AccessTools.Field(manager, "sceneIndexes") : null;
+            }
+            return customIslandScenes?.GetValue(null) as IDictionary;
+        }
+
+        private static bool CheckSceneryReady(PortChoice site)
         {
             if (!IsCurrent(site) || !site.Island.SceneLoaded()) return false;
             if (site.SceneryRoot != null) return Loaded(site.SceneryRoot) && site.SceneryRoot.gameObject.activeInHierarchy;
             // CustomIslandAPI uses an explicit additive scene path, not islandIndex
             // as a build index. Its SceneLoaded flag is raised before load completes.
-            var manager = AccessTools.TypeByName("CustomIslandAPI.IslandManager");
-            var paths = manager != null ? AccessTools.Field(manager, "sceneIndexes")?.GetValue(null) as IDictionary : null;
+            var paths = CustomIslandScenes();
             if (paths != null && paths.Contains(site.Island.islandIndex))
             {
                 var path = paths[site.Island.islandIndex] as string;

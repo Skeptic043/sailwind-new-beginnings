@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.2.7
+
+### Fixed
+
+- Starting at an added or hidden location no longer freezes for several seconds while the berth, landing and supplies are checked.
+
 ## Version 1.2.6
 
 ### Changed
