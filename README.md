@@ -20,7 +20,7 @@ Choose a port and boat, or randomize one or both, then press Continue to start a
 
 When added ports are detected, Mod ports appears with the Random Port pool checkboxes. It starts unchecked. Turning it on adds those locations to Random Port regardless of the region checkboxes, so you can leave every other pool unchecked for mod ports only. Shipyard restrictions and boat placement checks still apply. You can also choose an added location manually without enabling this checkbox. Chronos has its own unchecked pool option for including its original berth in random starts.
 
-Better Ports' Bottleneck Isle is discovered automatically. Added locations without a normal starting berth must have enough room for the selected boat, a dry landing and the supplies. If those checks fail, the start returns to the menu with a reason.
+Better Ports' Bottleneck Isle is discovered automatically. Added locations without a normal starting berth are checked for room for the selected boat, a dry landing and the supplies. If a check fails, the start carries on with the closest fit it found and writes a warning to the log.
 
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
 

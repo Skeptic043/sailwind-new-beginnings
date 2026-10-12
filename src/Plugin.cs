@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.2.5")]
+    [BepInPlugin(Id, "New Beginnings", "1.2.6")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -1643,7 +1643,8 @@ namespace NewBeginnings
         internal void Report(string message) => Logger.LogInfo(message);
         internal void DebugLog(string message) => Logger.LogDebug(message);
         internal void Warn(string message) => Logger.LogWarning(message);
-        internal void Error(string message, Exception exception) => Logger.LogError(message + " " + exception);
+        internal void Error(string message, Exception exception) =>
+            Logger.LogError(exception == null ? message : message + " " + exception);
 
         private void OnDestroy()
         {

@@ -13,16 +13,14 @@ namespace NewBeginnings
         private static int customGeneration;
         private static int customFlightGeneration = -1;
         internal static bool CustomStartInFlight => customFlightGeneration == customGeneration;
-        private static bool scrambledWorldRequiresRestart;
         private static float startSelectedAt = -1f;
-        private const string RestartRequired = "Restart the game before trying another new game. The previous failed start already moved the Scrambled Seas world.";
 
         internal static bool TryGetStartBlock(out string reason)
         {
-            reason = scrambledWorldRequiresRestart ? RestartRequired :
-                CustomStartInFlight ? "A starting location is already being prepared." : null;
+            reason = CustomStartInFlight ? "A starting location is already being prepared." : null;
             return reason != null;
         }
+
         private static readonly System.Reflection.MethodInfo MovePlayerFactory = AccessTools.Method(typeof(StartMenu), "MovePlayerToStartPos");
         private static readonly System.Reflection.MethodInfo AnchorGroundedMethod = AccessTools.Method(typeof(Anchor), "IsTouchingGround");
         private static readonly System.Reflection.MethodInfo SetAnchorMethod = AccessTools.Method(typeof(Anchor), "SetAnchor");
@@ -71,8 +69,9 @@ namespace NewBeginnings
         }
 
         // Native FadeIslandMenu owns a separate Juicebox tween and a delayed
-        // hide. Custom preflight can fail before either completes. Hide this
-        // one menu immediately so rollback has no foreign animation to race.
+        // hide. A cancelled start can restore the menu before either completes.
+        // Hide this one menu immediately so that restore has no foreign
+        // animation to race.
         [HarmonyPatch(typeof(StartMenu), "DisableIslandMenu")]
         private static class CustomMenuHide
         {
@@ -187,170 +186,248 @@ namespace NewBeginnings
             }
         }
 
-        internal static bool TryPreparePendingCustom(StartMenu menu, out IEnumerator sequence,
-            Func<Transform, IEnumerator> continuation = null, bool worldMoved = false)
+        // nativeStart is the target Sailwind's start coroutine was called with.
+        // The selected start continues there when no placement can be produced.
+        internal static bool TryPreparePendingCustom(StartMenu menu, Transform nativeStart, out IEnumerator sequence,
+            Func<Transform, IEnumerator> continuation = null)
         {
             sequence = null;
             if (pending == null || !pending.Port.UsesCustomBerth || !ReferenceEquals(menu, pendingMenu)) return false;
             var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
             pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
-            sequence = PrepareCustomStart(menu, pair, options, snapshot, continuation, worldMoved);
+            sequence = PrepareCustomStart(menu, pair, options, snapshot, nativeStart, continuation);
             return true;
         }
 
+        // Once a start is selected, a placement problem never returns the
+        // player to the menu. Each problem is logged and the start continues
+        // with the best available result: the planned berth, or Sailwind's own
+        // start target when no placement could be produced. Only a real
+        // cancellation (a saved-game load, another new game or plugin
+        // teardown) unwinds the selected start.
         private static IEnumerator PrepareCustomStart(StartMenu menu, StartPair pair,
-            StartingOptionsSettings options, CustomStartSnapshot snapshot,
-            Func<Transform, IEnumerator> continuation = null, bool worldMoved = false)
+            StartingOptionsSettings options, CustomStartSnapshot snapshot, Transform nativeStart,
+            Func<Transform, IEnumerator> continuation)
         {
             var generation = customGeneration;
             customFlightGeneration = generation;
-            var failure = "Starting-location preparation was cancelled.";
+            const string cancelled = "Starting-location preparation was cancelled.";
             CustomPlacement placement = null;
             IEnumerator native = null;
             var committed = false;
             var cleaned = false;
+            var finished = false;
             Action cleanup = () =>
             {
                 if (cleaned || committed) return;
                 cleaned = true;
-                // Scrambled's startup has already moved the whole world before
-                // entering its coroutine factory. Our boat/menu rollback cannot
-                // undo that mutation. A second scramble of this world is unsafe.
-                if (worldMoved)
-                {
-                    scrambledWorldRequiresRestart = true;
-                    failure = RestartRequired + " " + failure;
-                }
                 try { placement?.Rollback(); }
                 catch (Exception exception) { Plugin.Instance?.Error("Boat rollback could not fully restore a disappeared scene object.", exception); }
                 finally
                 {
                     StartupProfiler.Cancel();
-                    CleanupCustom(() => Plugin.Instance?.CancelBoatSettle());
-                    CleanupCustom(() => Plugin.Instance?.CancelPlayerStartTracking());
-                    CleanupCustom(() => Plugin.Instance?.ClearDocksideSurface());
-                    CleanupCustom(StarterCargo.Disarm);
-                    CleanupCustom(StartingValues.Cancel);
-                    CleanupCustom(LeopardStarterRig.Cancel);
-                    CleanupCustom(() => snapshot?.Restore(failure));
+                    DisarmCustomStart();
+                    CleanupCustom(() => snapshot?.Restore(cancelled));
                     ClearStartTiming();
-                    Plugin.Instance?.Warn(failure);
+                    Plugin.Instance?.Warn(cancelled);
                 }
             };
             customCleanup = cleanup;
             try
             {
-                if (snapshot == null) { failure = "Native start state could not be preserved."; yield break; }
-                snapshot.Approach(pair.Port);
-                var deadline = Time.realtimeSinceStartup + 30f;
-                var readyFrame = -1;
-                while (generation == customGeneration && menu != null && !GameState.currentlyLoading &&
-                    StartDestinations.IsCurrent(pair.Port) && Time.realtimeSinceStartup < deadline)
+                var target = nativeStart;
+                if (snapshot == null)
+                    Plugin.Instance?.Error("Native start state could not be preserved. Continuing with Sailwind's own start target.", null);
+                else
                 {
-                    if (StartDestinations.SceneryReady(pair.Port))
+                    snapshot.Approach(pair.Port);
+                    var deadline = Time.realtimeSinceStartup + 30f;
+                    var readyFrame = -1;
+                    while (generation == customGeneration && menu != null && !GameState.currentlyLoading &&
+                        StartDestinations.IsCurrent(pair.Port) && Time.realtimeSinceStartup < deadline)
                     {
-                        if (readyFrame < 0) readyFrame = Time.frameCount;
-                        if (Time.frameCount > readyFrame + 2) break;
+                        if (StartDestinations.SceneryReady(pair.Port))
+                        {
+                            if (readyFrame < 0) readyFrame = Time.frameCount;
+                            if (Time.frameCount > readyFrame + 2) break;
+                        }
+                        else readyFrame = -1;
+                        yield return null;
                     }
-                    else readyFrame = -1;
-                    yield return null;
+                    if (generation != customGeneration || menu == null || GameState.currentlyLoading) yield break;
+                    if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
+                        Plugin.Instance?.Warn("The selected island scenery did not report ready" + SinceSelection() +
+                            ". Preparing the start anyway.");
+                    else Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
+                    var profiled = StartupProfiler.Enter();
+                    try { placement = TryPrepareCustom(menu, pair, options); }
+                    finally { StartupProfiler.Exit(profiled); }
+                    if (placement != null && placement.Selected.Berth.Anchored)
+                    {
+                        var anchor = placement.Selected.Ropes.anchor;
+                        var anchorDeadline = Time.realtimeSinceStartup + 4f;
+                        // OnLoad stores the normalized length. Native Update applies
+                        // it to the physical joint, including when contact was immediate.
+                        yield return null;
+                        while (generation == customGeneration && anchor != null && !AnchorGrounded(anchor) &&
+                            Time.realtimeSinceStartup < anchorDeadline && !GameState.currentlyLoading)
+                            yield return new WaitForFixedUpdate();
+                        if (generation != customGeneration || GameState.currentlyLoading) yield break;
+                        if (anchor == null || !AnchorGrounded(anchor))
+                        {
+                            Plugin.Instance?.Warn("The anchor did not report seabed contact. The boat stays at its planned anchorage and the start continues.");
+                            placement.ReleaseHull();
+                        }
+                        else if (!placement.SecureAnchor(out var anchorProblem))
+                        {
+                            Plugin.Instance?.Warn("The anchor could not be secured (" + anchorProblem +
+                                "). The boat stays at its planned anchorage and the start continues.");
+                            placement.ReleaseHull();
+                        }
+                    }
+                    if (placement != null)
+                    {
+                        profiled = StartupProfiler.Enter();
+                        try
+                        {
+                            if (placement.Commit(out var placed, out var problem)) target = placed;
+                            else
+                            {
+                                // The handoff never reached Sailwind. Return the boat
+                                // and continue with Sailwind's own start target.
+                                Plugin.Instance?.Error("The starting boat could not be handed to Sailwind (" + problem +
+                                    "). Continuing with Sailwind's own start target.", null);
+                                var abandoned = placement; placement = null;
+                                CleanupCustom(abandoned.Rollback);
+                                DisarmCustomStart();
+                            }
+                        }
+                        finally { StartupProfiler.Exit(profiled); }
+                    }
                 }
-                if (generation != customGeneration || menu == null || GameState.currentlyLoading) yield break;
-                if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
-                { failure = "The selected island scenery did not become ready. No starting boat was granted."; yield break; }
-                Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
-                var profiled = StartupProfiler.Enter();
-                bool prepared;
-                try { prepared = TryPrepareCustom(menu, pair, options, out placement, out failure); }
-                finally { StartupProfiler.Exit(profiled); }
-                if (!prepared) yield break;
-                if (placement.Selected.Berth.Anchored)
+                if (target == null)
                 {
-                    var anchor = placement.Selected.Ropes.anchor;
-                    var anchorDeadline = Time.realtimeSinceStartup + 4f;
-                    // OnLoad stores the normalized length. Native Update applies
-                    // it to the physical joint, including when contact was immediate.
-                    yield return null;
-                    while (generation == customGeneration && anchor != null && !AnchorGrounded(anchor) &&
-                        Time.realtimeSinceStartup < anchorDeadline && !GameState.currentlyLoading)
-                        yield return new WaitForFixedUpdate();
-                    if (generation != customGeneration || GameState.currentlyLoading) yield break;
-                    if (anchor == null || !AnchorGrounded(anchor))
-                    { failure = "The anchor could not establish seabed contact. No starting boat was granted."; yield break; }
-                    if (!placement.SecureAnchor(out failure)) yield break;
+                    Plugin.Instance?.Error("Sailwind's own start target is unavailable, so the start cannot continue.", null);
+                    yield break;
                 }
-                profiled = StartupProfiler.Enter();
-                bool placed;
-                Transform target;
-                try { placed = placement.Commit(out target, out failure); }
-                finally { StartupProfiler.Exit(profiled); }
-                if (!placed) yield break;
                 TeleportNativeStartObserver(menu, target);
                 native = continuation != null ? continuation(target) :
                     MovePlayerFactory.Invoke(menu, new object[] { target }) as IEnumerator;
-                if (native == null) { failure = "The native start sequence is unavailable."; yield break; }
-                // Keep rollback until the native iterator actually grants this
-                // boat, rather than only until its IEnumerator is constructed.
+                if (native == null)
+                {
+                    Plugin.Instance?.Error("The native start sequence is unavailable, so the start cannot continue.", null);
+                    yield break;
+                }
+                var warnedOffshore = false;
+                var warnedBoat = false;
+                // Keep cancellation available until the native iterator actually
+                // grants the boat, rather than only until its IEnumerator exists.
                 while (generation == customGeneration && menu != null && !GameState.currentlyLoading)
                 {
-                    if (placement.Selected.Berth.OffshoreHeld &&
+                    if (placement != null && !warnedOffshore && placement.Selected.Berth.OffshoreHeld &&
                         (!StartDestinations.IsCurrent(placement.Selected.Destination) || placement.Selected.Body == null ||
                          placement.Selected.Ropes == null || placement.Selected.Ropes.anchor == null ||
                          placement.Selected.Ropes.anchor.GetComponent<Rigidbody>() == null))
-                    { failure = "The offshore starting boat or its native anchor disappeared."; break; }
-                    if (!placement.Selected.Boat.isPurchased() &&
-                        PurchaseUiField.GetValue(placement.Selected.Boat) as GameObject == null)
-                    { failure = "The selected boat became unavailable before the native grant."; break; }
-                    if (!native.MoveNext()) break;
-                    if (!committed && placement.Selected.Boat.isPurchased())
+                    {
+                        warnedOffshore = true;
+                        Plugin.Instance?.Warn("The offshore starting boat or its native anchor disappeared before the native grant. The start continues.");
+                    }
+                    if (placement != null && !warnedBoat && (placement.Selected.Boat == null ||
+                        !placement.Selected.Boat.isPurchased() && PurchaseUiField.GetValue(placement.Selected.Boat) as GameObject == null))
+                    {
+                        warnedBoat = true;
+                        Plugin.Instance?.Warn("The selected boat became unavailable before the native grant. The start continues.");
+                    }
+                    if (!native.MoveNext()) { finished = true; break; }
+                    if (!committed && Granted(menu, placement))
                     {
                         committed = true; customCleanup = null;
                         Plugin.Instance?.Report("Starting boat granted" + SinceSelection() + ".");
                     }
                     yield return native.Current;
                 }
-                if (placement.Selected.Boat.isPurchased()) { committed = true; customCleanup = null; }
+                if (Granted(menu, placement)) { committed = true; customCleanup = null; }
             }
             finally
             {
-                if (placement?.Selected.Boat != null && placement.Selected.Boat.isPurchased()) committed = true;
+                if (Granted(menu, placement)) committed = true;
                 if (ReferenceEquals(customCleanup, cleanup)) customCleanup = null;
                 try { (native as IDisposable)?.Dispose(); }
                 catch (Exception exception) { Plugin.Instance?.Error("Native start iterator cleanup failed.", exception); }
-                try { cleanup(); }
+                try
+                {
+                    if (generation != customGeneration || menu == null || GameState.currentlyLoading) cleanup();
+                    else if (!finished && !committed)
+                    {
+                        // An exception or an external stop ended the sequence.
+                        // Leave the start as placed, without temporary holds.
+                        CleanupCustom(() => placement?.ReleaseHull());
+                        Plugin.Instance?.Warn("The start sequence stopped before it finished" + SinceSelection() +
+                            ". The selected start was left as placed.");
+                    }
+                }
                 finally { if (customFlightGeneration == generation) customFlightGeneration = -1; }
             }
         }
 
-        private static bool TryPrepareCustom(StartMenu menu, StartPair pair, StartingOptionsSettings options,
-            out CustomPlacement placement, out string reason)
+        private static bool Granted(StartMenu menu, CustomPlacement placement)
         {
-            placement = null; reason = null;
+            if (placement != null) return placement.Selected.Boat != null && placement.Selected.Boat.isPurchased();
+            // With no placement, Sailwind grants its own regional starter.
+            if (menu == null) return false;
+            var starters = StartingBoatsField.GetValue(menu) as PurchasableBoat[];
+            var region = CurrentRegionField.GetValue(menu) is int value ? value : -1;
+            return starters != null && region >= 0 && region < starters.Length &&
+                starters[region] != null && starters[region].isPurchased();
+        }
+
+        private static void DisarmCustomStart()
+        {
+            CleanupCustom(() => Plugin.Instance?.CancelBoatSettle());
+            CleanupCustom(() => Plugin.Instance?.CancelPlayerStartTracking());
+            CleanupCustom(() => Plugin.Instance?.ClearDocksideSurface());
+            CleanupCustom(StarterCargo.Disarm);
+            CleanupCustom(StartingValues.Cancel);
+            CleanupCustom(LeopardStarterRig.Cancel);
+        }
+
+        // Returns null only when no placement could be produced. A problem that
+        // still leaves a usable placement is logged and placement continues.
+        private static CustomPlacement TryPrepareCustom(StartMenu menu, StartPair pair, StartingOptionsSettings options)
+        {
+            CustomPlacement placement = null;
             try
             {
-                if (!NativeRecoveryReady(out reason) ||
-                    !TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out reason)) return false;
+                if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason))
+                    return NoPlacement("The selected start could not be planned: " + reason);
                 if (selected.Boat != pair.Boat.Boat || selected.Saveable != pair.Boat.Saveable)
-                { reason = "The selected boat changed while scenery loaded."; return false; }
+                    Plugin.Instance?.Warn("The selected boat changed while scenery loaded. Using the boat now loaded for that selection.");
                 if (selected.Saveable.GetComponent<BoatDamage>() == null ||
                     selected.Saveable.GetComponent<BoatLocalItems>() == null ||
                     selected.Ropes == null || selected.Ropes.anchor == null || selected.Ropes.GetAnchorController() == null)
-                { reason = "The selected boat lacks native shipwreck-recovery components."; return false; }
+                    return NoPlacement("The selected boat lacks native shipwreck-recovery components.");
                 if (selected.Berth.Anchored && (AnchorGroundedMethod == null || SetAnchorMethod == null || ReleaseAnchorMethod == null))
-                { reason = "The native anchor lifecycle methods are unavailable in this game build."; return false; }
+                    return NoPlacement("The native anchor lifecycle methods are unavailable in this game build.");
                 selected.Options = options; selected.Size = pair.Boat.Size; selected.Menu = menu;
-                if (!StarterCargo.TryPreflightShoreCapacity(selected, selected.Berth.ShorePosition, out reason)) return false;
+                if (!StarterCargo.TryPreflightShoreCapacity(selected, selected.Berth.ShorePosition, out reason))
+                    Plugin.Instance?.Warn("Starter supplies may not all fit at the landing. The start continues. " + reason);
                 placement = new CustomPlacement(selected, menu);
                 placement.Move();
-                return true;
+                return placement;
             }
             catch (Exception exception)
             {
                 var failedPlacement = placement;
-                CleanupCustom(() => failedPlacement?.Rollback()); placement = null;
-                reason = "Starting-location preflight failed: " + exception.Message;
-                return false;
+                CleanupCustom(() => failedPlacement?.Rollback());
+                Plugin.Instance?.Error("Starting-location placement failed. Continuing with Sailwind's own start target.", exception);
+                return null;
             }
+        }
+
+        private static CustomPlacement NoPlacement(string reason)
+        {
+            Plugin.Instance?.Error(reason + " Continuing with Sailwind's own start target.", null);
+            return null;
         }
 
         private static bool NativeRecoveryReady(out string reason)
@@ -359,7 +436,7 @@ namespace NewBeginnings
             var ready = ports != null && ports.Count > 0 && ports.All(port => port != null &&
                 StartDestinations.Loaded(port) && port.parentPort != null && port.boatPos != null &&
                 port.mooringFront != null && port.mooringBack != null);
-            reason = ready ? null : "Native recovery destinations are incomplete. The new location cannot safely start yet.";
+            reason = ready ? null : "Native recovery destinations are incomplete, so shipwreck recovery may not find a port.";
             return ready;
         }
 
@@ -419,7 +496,8 @@ namespace NewBeginnings
             internal void Move()
             {
                 var s = Selected;
-                if (!s.Berth.Revalidate(s.Body, s.Ropes, out var reason)) throw new InvalidOperationException(reason);
+                if (!s.Berth.Revalidate(s.Body, s.Ropes, out var reason))
+                    Plugin.Instance?.Warn("The planned berth did not pass its final check (" + reason + "). The boat is placed there anyway.");
                 guard = new ProbeVelocityGuard(s.Saveable);
                 moved = true;
                 if (anchorWasSet) ReleaseAnchorMethod.Invoke(s.Ropes.anchor, null);
@@ -481,9 +559,23 @@ namespace NewBeginnings
                 if (s.Berth.AnchorModel == null ||
                     !s.Berth.AnchorModel.ReadyToSecure(s.Ropes, s.Body, s.Berth.AnchorLength,
                         s.Berth.AnchorPosition, out reason)) return false;
-                SetAnchorMethod.Invoke(s.Ropes.anchor, null);
+                try { SetAnchorMethod.Invoke(s.Ropes.anchor, null); }
+                catch (Exception exception)
+                {
+                    reason = "native anchor setup failed: " + (exception.InnerException ?? exception).Message;
+                    return false;
+                }
                 s.Body.isKinematic = bodyKinematic;
-                return s.Ropes.anchor.IsSet();
+                if (!s.Ropes.anchor.IsSet()) { reason = "the native anchor did not report set"; return false; }
+                return true;
+            }
+
+            // Release temporary holds when setup cannot finish, so the hull
+            // returns to normal physics where it was placed.
+            internal void ReleaseHull()
+            {
+                if (Selected.Body != null) Selected.Body.isKinematic = bodyKinematic;
+                guard?.Restore(); guard = null;
             }
 
             internal bool Commit(out Transform target, out string reason)
@@ -492,7 +584,8 @@ namespace NewBeginnings
                 try
                 {
                     var s = Selected;
-                    if (!StartDestinations.IsCurrent(s.Destination) || !NativeRecoveryReady(out reason)) return false;
+                    if (!StartDestinations.IsCurrent(s.Destination)) { reason = "the starting location is no longer loaded"; return false; }
+                    if (!NativeRecoveryReady(out var recovery)) Plugin.Instance?.Warn(recovery + " The start continues.");
                     target = Plugin.Instance.MakeTemporaryStart(s, s.Berth.Rotation, s.Berth.ShorePosition, s.Berth.Position);
                     var replacement = (PurchasableBoat[])starters.Clone(); replacement[s.Region] = s.Boat;
                     changedNative = true;

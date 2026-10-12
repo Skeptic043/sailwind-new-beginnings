@@ -315,7 +315,7 @@ namespace NewBeginnings
         {
             private static bool Prefix(StartMenu __instance, ref Transform startPos, ref IEnumerator __result)
             {
-                if (TryPreparePendingCustom(__instance, out var custom))
+                if (TryPreparePendingCustom(__instance, startPos, out var custom))
                 { __result = custom; return false; }
                 if (!nativeTweenSeamReady)
                 {

@@ -1,5 +1,16 @@
 # Release notes
 
+## Version 1.2.6
+
+### Changed
+
+- A selected start that runs into a placement problem now carries on and writes a warning to the log instead of returning to the main menu. The boat and player use the closest fit the checks found.
+- With Scrambled Seas, a start problem no longer requires restarting the game before another new game.
+
+### Fixed
+
+- Harbours with short piers, such as Fort Juniper, now find a berth for large boats.
+
 ## Version 1.2.5
 
 ### Changed

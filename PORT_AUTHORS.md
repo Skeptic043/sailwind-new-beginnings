@@ -8,7 +8,7 @@ Call this on Unity's main thread after your native Port has registered and the s
 StartPorts.Register(providerId, siteId, port, options, out string reason);
 ```
 
-Use your plugin GUID as `providerId` and a stable name such as `main-dock` as `siteId`. A successful call accepts the description. The selected boat, real moorings, scenery, dry landing and supplies still have to pass startup checks.
+Use your plugin GUID as `providerId` and a stable name such as `main-dock` as `siteId`. A successful call accepts the description. At startup New Beginnings still checks the selected boat, real moorings, scenery, dry landing and supplies. If a check fails, the start carries on with the closest fit and writes a warning to the log.
 
 ## Optional integration
 
