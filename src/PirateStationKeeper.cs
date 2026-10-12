@@ -11,17 +11,24 @@ namespace NewBeginnings
         private Transform frame;
         private Vector3 localPosition;
         private float localYaw;
+        private bool releaseWhenPurchased;
+        private bool allowInitialLoad;
+        private bool sawReadyState;
 
-        internal static PirateStationKeeper Attach(Rigidbody body, Transform frame)
+        internal static PirateStationKeeper Attach(Rigidbody body, Transform frame,
+            bool releaseWhenPurchased = false)
         {
             RemoveActive();
             var keeper = body.gameObject.AddComponent<PirateStationKeeper>();
             keeper.body = body; keeper.frame = frame;
             keeper.localPosition = frame.InverseTransformPoint(body.position);
             keeper.localYaw = Mathf.DeltaAngle(frame.eulerAngles.y, body.rotation.eulerAngles.y);
+            keeper.releaseWhenPurchased = releaseWhenPurchased;
             active = keeper;
             return keeper;
         }
+
+        internal void AllowInitialLoad() => allowInitialLoad = true;
 
         internal static void RemoveActive() => Remove(active);
 
@@ -35,9 +42,18 @@ namespace NewBeginnings
 
         private void FixedUpdate()
         {
+            if (GameState.currentlyLoading)
+            {
+                if (allowInitialLoad && !sawReadyState) return;
+                Remove(this);
+                return;
+            }
+            sawReadyState = true;
+            var saleBoat = releaseWhenPurchased && body != null
+                ? body.GetComponent<PurchasableBoat>() : null;
             if (Plugin.Instance == null || !Plugin.Instance.isActiveAndEnabled ||
-                GameState.currentlyLoading || body == null || frame == null ||
-                (GameState.playing && GameState.currentBoat == body.transform))
+                body == null || frame == null || saleBoat != null && saleBoat.isPurchased() ||
+                (!releaseWhenPurchased && GameState.playing && GameState.currentBoat == body.transform))
             { Remove(this); return; }
             if (body.isKinematic) return;
             var target = frame.TransformPoint(localPosition);

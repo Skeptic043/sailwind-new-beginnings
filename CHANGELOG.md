@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.2.5
+
+### Changed
+
+- When Age of Exploration's Santa Maria occupies Siren Song's alternate berth, a different selected starter now uses the Cog's berth while the unpurchased Cog waits offshore. The Cog keeps its normal purchase state and its offshore position is restored from the save until it is purchased.
+
 ## Version 1.2.4
 
 ### Added

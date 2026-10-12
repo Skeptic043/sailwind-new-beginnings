@@ -30,6 +30,7 @@ namespace NewBeginnings
         public BoatSize? Size;
         internal StartingOptionsSettings Options;
         internal NativeBerth.Plan NativeBerth;
+        internal SirenSongCogRelocation.Plan SirenSongCog;
     }
 
     internal sealed class ProbeVelocityGuard
@@ -206,6 +207,7 @@ namespace NewBeginnings
                 pendingMenu = null;
                 pendingOptions = null;
                 CancelCustomStart();
+                SirenSongCogRelocation.BeginNewGame();
                 StartingValues.Cancel();
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
@@ -574,11 +576,26 @@ namespace NewBeginnings
                 reason = "Selected recovery berth lacks its initialized dock springs.";
                 return false;
             }
+            selected.SirenSongCog = null;
             if (SirenSongBerth.IsTarget(selected.Port) &&
                 !SirenSongBerth.TryGetMoorings(selected.Port, recovery, selected.Body,
-                    out front, out back, out reason)) return false;
-            if (front.spring.connectedBody != null && front.spring.connectedBody != selected.Body ||
-                back.spring.connectedBody != null && back.spring.connectedBody != selected.Body)
+                    out front, out back, out reason))
+            {
+                var alternateReason = reason;
+                if (!SirenSongCogRelocation.TryResolve(selected, out var cogPlan, out var cogReason))
+                {
+                    reason = alternateReason + " " + cogReason;
+                    return false;
+                }
+                selected.SirenSongCog = cogPlan;
+                front = cogPlan.Front;
+                back = cogPlan.Back;
+            }
+            var allowedResident = selected.SirenSongCog?.Body;
+            if ((front.spring.connectedBody != null && front.spring.connectedBody != selected.Body &&
+                    front.spring.connectedBody != allowedResident) ||
+                (back.spring.connectedBody != null && back.spring.connectedBody != selected.Body &&
+                    back.spring.connectedBody != allowedResident))
             {
                 reason = "Selected recovery dock spring is occupied by another boat.";
                 return false;
@@ -677,7 +694,8 @@ namespace NewBeginnings
             {
                 Port = port, Recovery = recovery, Destination = destination, Berth = relocation.Berth, Boat = boat, Saveable = saveable,
                 Body = body, Ropes = ropes, FrontMooring = frontMooring,
-                BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth, Size = size
+                BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth,
+                SirenSongCog = relocation.SirenSongCog, Size = size
             };
             return true;
         }
@@ -759,15 +777,22 @@ namespace NewBeginnings
         {
             // Resolve the berth while the selected boat is still at its old location. Native
             // GetBoatPos applies its normal occupied-berth offset when another boat is present.
-            var alternateBerth = SirenSongBerth.TryCreate(selected, out var berthPlan);
-            var berthPosition = alternateBerth ? berthPlan.Position : GetBerthPosition(selected);
+            var cogPlan = selected.SirenSongCog;
+            if (cogPlan != null && !cogPlan.Revalidate(selected, out var cogReason))
+                throw new InvalidOperationException(cogReason ?? "Siren Song's resident layout changed before placement.");
+            SirenSongCogRelocation.Transaction cogTransaction = null;
+            SirenSongBerth.Plan berthPlan = null;
+            var alternateBerth = cogPlan == null && SirenSongBerth.TryCreate(selected, out berthPlan);
+            var berthPosition = cogPlan != null ? cogPlan.StarterPosition :
+                alternateBerth ? berthPlan.Position : GetBerthPosition(selected);
             if (alternateBerth)
             {
                 selected.FrontMooring = berthPlan.Front;
                 selected.BackMooring = berthPlan.Back;
             }
-            var berthRotation = selected.Recovery.boatPos.rotation;
-            berthPosition = AdjustLargeBoatBerth(selected, berthPosition, berthRotation);
+            var berthRotation = cogPlan != null ? cogPlan.StarterRotation : selected.Recovery.boatPos.rotation;
+            if (cogPlan == null)
+                berthPosition = AdjustLargeBoatBerth(selected, berthPosition, berthRotation);
             var boatTransform = selected.Saveable.transform;
             var oldPosition = boatTransform.position;
             var oldRotation = boatTransform.rotation;
@@ -802,6 +827,7 @@ namespace NewBeginnings
             ProbeVelocityGuard probeGuard = null;
             try
             {
+                if (cogPlan != null) cogTransaction = SirenSongCogRelocation.Begin(cogPlan);
                 probeGuard = new ProbeVelocityGuard(selected.Saveable);
                 selected.Ropes.UnmoorAllRopes();
                 selected.Ropes.GetAnchorController().ResetAnchor();
@@ -853,52 +879,68 @@ namespace NewBeginnings
                 probeGuard = null;
                 StarterBoatRepair.Arm(menu, selected);
                 LeopardStarterRig.Arm(menu, selected);
+                cogTransaction?.Commit();
             }
             catch
             {
                 try
                 {
-                    // Do not allow a partial field substitution to grant the wrong extra boat.
-                    // An unmoored boat may still require a live recovery after an exceptional move.
-                    StartingBoatsField.SetValue(menu, starters);
-                    selected.StarterSet.starterBoat = oldStarterBoat;
-                    GameState.lastBoat = oldLastBoat;
-                    GameState.lastOwnedBoat = oldLastOwnedBoat;
-                    GameState.lastVisitedPort = oldLastVisitedPort;
-                    startPos = oldStartPos;
-                    Plugin.Instance.CancelPlayerStartTracking();
-                    StarterCargo.Disarm();
-                    StarterMooring.Cancel();
-                    StarterBoatRepair.Cancel();
-                    if (moved)
-                    {
-                        boatTransform.SetPositionAndRotation(oldPosition, oldRotation);
-                        selected.Body.position = oldPosition;
-                        selected.Body.rotation = oldRotation;
-                        selected.Body.velocity = oldVelocity;
-                        selected.Body.angularVelocity = oldAngularVelocity;
-                        if (anchorBody != null) anchorBody.position = oldAnchorPosition;
-                        if (anchor != null) anchor.OnLoad(false, oldAnchorLength);
-                    }
-                    foreach (var rope in oldRopes)
+                    try
                     {
                         try
                         {
-                            rope.Rope.Unmoor();
-                            if (rope.Mooring != null)
+                            // Do not allow a partial field substitution to grant the wrong extra boat.
+                            // An unmoored boat may still require a live recovery after an exceptional move.
+                            StartingBoatsField.SetValue(menu, starters);
+                            selected.StarterSet.starterBoat = oldStarterBoat;
+                            GameState.lastBoat = oldLastBoat;
+                            GameState.lastOwnedBoat = oldLastOwnedBoat;
+                            GameState.lastVisitedPort = oldLastVisitedPort;
+                            startPos = oldStartPos;
+                            Plugin.Instance.CancelPlayerStartTracking();
+                            StarterCargo.Disarm();
+                            StarterMooring.Cancel();
+                            StarterBoatRepair.Cancel();
+                            if (moved)
                             {
-                                rope.Rope.MoorTo(rope.Mooring);
-                            }
-                            else
-                            {
-                                rope.Rope.transform.SetParent(rope.Parent, true);
-                                rope.Rope.transform.SetPositionAndRotation(rope.Position, rope.Rotation);
+                                boatTransform.SetPositionAndRotation(oldPosition, oldRotation);
+                                selected.Body.position = oldPosition;
+                                selected.Body.rotation = oldRotation;
+                                selected.Body.velocity = oldVelocity;
+                                selected.Body.angularVelocity = oldAngularVelocity;
+                                if (anchorBody != null) anchorBody.position = oldAnchorPosition;
+                                if (anchor != null) anchor.OnLoad(false, oldAnchorLength);
                             }
                         }
-                        catch (Exception exception)
+                        finally
                         {
-                            Plugin.Instance.Warn("A rope could not be restored after failed placement: " + exception.Message);
+                            foreach (var rope in oldRopes)
+                            {
+                                try
+                                {
+                                    rope.Rope.Unmoor();
+                                    if (rope.Mooring != null)
+                                    {
+                                        rope.Rope.MoorTo(rope.Mooring);
+                                    }
+                                    else
+                                    {
+                                        rope.Rope.transform.SetParent(rope.Parent, true);
+                                        rope.Rope.transform.SetPositionAndRotation(rope.Position, rope.Rotation);
+                                    }
+                                }
+                                catch (Exception exception)
+                                {
+                                    Plugin.Instance.Warn("A rope could not be restored after failed placement: " + exception.Message);
+                                }
+                            }
                         }
+                    }
+                    finally
+                    {
+                        // The selected starter must release the recovery springs
+                        // before the native Cog can reclaim its exact authored berth.
+                        cogTransaction?.Rollback();
                     }
                 }
                 finally
@@ -1060,7 +1102,7 @@ namespace NewBeginnings
             return candidate;
         }
 
-        private static float ExtraBerthDistance(bool leopard, BoatSize? size) =>
+        internal static float ExtraBerthDistance(bool leopard, BoatSize? size) =>
             leopard ? 3f : size == BoatSize.Large ? 1f : 0f;
 
         private static bool TryOutwardOffset(Vector3 right, Vector3 berth,

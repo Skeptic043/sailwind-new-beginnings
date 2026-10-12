@@ -103,7 +103,7 @@ namespace NewBeginnings
             Resources.FindObjectsOfTypeAll<BoatMooringRopes>().Where(ropes => ropes != null &&
                 ropes.gameObject.scene.IsValid() && ropes.gameObject.scene.isLoaded);
 
-        private static bool TryReadCleats(Port port, RecoveryPort recovery,
+        internal static bool TryReadCleats(Port port, RecoveryPort recovery,
             out GPButtonDockMooring[] cleats, out string reason)
         {
             cleats = null;
@@ -127,7 +127,7 @@ namespace NewBeginnings
             return true;
         }
 
-        private static BerthClearance.Footprint ReadHull(Rigidbody body, Vector3 position, Quaternion rotation)
+        internal static BerthClearance.Footprint ReadHull(Rigidbody body, Vector3 position, Quaternion rotation)
         {
             // A hidden boat can have its collider disabled. Its authored capsule
             // still occupies the berth when the island and physics become live.
@@ -149,22 +149,7 @@ namespace NewBeginnings
             if (cleats == null || cleats.Length != 6 || cleats.Any(p => !Finite(p)) || !Finite(originalPosition) ||
                 !Finite(own.A) || !Finite(own.B) || float.IsNaN(own.Radius) ||
                 float.IsInfinity(own.Radius) || own.Radius <= 0f) return false;
-            var along = cleats[3] - cleats[2];
-            var span = along.magnitude;
-            if (span < 12f || span > 22f) return false;
-            along /= span;
-            outward = new Vector2(-along.y, along.x);
-            var originalMidpoint = (cleats[0] + cleats[1]) * 0.5f;
-            if (Vector2.Dot(outward, originalPosition - originalMidpoint) < 0f) outward = -outward;
-            if (Vector2.Dot(outward, originalPosition - originalMidpoint) < 1f) return false;
-            // Verify all six still form the inspected ordered dock, with the
-            // first four straight and the final two bending toward the water.
-            for (var index = 1; index < cleats.Length; ++index)
-            {
-                var step = cleats[index] - cleats[index - 1];
-                if (Vector2.Dot(step, along) < 7f || step.magnitude > 22f) return false;
-                if (index < 4 && Math.Abs(Vector2.Dot(step, outward)) > 1f) return false;
-            }
+            if (!TryOutward(cleats, originalPosition, out outward)) return false;
             var center = (own.A + own.B) * 0.5f;
             var midpoint = (cleats[2] + cleats[3]) * 0.5f;
             // Cleats sit slightly inside the actual dock edge. Two metres from
@@ -186,6 +171,30 @@ namespace NewBeginnings
                 if (clear) return true;
             }
             return false;
+        }
+
+        internal static bool TryOutward(Vector2[] cleats, Vector2 originalPosition, out Vector2 outward)
+        {
+            outward = Vector2.zero;
+            if (cleats == null || cleats.Length != 6 || cleats.Any(p => !Finite(p)) ||
+                !Finite(originalPosition)) return false;
+            var along = cleats[3] - cleats[2];
+            var span = along.magnitude;
+            if (span < 12f || span > 22f) return false;
+            along /= span;
+            outward = new Vector2(-along.y, along.x);
+            var originalMidpoint = (cleats[0] + cleats[1]) * 0.5f;
+            if (Vector2.Dot(outward, originalPosition - originalMidpoint) < 0f) outward = -outward;
+            if (Vector2.Dot(outward, originalPosition - originalMidpoint) < 1f) return false;
+            // Verify all six still form the inspected ordered dock, with the
+            // first four straight and the final two bending toward the water.
+            for (var index = 1; index < cleats.Length; ++index)
+            {
+                var step = cleats[index] - cleats[index - 1];
+                if (Vector2.Dot(step, along) < 7f || step.magnitude > 22f) return false;
+                if (index < 4 && Math.Abs(Vector2.Dot(step, outward)) > 1f) return false;
+            }
+            return true;
         }
 
         private static bool Finite(Vector2 value) => !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
