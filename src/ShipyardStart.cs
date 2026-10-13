@@ -58,12 +58,6 @@ namespace NewBeginnings
             plan = null;
             var yard = ResolveYard(destination);
             if (!Usable(yard)) return false;
-            if (destination.SiteIdentity == "site:oldchronian|fort-juniper")
-            {
-                if (StartBerthPlanner.TryFortShipyard(destination, body, ropes, out plan, out var berthReason)) return true;
-                Plugin.Instance.Warn("Fort Juniper's alongside shipyard berth could not be measured (" + berthReason +
-                    "). The start uses the shipyard release marker.");
-            }
             if (HasNativeYard(destination) && (destination.Index == 0 || destination.Index == 9 || destination.Index == 22))
             {
                 if (StartBerthPlanner.TryNativeShipyard(destination, yard, body, ropes, out plan, out var berthReason)) return true;

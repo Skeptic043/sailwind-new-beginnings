@@ -1,5 +1,16 @@
 # Release notes
 
+## Version 1.3.4
+
+### Changed
+
+- Native regional supplies now establish the dockside layout before added equipment. Fitting crates can stack on the starting table or the larger regional food crate, and remaining ground positions favor the space nearest the player.
+
+### Fixed
+
+- Fort Juniper shipyard starts now use Old Chronian's authored release berth and yard-side ground. This replaces the guessed Dock1 placement that could intersect the dock's underwater mesh and launch large boats.
+- Native cheese and goat-cheese crates keep a level starting pose while the layout is planned, preventing their larger stack bases from being stranded after smaller added crates.
+
 ## Version 1.3.3
 
 ### Fixed

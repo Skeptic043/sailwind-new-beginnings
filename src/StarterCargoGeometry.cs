@@ -32,21 +32,48 @@ namespace NewBeginnings
         internal static bool IsUprightBox(ShipItem item, Quaternion rotation)
         {
             if ((rotation * Vector3.up).y < .995f) return false;
+            return SimpleBox(item) != null;
+        }
+
+        internal static bool TryTabletopRotation(ShipItem item, Quaternion rotation,
+            out Quaternion stackRotation)
+        {
+            stackRotation = rotation;
+            var box = SimpleBox(item);
+            if (box == null) return false;
+            var axes = new[] { rotation * Vector3.right, rotation * Vector3.up, rotation * Vector3.forward };
+            var size = Vector3.Scale(box.size, box.transform.lossyScale);
+            var lengths = new[] { Mathf.Abs(size.x), Mathf.Abs(size.y), Mathf.Abs(size.z) };
+            var vertical = -1;
+            for (var i = 0; i < axes.Length; i++)
+                if (Mathf.Abs(axes[i].y) >= .995f) vertical = i;
+            if (vertical < 0) return false;
+            var longest = (vertical + 1) % 3;
+            var other = (vertical + 2) % 3;
+            if (lengths[other] > lengths[longest]) longest = other;
+            var along = axes[longest];
+            along.y = 0f;
+            stackRotation = Quaternion.LookRotation(Vector3.Cross(along, Vector3.up));
+            return true;
+        }
+
+        private static BoxCollider SimpleBox(ShipItem item)
+        {
             var body = item.GetItemRigidbody();
             var root = body != null && body.GetComponent<BoxCollider>() != null ? body.transform : item.transform;
             var box = root.GetComponent<BoxCollider>();
-            if (box == null || box.isTrigger) return false;
+            if (box == null || box.isTrigger) return null;
             // A simple flat crate can carry another box. Compound bodies,
             // barrels and authored angled boxes keep ordinary ground placement.
             foreach (var collider in root.GetComponents<Collider>())
-                if (collider != box && !collider.isTrigger) return false;
+                if (collider != box && !collider.isTrigger) return null;
             foreach (Transform child in root)
             {
                 if (root == item.transform && !child.CompareTag("ItemSubcollider")) continue;
                 foreach (var collider in child.GetComponentsInChildren<Collider>(true))
-                    if (!collider.isTrigger) return false;
+                    if (!collider.isTrigger) return null;
             }
-            return true;
+            return box;
         }
 
         private static void Include(Collider collider, Transform root, Vector3 position,

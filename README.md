@@ -35,13 +35,13 @@ Pirate Island is the far-western hideout in Al'Ankh waters. The secret islands s
 
 At Pirate Island, Small boats can use the existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land. Your boat waits in open water off the east coast and is held in place until you board it. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
 
-At Fort Juniper, the ordinary start places your boat alongside the open side of the lower-left dock with you and your supplies on the pier. Use shipyard berth instead places the boat alongside Old Chronian's shipyard pier and places you and your supplies on that pier. The ordinary start uses mooring lines when they can reach the cleats and otherwise holds the boat in place until you board it.
+At Fort Juniper, the ordinary start places your boat alongside the open side of the lower-left dock with you and your supplies on the pier. Use shipyard berth instead uses Old Chronian's authored shipyard release berth and places you and your supplies on the yard-side ground. The ordinary start uses mooring lines when they can reach the cleats and otherwise holds the boat in place until you board it.
 
 </details>
 
 ## Starting supplies and mooring
 
-With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Suitable boxes begin in short stacks and settle under the game's physics, while larger or awkward supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
+With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Regional supplies establish the layout first. Suitable added boxes can stack on the starting table, the larger regional food crate or other boxes and settle under the game's physics, while larger or awkward supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 
 Boats that need to be moved away from their normal starting locations receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 

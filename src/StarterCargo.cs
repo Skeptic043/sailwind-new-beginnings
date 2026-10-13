@@ -596,6 +596,18 @@ namespace NewBeginnings
             var authored = AuthoredRotations.TryGetValue(item, out var rotation) ?
                 rotation : item.transform.rotation;
             if (IsNativeCup(item)) return CupUprightRotation(authored);
+            // Native physics can tip a crate while the starter set is still
+            // waiting elsewhere. Keep its captured upright pose for planning.
+            if (item is ShipItemCrate)
+            {
+                if (StarterCargoGeometry.IsUprightBox(item, authored)) return authored;
+                // The native goat-cheese starter is authored on its lid.
+                // Turn that level box over before using it as a stack base.
+                var upright = authored * Quaternion.Euler(180f, 0f, 0f);
+                if (StarterCargoGeometry.IsUprightBox(item, upright)) return upright;
+            }
+            if (!AdditionalEquipment.IsAdditional(item) && AuthoredNameContains(item, "table") &&
+                StarterCargoGeometry.TryTabletopRotation(item, authored, out _)) return authored;
             return IsNativeOar(item) ? authored : item.transform.rotation;
         }
 
@@ -921,7 +933,8 @@ namespace NewBeginnings
                 // At Dead Cove a full retry could otherwise run out of dock before
                 // reaching the oar, leaving the first, already shifted layout in
                 // place. The barrel mesh is not a reliable physics shelf.
-                foreach (var item in items.OrderBy(item => item == anchor ? 0 :
+                foreach (var item in items.OrderBy(AdditionalEquipment.IsAdditional)
+                    .ThenBy(item => item == anchor ? 0 :
                     item == foodSupport ? 1 : IsNativeOar(item) ? 2 : 3)
                     .ThenByDescending(item => StackBaseArea(item)))
                 {
@@ -972,9 +985,14 @@ namespace NewBeginnings
                             Radius = LooseFootprintRadius(item)
                         });
                     }
-                    if (column == null && TryStackBounds(item, itemRotation, out var box))
+                    var columnRotation = itemRotation;
+                    var tableSupport = item == foodSupport &&
+                        !AdditionalEquipment.IsAdditional(item) && AuthoredNameContains(item, "table") &&
+                        StarterCargoGeometry.TryTabletopRotation(item, itemRotation, out columnRotation);
+                    if (column == null && (TryStackBounds(item, itemRotation, out var box) ||
+                        tableSupport && TryCargoBounds(item, itemRotation, out box)))
                     {
-                        column = NewCrateColumn(item, itemGround, itemRotation, box, groundCollider);
+                        column = NewCrateColumn(item, itemGround, columnRotation, box, groundCollider);
                         columns.Add(column);
                     }
                     if (column != null)
@@ -1204,7 +1222,7 @@ namespace NewBeginnings
             var oar = IsNativeOar(item);
             // Fill adjacent rows around the supplies. Radial rings spread
             // large selections around the player and leave unusable gaps.
-            foreach (var sample in CompactGroundSamples(groupGround, marker, radius))
+            foreach (var sample in CompactGroundSamples(groupGround, playerGround, marker, radius))
             {
                 if (Vector3.Distance(sample, playerGround) > 4.75f) continue;
                 if (!IsSlotClear(new GroundSlot
@@ -1230,7 +1248,7 @@ namespace NewBeginnings
             return false;
         }
 
-        private static IEnumerable<Vector3> CompactGroundSamples(Vector3 center,
+        private static IEnumerable<Vector3> CompactGroundSamples(Vector3 center, Vector3 playerGround,
             Transform marker, float radius)
         {
             var forward = marker.forward;
@@ -1242,7 +1260,7 @@ namespace NewBeginnings
             var offsets = from x in Enumerable.Range(-3, 7)
                           from z in Enumerable.Range(-3, 7)
                           where x != 0 || z != 0
-                          orderby x * x + z * z
+                          orderby (center + right * (x * spacing) + forward * (z * spacing) - playerGround).sqrMagnitude
                           select right * (x * spacing) + forward * (z * spacing);
             foreach (var offset in offsets) yield return center + offset;
         }
