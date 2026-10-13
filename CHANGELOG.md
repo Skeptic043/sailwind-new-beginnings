@@ -1,5 +1,17 @@
 # Release notes
 
+## Version 1.3.3
+
+### Fixed
+
+- Suitable starter crates now begin in short stacks and settle under the game's physics. Large loadouts no longer require a separate patch of dock for every box.
+- A layout that cannot fit now stops after a bounded set of complete placement attempts instead of repeatedly searching the same dock for up to 30 seconds.
+- Large equipment selections now prepare faster instead of repeating the same lookup for every packed item.
+- Shipyard Ports Only now recognizes Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay before their island scenery loads.
+- Gold Rock City, Dragon Cliffs and Kicia Bay now place the player and supplies on measured shipyard dock surfaces independently of boat size. Wide hulls receive enough room beside the dock while retaining the shipyard's release heading.
+- Fort Juniper uses the actual Old Chronian shipyard pier when Use shipyard berth is enabled. Its ordinary start still uses the wider lower-left dock.
+- Fort Aestrin prefers Better Ports' drydock shipyard when it is loaded, with the normal shipyard retained as the fallback.
+
 ## Version 1.3.2
 
 ### Changed

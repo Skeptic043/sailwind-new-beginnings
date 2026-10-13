@@ -248,6 +248,93 @@ namespace NewBeginnings
             return true;
         }
 
+        internal static bool TryFortShipyard(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
+            out StartBerthPlan plan, out string reason)
+        {
+            plan = null;
+            if (!TryHull(body, ropes, out var hull, out reason) || !TryHeight(body, out var height, out reason)) return false;
+            var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true);
+            var front = cleats.FirstOrDefault(c => StartDestinations.Loaded(c) && c.name == "FORT_dock_mooring_1R5");
+            var back = cleats.FirstOrDefault(c => StartDestinations.Loaded(c) && c.name == "FORT_dock_mooring_1R1");
+            var span = front != null && back != null ?
+                Vector3.ProjectOnPlane(front.transform.position - back.transform.position, Vector3.up) : Vector3.zero;
+            if (!Finite(span) || span.sqrMagnitude < .01f)
+                return Fail("The shipyard pier's alongside cleats are unavailable.", out reason);
+            var forward = span.normalized;
+            var outward = Vector3.Cross(Vector3.up, forward);
+            var rotation = Quaternion.LookRotation(forward, Vector3.up);
+            // Face north along the east side of the yard's pier. The north cleat
+            // keeps small hulls in the service trigger; long hulls extend forward
+            // far enough that their stern remains beyond the shoreward cleat.
+            var along = Mathf.Max(span.magnitude, hull.HalfSegment + hull.Radius + 2f);
+            var position = back.transform.position + forward * along + outward * (hull.Radius + 2f) - rotation * hull.Center;
+            position.y = height;
+            var seed = (front.transform.position + back.transform.position) * .5f - outward * 2f;
+            var verified = Plugin.Instance.TryFindStartShore(destination, seed, position,
+                out var shore, out _, out _, front.transform, back.transform);
+            if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
+            plan = Make(destination, position, rotation, shore);
+            plan.Mode = StartBerthMode.ShipyardHeld;
+            plan.Front = front; plan.Back = back;
+            plan.LandingVerified = verified;
+            plan.ClearanceVerified = plan.DepartureVerified = false;
+            if (!verified) Plugin.Instance.Warn("Fort Juniper's shipyard landing was not verified; the player uses its pier reference.");
+            return true;
+        }
+
+        internal static bool TryNativeShipyard(PortChoice destination, Shipyard yard, Rigidbody body, BoatMooringRopes ropes,
+            out StartBerthPlan plan, out string reason)
+        {
+            plan = null;
+            if (!TryHull(body, ropes, out var hull, out reason) || !TryHeight(body, out var height, out reason)) return false;
+            string frontName, backName;
+            switch (destination.Index)
+            {
+                // Inner/top face of the broad lower leg of Gold Rock's L-shaped yard dock.
+                case 0: frontName = "dock_spring_attachment (5)"; backName = "dock_spring_attachment (4)"; break;
+                case 9: frontName = "dock_mooring E (16)"; backName = "dock_mooring E (15)"; break;
+                case 22: frontName = "dock_mooring E (10)"; backName = "dock_mooring E (15)"; break;
+                default: return Fail("No measured native yard dock is defined here.", out reason);
+            }
+            var cleats = destination.Island.GetComponentsInChildren<GPButtonDockMooring>(true);
+            var front = cleats.FirstOrDefault(c => StartDestinations.Loaded(c) && c.name == frontName);
+            var back = cleats.FirstOrDefault(c => StartDestinations.Loaded(c) && c.name == backName);
+            var span = front != null && back != null ?
+                Vector3.ProjectOnPlane(front.transform.position - back.transform.position, Vector3.up) : Vector3.zero;
+            if (!Finite(span) || span.sqrMagnitude < .01f)
+                return Fail("The shipyard dock's landing cleats are unavailable.", out reason);
+            var outward = Vector3.Cross(Vector3.up, span.normalized);
+            var midpoint = (front.transform.position + back.transform.position) * .5f;
+            var marker = yard.shipReleasePosition;
+            var center = marker.position;
+            // Dragon Cliffs discharges beyond its service trigger. Keep the
+            // starting boat inside that trigger, between the same two piers.
+            if (destination.Index == 9) center -= marker.forward * 8f;
+            // Preserve the authored release channel and heading. Wide hulls
+            // need their physical side, rather than their root, clear of the pier.
+            var distance = Vector3.Dot(center - midpoint, outward);
+            center += outward * Mathf.Max(0f, hull.Radius + 2f - distance);
+            var position = center - marker.rotation * hull.Center;
+            position.y = height;
+            // This point remains on the dock regardless of the chosen hull.
+            // Use its deck height, not the elevated yard trigger's origin.
+            var landing = midpoint - outward * 2f;
+            // Dragon Cliffs' outer pier avoids the crane on the opposite pier.
+            // Half a metre along its deck places the seed on a plank, not its seam.
+            if (destination.Index == 9) landing -= span.normalized * .5f;
+            var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : landing;
+            var verified = Plugin.Instance.TryFindStartShore(destination, seed, seed,
+                out var shore, out _, out _, front.transform, back.transform);
+            if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
+            plan = Make(destination, position, marker.rotation, shore);
+            plan.Mode = StartBerthMode.ShipyardHeld;
+            plan.Front = front; plan.Back = back;
+            plan.LandingVerified = verified;
+            plan.ClearanceVerified = plan.DepartureVerified = false;
+            if (!verified) Plugin.Instance.Warn("The shipyard landing was not verified; the player uses its dock reference.");
+            return true;
+        }
+
         private static bool TrySurveyDock(PortChoice destination, Rigidbody body, BoatMooringRopes ropes, Hull hull, float height,
             GPButtonDockMooring[] cleats, Survey survey, out StartBerthPlan plan, out string reason)
         {

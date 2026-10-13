@@ -38,6 +38,26 @@ namespace NewBeginnings
             public bool LargeSupport;
         }
 
+        private sealed class CrateColumn
+        {
+            public Vector3 Ground, Center;
+            public Collider Support;
+            public Quaternion Rotation;
+            public float Width, Depth, Top;
+            public readonly List<ShipItem> Items = new List<ShipItem>();
+        }
+
+        private sealed class CargoShape
+        {
+            public Quaternion Rotation;
+            public Bounds RelativeBounds;
+        }
+
+        private const int MaxColumnItems = 4;
+        private const float MaxColumnHeight = 2.1f;
+        private static Dictionary<ShipItem, CargoShape> planningShapes;
+        private static readonly HashSet<ShipItem> StackedItems = new HashSet<ShipItem>();
+
         private static readonly ShipItemReferenceComparer ReferenceComparer =
             new ShipItemReferenceComparer();
         private static readonly FieldInfo RegisteredField =
@@ -74,8 +94,6 @@ namespace NewBeginnings
             new List<Transform>();
         private static readonly Dictionary<ShipItem, Vector3> PlannedGround =
             new Dictionary<ShipItem, Vector3>(ReferenceComparer);
-
-        private static readonly List<Vector3> RejectedAnchorGround = new List<Vector3>();
 
         private static ResolvedStart armed;
         private static float readyAt = -1f;
@@ -127,7 +145,7 @@ namespace NewBeginnings
             AuthoredNames.Clear();
             BoatWalkRoots.Clear();
             PlannedGround.Clear();
-            RejectedAnchorGround.Clear();
+            StackedItems.Clear();
             Plugin.Instance?.ClearDocksideCargoSurface();
         }
 
@@ -389,7 +407,6 @@ namespace NewBeginnings
             var lastReason = "waiting for the native starter set";
             while (IsCurrent(selected) && Time.realtimeSinceStartup < deadline)
             {
-                var placementAttempted = false;
                 foreach (var item in CollectItems(selected.StarterSet.transform))
                     Capture(item);
                 var nativeReady = NativeItemsReady(out lastReason);
@@ -415,7 +432,6 @@ namespace NewBeginnings
                         yield return null;
                         continue;
                     }
-                    placementAttempted = true;
                     placementStage = "planning a complete dockside layout";
                     if (TryPlaceAll(selected, ground, groundCollider, out lastReason))
                     {
@@ -435,6 +451,13 @@ namespace NewBeginnings
                             Disarm();
                             yield break;
                         }
+                        // Native settling can rearrange a stack. Never move
+                        // every crate again around boxes that have settled.
+                        if (StackedItems.Count != 0)
+                        {
+                            FailAndDisarm("items did not remain at their dockside columns: " + lastReason);
+                            yield break;
+                        }
                         Plugin.Instance?.Warn("Dockside supplies shifted during startup (" + lastReason + "); making one placement retry.");
                         Vector3? avoidGround = null;
                         if (failedItem != null &&
@@ -447,20 +470,6 @@ namespace NewBeginnings
                         var retryPlaced = TryPlaceAll(selected, ground,
                             groundCollider, out lastReason, failedItem,
                             avoidGround);
-                        if (!retryPlaced && avoidGround.HasValue &&
-                            Captured.Any(IsNativeOar) &&
-                            !IsNativeOar(failedItem))
-                        {
-                            // A small wharf can have no second free position
-                            // for the failed item. Re-place the exact native
-                            // set on the verified first layout rather than
-                            // leave items where the first physics settle sent
-                            // them when the alternate plan could not fit.
-                            Plugin.Instance?.Warn("Alternate dockside supply layout unavailable (" +
-                                lastReason + "); retrying the native items without the failed-point exclusion.");
-                            retryPlaced = TryPlaceAll(selected, ground,
-                                groundCollider, out lastReason);
-                        }
                         if (retryPlaced)
                         {
                             placementStage = "waiting for native physics to settle the retry";
@@ -480,16 +489,13 @@ namespace NewBeginnings
                             lastReason);
                         yield break;
                     }
+                    FailAndDisarm("the dockside layout could not be placed: " + lastReason);
+                    yield break;
                 }
                 else if (lastReason == null)
                     lastReason = Plugin.Instance.CargoSurfaceStatus ?? "the loaded dockside ground has not resolved";
                 placementStage = lastReason;
-                // A narrow dock can require many physics probes. Give scene
-                // loading and boat settle time before trying the same layout.
-                if (placementAttempted)
-                    yield return new WaitForSecondsRealtime(0.25f);
-                else
-                    yield return null;
+                yield return null;
             }
             if (ReferenceEquals(armed, selected))
             {
@@ -823,6 +829,18 @@ namespace NewBeginnings
             Collider groundCollider, out string reason,
             ShipItem avoidItem = null, Vector3? avoidGround = null)
         {
+            planningShapes = new Dictionary<ShipItem, CargoShape>(ReferenceComparer);
+            try
+            {
+                return PlanAndPlaceAll(selected, ground, groundCollider, out reason, avoidItem, avoidGround);
+            }
+            finally { planningShapes = null; }
+        }
+
+        private static bool PlanAndPlaceAll(ResolvedStart selected, Vector3 ground,
+            Collider groundCollider, out string reason,
+            ShipItem avoidItem, Vector3? avoidGround)
+        {
             reason = null;
             if (!NativeItemsReady(out reason)) return false;
             RefreshBoatWalkRoots();
@@ -854,106 +872,136 @@ namespace NewBeginnings
                     AuthoredNameContains(item, "crate"));
             if (foodSupport == anchor) foodSupport = null;
 
-            if (!TryChooseGround(ground, groundCollider, anchor, null,
-                anchor == avoidItem ? avoidGround : null,
-                out var anchorGround,
-                out reason, true))
-            {
-                // All currently usable alternatives have been tried. Let a
-                // later scene/boat settle re-evaluate them within the same
-                // bounded startup deadline.
-                RejectedAnchorGround.Clear();
-                return false;
-            }
+            var rejectedAnchors = new List<Vector3>();
+            var anchorGround = Vector3.zero;
             var foodGround = Vector3.zero;
-            if (foodSupport != null &&
-                !TryChooseGround(ground, groundCollider, foodSupport,
-                    anchorGround,
-                    foodSupport == avoidItem ? avoidGround : null,
-                    out foodGround,
-                    out reason))
+            List<CargoMove> moves = null;
+            Dictionary<ShipItem, Vector3> planned = null;
+            List<CrateColumn> columns = null;
+            var completeLayout = false;
+            // A clear nearest anchor can strand the table or later supplies.
+            // Try a few complete layouts before moving anything, in this call
+            // only. Keep the first successful layout and its shape cache.
+            for (var attempt = 0; attempt < 3; attempt++)
             {
-                RejectAnchorGround(selected, anchorGround);
-                return false;
-            }
+                if (!TryChooseGround(ground, groundCollider, anchor, null,
+                    anchor == avoidItem ? avoidGround : null,
+                    out anchorGround,
+                    out reason, rejectedAnchors)) return false;
+                rejectedAnchors.Add(anchorGround);
+                if (foodSupport != null &&
+                    !TryChooseGround(ground, groundCollider, foodSupport,
+                        anchorGround,
+                        foodSupport == avoidItem ? avoidGround : null,
+                        out foodGround,
+                        out reason))
+                    continue;
 
-            var authoredAnchor = AuthoredPositions[anchor];
-            var authoredFood = foodSupport == null ? Vector3.zero :
-                AuthoredPositions[foodSupport];
-            var reserved = new List<GroundSlot>
-            {
-                new GroundSlot
+                var authoredAnchor = AuthoredPositions[anchor];
+                var authoredFood = foodSupport == null ? Vector3.zero :
+                    AuthoredPositions[foodSupport];
+                var reserved = new List<GroundSlot>
                 {
-                    Point = anchorGround, Radius = FootprintRadius(anchor),
-                    LargeSupport = true
-                }
-            };
-            if (foodSupport != null)
-                reserved.Add(new GroundSlot
-                {
-                    Point = foodGround, Radius = FootprintRadius(foodSupport),
-                    LargeSupport = true
-                });
-            var moves = new List<CargoMove>(items.Length);
-            var planned = new Dictionary<ShipItem, Vector3>(ReferenceComparer);
-            // Reserve space for the native oar before the small loose items.
-            // At Dead Cove a full retry could otherwise run out of dock before
-            // reaching the oar, leaving the first, already shifted layout in
-            // place. The barrel mesh is not a reliable physics shelf.
-            foreach (var item in items.OrderBy(item => item == anchor ? 0 :
-                item == foodSupport ? 1 : IsNativeOar(item) ? 2 : 3))
-            {
-                var body = item.GetItemRigidbody();
-                if (body == null || body.GetBody() == null)
-                {
-                    reason = "the native physics body is unavailable for " + AuthoredName(item);
-                    return false;
-                }
-                var itemGround = anchorGround;
-                // The native oar is authored standing nearly upright. Place
-                // it in that original pose so its physics can settle on the
-                // dock without requiring a pre-cleared horizontal footprint.
-                var itemRotation = PlacementRotation(item);
-                if (item == foodSupport) itemGround = foodGround;
-                else if (item != anchor)
-                {
-                    var groupGround = NearerToFood(item, authoredAnchor,
-                        authoredFood, foodSupport) ? foodGround : anchorGround;
-                    var foundGround = TryChooseLooseGround(item, groupGround, ground,
-                        reserved, item == avoidItem ? avoidGround : null,
-                        out itemGround, out itemRotation);
-                    if (!foundGround && IsNativeOar(item) && foodSupport != null)
-                        foundGround = TryChooseLooseGround(item,
-                            groupGround == foodGround ? anchorGround : foodGround,
-                            ground, reserved,
-                            item == avoidItem ? avoidGround : null,
-                            out itemGround, out itemRotation);
-                    if (!foundGround)
+                    new GroundSlot
                     {
-                        reason = "no reachable dockside ground near the starter group for " +
-                            AuthoredName(item);
-                        RejectAnchorGround(selected, anchorGround);
-                        return false;
+                        Point = anchorGround, Radius = FootprintRadius(anchor),
+                        LargeSupport = true
                     }
+                };
+                if (foodSupport != null)
                     reserved.Add(new GroundSlot
                     {
-                        Point = IsNativeOar(item) ?
-                            OarBaseGround(item, itemGround, itemRotation) :
-                            itemGround,
-                        Radius = LooseFootprintRadius(item)
+                        Point = foodGround, Radius = FootprintRadius(foodSupport),
+                        LargeSupport = true
+                    });
+                moves = new List<CargoMove>(items.Length);
+                planned = new Dictionary<ShipItem, Vector3>(ReferenceComparer);
+                columns = new List<CrateColumn>();
+                // Reserve space for the native oar before the small loose items.
+                // At Dead Cove a full retry could otherwise run out of dock before
+                // reaching the oar, leaving the first, already shifted layout in
+                // place. The barrel mesh is not a reliable physics shelf.
+                foreach (var item in items.OrderBy(item => item == anchor ? 0 :
+                    item == foodSupport ? 1 : IsNativeOar(item) ? 2 : 3)
+                    .ThenByDescending(item => StackBaseArea(item)))
+                {
+                    var body = item.GetItemRigidbody();
+                    if (body == null || body.GetBody() == null)
+                    {
+                        reason = "the native physics body is unavailable for " + AuthoredName(item);
+                        return false;
+                    }
+                    var itemGround = anchorGround;
+                    // The native oar is authored standing nearly upright. Place
+                    // it in that original pose so its physics can settle on the
+                    // dock without requiring a pre-cleared horizontal footprint.
+                    var itemRotation = PlacementRotation(item);
+                    CrateColumn column = null;
+                    if (item == foodSupport) itemGround = foodGround;
+                    else if (item != anchor)
+                    {
+                        var groupGround = NearerToFood(item, authoredAnchor,
+                            authoredFood, foodSupport) ? foodGround : anchorGround;
+                        // Once a crate base is placed, grow its nearby rows rather
+                        // than surrounding the player with another ring of bases.
+                        if (columns.Count != 0 && !IsNativeOar(item))
+                            groupGround = columns[0].Ground;
+                        var foundGround = TryStackCrate(item, columns, out column,
+                            out itemGround, out itemRotation);
+                        if (!foundGround)
+                            foundGround = TryChooseLooseGround(item, groupGround, ground,
+                                reserved, item == avoidItem ? avoidGround : null,
+                                out itemGround, out itemRotation);
+                        if (!foundGround && IsNativeOar(item) && foodSupport != null)
+                            foundGround = TryChooseLooseGround(item,
+                                groupGround == foodGround ? anchorGround : foodGround,
+                                ground, reserved,
+                                item == avoidItem ? avoidGround : null,
+                                out itemGround, out itemRotation);
+                        if (!foundGround)
+                        {
+                            reason = "no reachable dockside ground near the starter group for " +
+                                AuthoredName(item);
+                            break;
+                        }
+                        if (column == null) reserved.Add(new GroundSlot
+                        {
+                            Point = IsNativeOar(item) ?
+                                OarBaseGround(item, itemGround, itemRotation) :
+                                itemGround,
+                            Radius = LooseFootprintRadius(item)
+                        });
+                    }
+                    if (column == null && TryStackBounds(item, itemRotation, out var box))
+                    {
+                        column = NewCrateColumn(item, itemGround, itemRotation, box, groundCollider);
+                        columns.Add(column);
+                    }
+                    if (column != null)
+                    {
+                        TryCargoBounds(item, itemRotation, out var bounds);
+                        column.Top = itemGround.y + .04f + bounds.size.y;
+                        column.Width = bounds.size.x;
+                        column.Depth = bounds.size.z;
+                        column.Items.Add(item);
+                    }
+                    planned[item] = column == null ? itemGround : column.Ground;
+                    var destination = PutBottomOnSurface(item, itemGround,
+                        itemRotation);
+                    moves.Add(new CargoMove
+                    {
+                        Item = item, Body = body, Position = destination,
+                        Rotation = itemRotation,
+                        OriginalPosition = item.transform.position,
+                        OriginalRotation = item.transform.rotation
                     });
                 }
-                planned[item] = itemGround;
-                var destination = PutBottomOnSurface(item, itemGround,
-                    itemRotation);
-                moves.Add(new CargoMove
-                {
-                    Item = item, Body = body, Position = destination,
-                    Rotation = itemRotation,
-                    OriginalPosition = item.transform.position,
-                    OriginalRotation = item.transform.rotation
-                });
+                if (moves.Count != items.Length) continue;
+                completeLayout = true;
+                break;
             }
+            if (!completeLayout) return false;
+            reason = null;
             try
             {
                 if (ExitBoatMethod == null || FloatingOriginManager.instance == null ||
@@ -1002,7 +1050,9 @@ namespace NewBeginnings
                 }
                 Physics.SyncTransforms();
                 AdditionalEquipment.MovePacked(ResetPackedDistance);
-                RejectedAnchorGround.Clear();
+                StackedItems.Clear();
+                foreach (var column in columns.Where(value => value.Items.Count > 1))
+                    StackedItems.UnionWith(column.Items);
                 PlannedGround.Clear();
                 foreach (var plannedItem in planned)
                     PlannedGround[plannedItem.Key] = selected.ShoreFrame.InverseTransformPoint(plannedItem.Value);
@@ -1054,14 +1104,14 @@ namespace NewBeginnings
         private static Vector3 PutBottomOnSurface(ShipItem item, Vector3 surface,
             Quaternion rotation)
         {
-            var bottom = StarterCargoGeometry.TryBounds(item, rotation, out var bounds)
+            var bottom = TryCargoBounds(item, rotation, out var bounds)
                 ? item.transform.position.y - bounds.min.y : 0.35f;
             return new Vector3(surface.x, surface.y + bottom + 0.04f, surface.z);
         }
 
         private static float FootprintRadius(ShipItem item)
         {
-            if (StarterCargoGeometry.TryBounds(item, PlacementRotation(item), out var bounds))
+            if (TryCargoBounds(item, PlacementRotation(item), out var bounds))
             {
                 var offset = bounds.center - item.transform.position;
                 var x = Mathf.Abs(offset.x) + bounds.extents.x;
@@ -1069,6 +1119,69 @@ namespace NewBeginnings
                 return Mathf.Max(0.18f, Mathf.Sqrt(x * x + z * z));
             }
             return 0.3f;
+        }
+
+        private static bool TryCargoBounds(ShipItem item, Quaternion rotation, out Bounds bounds)
+        {
+            if (planningShapes != null && planningShapes.TryGetValue(item, out var cached) &&
+                cached.Rotation == rotation)
+            {
+                bounds = cached.RelativeBounds;
+                bounds.center += item.transform.position;
+                return true;
+            }
+            if (!StarterCargoGeometry.TryBounds(item, rotation, out bounds)) return false;
+            if (planningShapes != null)
+            {
+                var relative = bounds;
+                relative.center -= item.transform.position;
+                planningShapes[item] = new CargoShape { Rotation = rotation, RelativeBounds = relative };
+            }
+            return true;
+        }
+
+        private static bool TryStackBounds(ShipItem item, Quaternion rotation, out Bounds bounds)
+        {
+            bounds = default;
+            return item is ShipItemCrate && StarterCargoGeometry.IsUprightBox(item, rotation) &&
+                TryCargoBounds(item, rotation, out bounds) && bounds.size.y > .05f;
+        }
+
+        private static float StackBaseArea(ShipItem item) =>
+            TryStackBounds(item, PlacementRotation(item), out var bounds) ? bounds.size.x * bounds.size.z : 0f;
+
+        private static CrateColumn NewCrateColumn(ShipItem item, Vector3 ground,
+            Quaternion rotation, Bounds bounds, Collider support) => new CrateColumn
+        {
+            Ground = ground, Center = ground + bounds.center - item.transform.position,
+            Rotation = rotation, Width = bounds.size.x, Depth = bounds.size.z, Support = support
+        };
+
+        private static bool TryStackCrate(ShipItem item, List<CrateColumn> columns,
+            out CrateColumn selectedColumn, out Vector3 surface, out Quaternion rotation)
+        {
+            selectedColumn = null;
+            surface = Vector3.zero;
+            rotation = PlacementRotation(item);
+            if (!TryStackBounds(item, rotation, out _)) return false;
+            foreach (var column in columns)
+            {
+                if (column.Items.Count >= MaxColumnItems ||
+                    !TryStackBounds(item, column.Rotation, out var bounds) ||
+                    bounds.size.x > column.Width + .002f || bounds.size.z > column.Depth + .002f ||
+                    column.Top + .04f + bounds.size.y - column.Ground.y > MaxColumnHeight)
+                    continue;
+                var offset = bounds.center - item.transform.position;
+                var candidate = new Vector3(column.Center.x - offset.x, column.Top,
+                    column.Center.z - offset.z);
+                if (IsInsideEmbarkVolume(item, candidate, column.Rotation) ||
+                    !HasCargoClearance(item, candidate, column.Rotation, column.Support)) continue;
+                selectedColumn = column;
+                surface = candidate;
+                rotation = column.Rotation;
+                return true;
+            }
+            return false;
         }
 
         private static bool IsNativeOar(ShipItem item) =>
@@ -1087,20 +1200,19 @@ namespace NewBeginnings
             selectedRotation = PlacementRotation(item);
             var marker = armed?.ShoreFrame;
             if (marker == null) return false;
-            var directions = GroundDirections(marker);
             var radius = LooseFootprintRadius(item);
             var oar = IsNativeOar(item);
-            // Narrow wharves may only have room lengthwise. Search farther
-            // along the same ground while keeping every item within the
-            // five-metre startup confirmation group around the player.
-            foreach (var distance in new[]
+            // Fill adjacent rows around the supplies. Radial rings spread
+            // large selections around the player and leave unusable gaps.
+            foreach (var sample in CompactGroundSamples(groupGround, marker, radius))
             {
-                0.6f, 0.9f, 1.2f, 1.55f, 1.9f, 2.3f, 2.7f, 3.2f, 3.7f
-            })
-            foreach (var direction in directions)
-            {
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(groupGround +
-                    direction * distance, out var point, out var collider) ||
+                if (Vector3.Distance(sample, playerGround) > 4.75f) continue;
+                if (!IsSlotClear(new GroundSlot
+                {
+                    Point = oar ? OarBaseGround(item, sample, selectedRotation) : sample,
+                    Radius = radius
+                }, reserved)) continue;
+                if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var point, out var collider) ||
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(point.y - groupGround.y) > 0.45f ||
                     Vector3.Distance(point, playerGround) > 4.75f ||
@@ -1112,16 +1224,27 @@ namespace NewBeginnings
                         selectedRotation) : !HasSupportFootprint(item, point)) ||
                     !HasCargoClearance(item, point, selectedRotation, collider))
                     continue;
-                if (!IsSlotClear(new GroundSlot
-                {
-                    Point = oar ? OarBaseGround(item, point,
-                        selectedRotation) : point,
-                    Radius = radius
-                }, reserved)) continue;
                 selected = point;
                 return true;
             }
             return false;
+        }
+
+        private static IEnumerable<Vector3> CompactGroundSamples(Vector3 center,
+            Transform marker, float radius)
+        {
+            var forward = marker.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < .01f) forward = Vector3.forward;
+            forward.Normalize();
+            var right = new Vector3(forward.z, 0f, -forward.x);
+            var spacing = Mathf.Max(.45f, radius * 2f + .08f);
+            var offsets = from x in Enumerable.Range(-3, 7)
+                          from z in Enumerable.Range(-3, 7)
+                          where x != 0 || z != 0
+                          orderby x * x + z * z
+                          select right * (x * spacing) + forward * (z * spacing);
+            foreach (var offset in offsets) yield return center + offset;
         }
 
         private static bool HasOarBaseSupport(ShipItem item,
@@ -1199,7 +1322,8 @@ namespace NewBeginnings
         private static bool TryChooseGround(Vector3 playerGround,
             Collider playerCollider, ShipItem support, Vector3? otherGroup,
             Vector3? avoidGround,
-            out Vector3 selected, out string reason, bool skipRejectedAnchors = false)
+            out Vector3 selected, out string reason,
+            List<Vector3> rejectedGrounds = null)
         {
             selected = Vector3.zero;
             reason = "no nearby clear wharf/shore point supports " +
@@ -1214,7 +1338,13 @@ namespace NewBeginnings
             foreach (var radius in radii)
             foreach (var direction in directions)
             {
+                // Radius is the minimum possible score. Once a nearer flat
+                // point wins, farther candidates cannot improve this choice.
+                if (radius >= bestScore) continue;
                 var sample = playerGround + direction * radius;
+                if (rejectedGrounds != null && rejectedGrounds.Any(point =>
+                    new Vector2(sample.x - point.x, sample.z - point.z).magnitude < 0.9f))
+                    continue;
                 if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var surface,
                     out var collider) || !IsVerifiedLandCollider(collider)) continue;
                 if (Mathf.Abs(surface.y - playerGround.y) > 0.45f ||
@@ -1224,8 +1354,6 @@ namespace NewBeginnings
                     new Vector2(surface.x - avoidGround.Value.x,
                         surface.z - avoidGround.Value.z).magnitude < 0.9f)
                     continue;
-                if (skipRejectedAnchors && RejectedAnchorGround.Any(point =>
-                    AreAnchorCandidatesNear(surface, GroundToWorld(armed, point)))) continue;
                 if (IsInsideEmbarkVolume(support, surface, PlacementRotation(support))) continue;
                 if (!HasSupportFootprint(support, surface) ||
                     !HasCargoClearance(support, surface, PlacementRotation(support), collider)) continue;
@@ -1240,25 +1368,13 @@ namespace NewBeginnings
             return !float.IsPositiveInfinity(bestScore);
         }
 
-        private static void RejectAnchorGround(ResolvedStart selected, Vector3 ground)
-        {
-            // A greedy first anchor can leave no complete layout even when
-            // the same dock has room elsewhere. Advance the next attempt to
-            // another anchor instead of repeating that exact dead end.
-            if (RejectedAnchorGround.Count >= 12) RejectedAnchorGround.Clear();
-            RejectedAnchorGround.Add(selected.ShoreFrame.InverseTransformPoint(ground));
-        }
-
-        private static bool AreAnchorCandidatesNear(Vector3 left, Vector3 right) =>
-            new Vector2(left.x - right.x, left.z - right.z).sqrMagnitude < 0.1225f;
-
         private static bool HasCargoClearance(ShipItem item, Vector3 surface,
             Quaternion rotation, Collider ground)
         {
             // A supply needs its own physical space, not the player's taller
             // capsule. Keep fixture/hull collision checks when probing cargo
             // ground without the player-clearance policy.
-            if (!StarterCargoGeometry.TryBounds(item, rotation, out var source)) return false;
+            if (!TryCargoBounds(item, rotation, out var source)) return false;
             var bounds = CargoClearanceBounds(source, item.transform.position,
                 surface, item.transform.position.y - source.min.y);
             foreach (var overlap in Physics.OverlapBox(bounds.center, bounds.extents,
@@ -1289,7 +1405,7 @@ namespace NewBeginnings
             // Test under the base's four edges, not just its pivot. Clamp
             // unusually large modded collider bounds to a local footprint so
             // oversized interaction colliders do not make every dock fail.
-            var bounds = StarterCargoGeometry.TryBounds(support, PlacementRotation(support), out var measured)
+            var bounds = TryCargoBounds(support, PlacementRotation(support), out var measured)
                 ? measured : new Bounds(support.transform.position, Vector3.one * 0.7f);
             var pivotOffset = bounds.center - support.transform.position;
             center += new Vector3(pivotOffset.x, 0f, pivotOffset.z);
@@ -1368,6 +1484,17 @@ namespace NewBeginnings
                     return false;
                 }
                 var point = item.transform.position;
+                if (StackedItems.Contains(item) && PlannedGround.TryGetValue(item, out var localColumn))
+                {
+                    var column = GroundToWorld(armed, localColumn);
+                    if (!TryConfirmStackedItem(item, column))
+                    {
+                        failedItem = item;
+                        reason = "a stacked starter crate left its shore column or entered a boat: " + AuthoredName(item);
+                        return false;
+                    }
+                    continue;
+                }
                 var horizontal = new Vector2(point.x - ground.x, point.z - ground.z);
                 // Candidate centers stay within 4.75m; allow some native
                 // physics settling while still requiring local land support.
@@ -1434,6 +1561,22 @@ namespace NewBeginnings
             return true;
         }
 
+        private static bool TryConfirmStackedItem(ShipItem item, Vector3 column)
+        {
+            if (item.currentActualBoat != null ||
+                !TryCargoBounds(item, item.transform.rotation, out var bounds)) return false;
+            var horizontal = new Vector2(bounds.center.x - column.x, bounds.center.z - column.z);
+            // Boxes may tilt or slide as the small initial gaps close. Check
+            // their actual occupied space and the verified shore column, not
+            // whether an upper box's pivot is resting directly on the dock.
+            if (horizontal.magnitude > 2f || bounds.min.y < column.y - .2f ||
+                bounds.max.y > column.y + MaxColumnHeight + .75f ||
+                !Plugin.Instance.TryProbeDocksideCargoSurface(column, out var ground, out var support) ||
+                !IsVerifiedLandCollider(support) || Mathf.Abs(ground.y - column.y) > .5f)
+                return false;
+            return !OverlapsEmbarkVolume(bounds);
+        }
+
         private static void RefreshBoatWalkRoots()
         {
             BoatWalkRoots.Clear();
@@ -1471,9 +1614,14 @@ namespace NewBeginnings
             // EmbarkCol, and its next native update reparents the item to a
             // boat. Probe the space a placed item occupies, not merely the
             // floor point. Any boat's active embark trigger is unsafe here.
-            if (!StarterCargoGeometry.TryBounds(item, rotation ?? item.transform.rotation, out var source)) return true;
+            if (!TryCargoBounds(item, rotation ?? item.transform.rotation, out var source)) return true;
             var bounds = CargoClearanceBounds(source, item.transform.position,
                 surface, item.transform.position.y - source.min.y);
+            return OverlapsEmbarkVolume(bounds);
+        }
+
+        private static bool OverlapsEmbarkVolume(Bounds bounds)
+        {
             foreach (var overlap in Physics.OverlapBox(bounds.center, bounds.extents + Vector3.one * .15f,
                 Quaternion.identity, ~0, QueryTriggerInteraction.Collide))
                 if (overlap != null && overlap.CompareTag("EmbarkCol"))

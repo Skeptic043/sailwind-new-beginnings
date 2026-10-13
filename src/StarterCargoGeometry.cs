@@ -29,6 +29,26 @@ namespace NewBeginnings
             return found;
         }
 
+        internal static bool IsUprightBox(ShipItem item, Quaternion rotation)
+        {
+            if ((rotation * Vector3.up).y < .995f) return false;
+            var body = item.GetItemRigidbody();
+            var root = body != null && body.GetComponent<BoxCollider>() != null ? body.transform : item.transform;
+            var box = root.GetComponent<BoxCollider>();
+            if (box == null || box.isTrigger) return false;
+            // A simple flat crate can carry another box. Compound bodies,
+            // barrels and authored angled boxes keep ordinary ground placement.
+            foreach (var collider in root.GetComponents<Collider>())
+                if (collider != box && !collider.isTrigger) return false;
+            foreach (Transform child in root)
+            {
+                if (root == item.transform && !child.CompareTag("ItemSubcollider")) continue;
+                foreach (var collider in child.GetComponentsInChildren<Collider>(true))
+                    if (!collider.isTrigger) return false;
+            }
+            return true;
+        }
+
         private static void Include(Collider collider, Transform root, Vector3 position,
             Quaternion turn, ref Bounds result, ref bool found)
         {

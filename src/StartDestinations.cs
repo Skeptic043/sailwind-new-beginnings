@@ -24,6 +24,19 @@ namespace NewBeginnings
         private static bool OptionalCurrent(Component value, IslandHorizon island) =>
             ReferenceEquals(value, null) || Loaded(value) && value.GetComponentInParent<IslandHorizon>() == island;
 
+        internal static bool BelongsToIsland(Component value, IslandHorizon island)
+        {
+            if (!Loaded(value) || !Loaded(island)) return false;
+            var parent = value.GetComponentInParent<IslandHorizon>();
+            if (parent != null) return parent == island;
+            // Native additive scenery follows the registered island by index,
+            // without parenting its objects beneath IslandHorizon.
+            var scenery = value.GetComponentInParent<IslandSceneryScene>();
+            var index = island.islandIndex;
+            return scenery != null && scenery.parentIslandIndex == index && Refs.islands != null &&
+                index >= 0 && index < Refs.islands.Length && Refs.islands[index] == island.transform;
+        }
+
         internal static bool IsCurrent(PortChoice site) => site != null && Loaded(site.Island) &&
             (site.Port == null ? site.HiddenKey == "pirate" && site.Island.islandIndex == 32 &&
                 site.Island.name == "island 32 A (hideout)" : ValidPort(site.Port) &&
@@ -31,7 +44,8 @@ namespace NewBeginnings
             Loaded(site.DockRoot) && site.DockRoot.GetComponentInParent<IslandHorizon>() == site.Island &&
             OptionalCurrent(site.Marker, site.Island) && OptionalCurrent(site.ShoreMarker, site.Island) &&
             OptionalCurrent(site.SceneryRoot, site.Island) && OptionalCurrent(site.PreferredFront, site.Island) &&
-            OptionalCurrent(site.PreferredBack, site.Island) && OptionalCurrent(site.Yard, site.Island) &&
+            OptionalCurrent(site.PreferredBack, site.Island) &&
+            (ReferenceEquals(site.Yard, null) || BelongsToIsland(site.Yard, site.Island)) &&
             (site.Yard == null || site.Yard.enabled) &&
             (site.HiddenKey != "saffron" || site.Marker != null);
 
@@ -47,10 +61,11 @@ namespace NewBeginnings
                 choice.IsModded = !SelectionCatalog.IsKnownPort(choice.Port);
                 if (choice.IsModded && !choice.Pool.HasValue)
                     choice.Pool = choice.Region == 0 ? PortPool.AlAnkh : choice.Region == 1 ? PortPool.Emerald : PortPool.Aestrin;
-                choice.Yard = yards.FirstOrDefault(yard => yard.GetComponentInParent<IslandHorizon>() == choice.Island &&
+                choice.Yard = yards.FirstOrDefault(yard => BelongsToIsland(yard, choice.Island) &&
                     !(yard.name == "FORT shipyard" && Ancestor(yard.transform, "JUNIPER(Clone)") != null) &&
                     Port.ports.Count(port => port != null && port.GetComponentInParent<IslandHorizon>() == choice.Island) == 1);
-                choice.HasShipyard = choice.Yard != null;
+                choice.Yard = ShipyardStart.PreferredYard(choice, yards);
+                choice.HasShipyard = choice.Yard != null || ShipyardStart.HasNativeYard(choice);
                 if (choice.Index == 33 && choice.IdentityName == "port A 33 (flower)")
                 {
                     choice.HiddenKey = "saffron";
@@ -87,7 +102,7 @@ namespace NewBeginnings
                 var options = registration.Options;
                 var island = registration.Port.GetComponentInParent<IslandHorizon>();
                 var saffron = registration.Port.portIndex == 33 && registration.Port.name == "port A 33 (flower)";
-                var yard = options.Shipyard != null ? options.Shipyard : yards.FirstOrDefault(item => item.GetComponentInParent<IslandHorizon>() == island &&
+                var yard = options.Shipyard != null ? options.Shipyard : yards.FirstOrDefault(item => BelongsToIsland(item, island) &&
                         (options.DockRoot == null || item.transform.IsChildOf(options.DockRoot)));
                 catalog.Ports.Add(new PortChoice { Port = registration.Port, Island = island,
                     DockRoot = options.DockRoot != null ? options.DockRoot : island.transform,

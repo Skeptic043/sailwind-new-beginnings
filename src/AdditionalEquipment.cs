@@ -122,6 +122,7 @@ namespace NewBeginnings
         private static bool appendSucceeded;
         private static bool packingComplete;
         private static string failure;
+        private static UnityEngine.Object crateUi;
 
         private static readonly Type CrateType = typeof(ShipItem).Assembly.GetType("CrateInventory");
         private static readonly Type CrateUiType = typeof(ShipItem).Assembly.GetType("CrateInventoryUI");
@@ -222,6 +223,7 @@ namespace NewBeginnings
             appendSucceeded = false;
             packingComplete = false;
             failure = null;
+            crateUi = null;
             Extras.Clear();
             PackingCandidates.Clear();
             ScaledPackingTools.Clear();
@@ -377,10 +379,13 @@ namespace NewBeginnings
         private static int CarrierCapacity(GameObject prefab)
         {
             if (prefab == null || Insert == null || Contents == null || CrateId == null || UiMeshes == null || UiButtons == null) return 0;
-            var ui = Resources.FindObjectsOfTypeAll(CrateUiType).FirstOrDefault();
-            if (ui == null) return 0;
-            var meshes = UiMeshes.GetValue(ui) as Mesh[];
-            var buttons = UiButtons.GetValue(ui) as Array;
+            // Reuse the live UI instead of scanning every loaded object for
+            // each packed item. Read its current arrays and this crate's mesh
+            // each time so native capacity changes still take effect.
+            if (crateUi == null) crateUi = Resources.FindObjectsOfTypeAll(CrateUiType).FirstOrDefault();
+            if (crateUi == null) return 0;
+            var meshes = UiMeshes.GetValue(crateUi) as Mesh[];
+            var buttons = UiButtons.GetValue(crateUi) as Array;
             var mesh = prefab.GetComponent<MeshFilter>()?.sharedMesh;
             if (meshes == null || buttons == null || mesh == null) return 0;
             var index = Array.IndexOf(meshes, mesh);

@@ -18,7 +18,7 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 Choose a port and boat, or randomize one or both, then press Continue to start a new game. The main screen has the region and boat-size checkboxes. Starting options contains Money, Reputation, Equipment and Spawn tabs. Open Spawn for shipyard settings, secret islands and individual exclusions. You can edit these settings before turning on random selection. In the exclusion menu, uncheck entries to leave them out of random starts, then click Done to save changes or Back to discard them. Shipyard Ports Only limits random starts to locations with a detected shipyard.
 
-Use shipyard berth starts your boat at the selected shipyard's release berth when one is available. It works with manually selected and random ports, and starts disabled. The boat waits there until you board it or admit it to the shipyard, while you and your supplies start ashore nearby. Ports without a shipyard keep their ordinary starting berth.
+Use shipyard berth starts your boat at the selected shipyard's release berth when one is available. It works with manually selected and random ports, and starts disabled. The boat waits there until you board it or admit it to the shipyard, while you and your supplies start ashore nearby. Gold Rock City, Dragon Cliffs and Kicia Bay use fixed shipyard-dock landings that do not change with boat size. Fort Aestrin uses Better Ports' drydock when it is loaded and otherwise uses its normal shipyard. Ports without a shipyard keep their ordinary starting berth.
 
 When added ports are detected, Mod ports appears with the Random Port pool checkboxes. It starts unchecked. Turning it on adds those locations to Random Port regardless of the region checkboxes, so you can leave every other pool unchecked for mod ports only. Shipyard restrictions and boat placement checks still apply. You can also choose an added location manually without enabling this checkbox. Chronos has its own unchecked pool option for including its original berth in random starts.
 
@@ -35,13 +35,13 @@ Pirate Island is the far-western hideout in Al'Ankh waters. The secret islands s
 
 At Pirate Island, Small boats can use the existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land. Your boat waits in open water off the east coast and is held in place until you board it. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
 
-At Fort Juniper, your boat starts alongside the open side of the lower-left dock with you and your supplies on the pier. If its mooring lines cannot reach the dock cleats, the boat is held in place until you board it.
+At Fort Juniper, the ordinary start places your boat alongside the open side of the lower-left dock with you and your supplies on the pier. Use shipyard berth instead places the boat alongside Old Chronian's shipyard pier and places you and your supplies on that pier. The ordinary start uses mooring lines when they can reach the cleats and otherwise holds the boat in place until you board it.
 
 </details>
 
 ## Starting supplies and mooring
 
-With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Larger supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
+With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Suitable boxes begin in short stacks and settle under the game's physics, while larger or awkward supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 
 Boats that need to be moved away from their normal starting locations receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
@@ -57,7 +57,7 @@ Port authors can optionally [register a preferred starting site](PORT_AUTHORS.md
 
 ## Compatibility and limitations
 
-Large starting loadouts can take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear. Reduce your selection or choose a larger port if this happens.
+Small ports may not have enough clear ground for every barrel and other unstacked supply, so some very large loadouts can still fail to appear. Reduce your selection or choose a larger port if this happens.
 
 For the starting options menu, automatic mod equipment detection looks for small tools that can go into crates. It can find items from untested mods, but cannot guarantee automatic inclusion of every mod item. Please open an issue if you run into any problems with mod items. Equipment in the following mods is tested working and compatible:
 
@@ -95,7 +95,6 @@ HMS Leopard is especially large and can struggle at ports that work for other la
 ## Known issues
 
 - HMS Leopard's starter sail can briefly flash fully deployed when unfurling, then return to its actual reefing position.
-- Large starting loadouts can cause the game to hitch and take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear. Try fewer items or a larger port if this happens.
 
 ## AI Use
 

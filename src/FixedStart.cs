@@ -551,11 +551,19 @@ namespace NewBeginnings
         // boat mutation is permitted until these relocation-only guards pass.
         private static bool TryResolveRelocation(ResolvedStart selected, out string reason)
         {
-            if (selected.UseShipyardBerth && ShipyardStart.TryPlan(selected.Destination, out var yardPlan))
+            if (selected.UseShipyardBerth && ShipyardStart.TryPlan(selected.Destination, out var yardPlan, selected.Body, selected.Ropes))
             {
                 selected.Berth = yardPlan;
+                selected.Recovery = null;
+                selected.FrontMooring = yardPlan.Front;
+                selected.BackMooring = yardPlan.Back;
                 reason = null;
                 return true;
+            }
+            if (selected.UseShipyardBerth)
+            {
+                Plugin.Instance.Warn("The selected shipyard's release marker is unavailable; using this port's ordinary berth.");
+                selected.UseShipyardBerth = false;
             }
             if (selected.Destination != null && selected.Destination.UsesCustomBerth)
             {
@@ -612,7 +620,7 @@ namespace NewBeginnings
                 return false;
             }
             var registered = RecoveryPortsField.GetValue(null) as List<RecoveryPort>;
-            var recovery = custom ? null : registered?.FirstOrDefault(item => item != null && item.parentPort == port &&
+            var recovery = destination.UsesCustomBerth ? null : registered?.FirstOrDefault(item => item != null && item.parentPort == port &&
                 item.boatPos != null && item.mooringFront != null && item.mooringBack != null);
             if (!custom && recovery == null)
             {
@@ -666,10 +674,10 @@ namespace NewBeginnings
             }
             result = new ResolvedStart
             {
-                Port = port, Recovery = recovery, Destination = destination, Berth = relocation.Berth, Boat = boat, Saveable = saveable,
+                Port = port, Recovery = relocation.Recovery, Destination = destination, Berth = relocation.Berth, Boat = boat, Saveable = saveable,
                 Body = body, Ropes = ropes, FrontMooring = frontMooring,
                 BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth,
-                Size = size, UseShipyardBerth = yardStart
+                Size = size, UseShipyardBerth = relocation.UseShipyardBerth
             };
             return true;
         }
