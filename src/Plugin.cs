@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.2.7")]
+    [BepInPlugin(Id, "New Beginnings", "1.2.8")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -1650,7 +1650,6 @@ namespace NewBeginnings
         {
             Config.SettingChanged -= OnConfigSettingChanged;
             FixedStart.CancelCustomStart();
-            SirenSongCogRelocation.Shutdown();
             StartingValues.Cancel();
             CancelBoatSettle();
             CancelPlayerStartTracking();

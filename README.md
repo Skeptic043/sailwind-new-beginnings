@@ -41,6 +41,8 @@ With standard supplies enabled, your starting port determines the regional suppl
 
 Boats that need to be moved away from their normal starting locations receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
+At Siren Song, the Cog for sale moves to the free cleats at the end of the dock so your boat can use the normal berth. This also happens when you load a save with your boat in that berth.
+
 ## Configuration
 
 The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`. After launching once, settings can also be changed in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).

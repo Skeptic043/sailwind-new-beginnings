@@ -1,5 +1,15 @@
 # Release notes
 
+## Version 1.2.8
+
+### Changed
+
+- The start menu no longer hides boats it expects might not fit a location. If a selected start cannot be placed, the menu shows the reason when you press Continue.
+
+### Fixed
+
+- Any boat can now start at Siren Song. The Cog for sale moves to the free cleats at the end of the dock so your boat gets the normal berth. This also happens when you load a save with your boat in that berth.
+
 ## Version 1.2.7
 
 ### Fixed
@@ -16,12 +26,6 @@
 ### Fixed
 
 - Harbours with short piers, such as Fort Juniper, now find a berth for large boats.
-
-## Version 1.2.5
-
-### Changed
-
-- When Age of Exploration's Santa Maria occupies Siren Song's alternate berth, a different selected starter now uses the Cog's berth while the unpurchased Cog waits offshore. The Cog keeps its normal purchase state and its offshore position is restored from the save until it is purchased.
 
 ## Version 1.2.4
 
