@@ -121,7 +121,7 @@ namespace NewBeginnings
                 var island = port != null ? port.transform.parent : null;
                 var docks = island == null ? new GPButtonDockMooring[0] :
                     island.GetComponentsInChildren<GPButtonDockMooring>(true).Where(dock => dock != null &&
-                        dock.transform.parent == island && dock.spring != null).ToArray();
+                        dock.transform.parent == island).ToArray();
                 var a = docks.Where(dock => dock.name == EndCleatA).ToArray();
                 var b = docks.Where(dock => dock.name == EndCleatB).ToArray();
                 if (a.Length != 1 || b.Length != 1) { Skip($"{EndCleatA} and {EndCleatB} were not found once each."); return false; }
