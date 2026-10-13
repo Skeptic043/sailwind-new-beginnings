@@ -9,7 +9,7 @@ namespace NewBeginnings
 {
     // A scene-bound preflight, held in a live frame through origin/scenery movement.
     // It does not own or mutate boats, native recovery registrations or providers.
-    internal enum StartBerthMode { Moored, Anchored, OffshoreHeld }
+    internal enum StartBerthMode { Moored, Anchored, OffshoreHeld, ShipyardHeld }
 
     internal sealed class StartBerthPlan
     {
@@ -22,7 +22,7 @@ namespace NewBeginnings
         internal SpringJoint FrontSpring, BackSpring;
         internal StartBerthMode Mode;
         internal bool Anchored { get => Mode == StartBerthMode.Anchored; set => Mode = value ? StartBerthMode.Anchored : StartBerthMode.Moored; }
-        internal bool OffshoreHeld => Mode == StartBerthMode.OffshoreHeld;
+        internal bool OffshoreHeld => Mode == StartBerthMode.OffshoreHeld || Mode == StartBerthMode.ShipyardHeld;
         internal string OffshoreDiagnostics;
         // A best-effort plan records the checks it did not pass. Revalidation
         // repeats only the checks that passed, and the warning names the rest.
@@ -152,10 +152,11 @@ namespace NewBeginnings
             var survey = new Survey(destination.HiddenKey == "pirate");
             if (destination.HiddenKey == "saffron")
             {
-                // Saffron's authored marker is on land. Land beside it and hold the
-                // boat in open water off the east coast.
+                // Use the east beach for arrival and hold the boat nearby, bow north.
+                // An explicitly registered shore marker still takes precedence.
                 if (destination.Marker == null) return Fail("The Saffron starting marker is missing.", out reason);
-                var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : destination.Marker.position;
+                var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position :
+                    destination.Island.transform.TransformPoint(new Vector3(220f, 1.1f, 169.9f));
                 var landingVerified = Plugin.Instance.TryFindStartShore(destination, seed, seed, out var shore, out _, out var shoreReason);
                 if (!landingVerified) shore = seed;
                 if (!TryFixedOffshoreHold(destination, body, hull, height, SaffronOffshoreCenter, Vector3.forward,
@@ -163,7 +164,7 @@ namespace NewBeginnings
                 if (!landingVerified)
                 {
                     plan.LandingVerified = false;
-                    Note(plan, "Best-effort landing: Saffron's dry landing was not verified, so the player starts at the authored landing marker. " + shoreReason);
+                    Note(plan, "Best-effort landing: Saffron's dry landing was not verified, so the player starts at the selected beach position. " + shoreReason);
                 }
                 return true;
             }
@@ -508,9 +509,9 @@ namespace NewBeginnings
         // Island-local hull centers for the fixed offshore holds, chosen from
         // installed terrain. Pirate's lies in deep water southeast of its
         // enclosed inner lagoon with the bow east. Saffron's lies off the east
-        // coast, 62 m east of its on-land marker, with the bow north.
+        // coast, about 22.5 m from the beach at this latitude, with the bow north.
         private static readonly Vector3 PirateOffshoreCenter = new Vector3(60.7f, 0f, -77.8f);
-        private static readonly Vector3 SaffronOffshoreCenter = new Vector3(262.7f, 0f, 169.9f);
+        private static readonly Vector3 SaffronOffshoreCenter = new Vector3(250f, 0f, 169.9f);
 
         private static bool TryFixedOffshoreHold(PortChoice destination, Rigidbody body, Hull hull, float height,
             Vector3 localCenter, Vector3 localForward, Survey survey,
@@ -704,6 +705,9 @@ namespace NewBeginnings
         internal static bool Revalidate(StartBerthPlan plan, Rigidbody body, BoatMooringRopes ropes, out string reason)
         {
             reason = null;
+            if (plan?.Mode == StartBerthMode.ShipyardHeld)
+                return StartDestinations.IsCurrent(plan.Destination) && plan.Frame != null &&
+                    Finite(plan.Position) && Finite(plan.ShorePosition) && IsFiniteRotation(plan.Rotation);
             var survey = new Survey();
             if (plan == null || !StartDestinations.IsCurrent(plan.Destination) ||
                 !StartDestinations.SceneryReady(plan.Destination) || plan.Frame != plan.Destination.DockRoot ||

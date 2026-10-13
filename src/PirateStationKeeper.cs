@@ -40,7 +40,7 @@ namespace NewBeginnings
             heldBody = null; heldFrame = null; position = default(Vector3); yaw = 0f;
             if (active == null || active.body == null || active.frame == null) return false;
             // A save can run after boarding but before the next physics tick.
-            if (GameState.playing && GameState.currentBoat == active.body.transform)
+            if (GameState.playing && UserHasTakenControl(active.body))
             { RemoveActive(); return false; }
             heldBody = active.body; heldFrame = active.frame;
             position = active.localPosition; yaw = active.localYaw;
@@ -63,7 +63,7 @@ namespace NewBeginnings
             awaitingLoad = false;
             if (Plugin.Instance == null || !Plugin.Instance.isActiveAndEnabled ||
                 GameState.currentlyLoading || body == null || frame == null ||
-                (GameState.playing && GameState.currentBoat == body.transform))
+                (GameState.playing && UserHasTakenControl(body)))
             { Remove(this); return; }
             if (body.isKinematic) return;
             var target = frame.TransformPoint(localPosition);
@@ -85,6 +85,10 @@ namespace NewBeginnings
             var outwardSpeed = Mathf.Min(Vector3.Dot(velocity, direction), 0f);
             return Vector3.ClampMagnitude(direction * (distance - 0.25f - outwardSpeed * 2f), 1f);
         }
+
+        private static bool UserHasTakenControl(Rigidbody heldBody) =>
+            GameState.currentBoat == heldBody.transform || GameState.currentShipyard != null &&
+                GameState.currentShipyard.GetCurrentBoat() == heldBody.gameObject;
 
         internal static bool TryStowedPosition(Rigidbody hull, Rigidbody anchor, ConfigurableJoint joint,
             Quaternion rotation, out Vector3 position)

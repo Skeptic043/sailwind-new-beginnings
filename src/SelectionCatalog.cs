@@ -45,6 +45,8 @@ namespace NewBeginnings
     {
         internal PortChoice Port;
         internal BoatChoice Boat;
+        internal bool UseShipyardBerth;
+        internal bool UsesCustomBerth => Port.UsesCustomBerth || UseShipyardBerth;
     }
 
     internal sealed class SelectionCatalog
@@ -538,12 +540,14 @@ namespace NewBeginnings
                     // selection still samples the complete set uniformly.
                     if (availabilityOnly)
                     {
-                        chosen = new StartPair { Port = port, Boat = boat };
+                        chosen = new StartPair { Port = port, Boat = boat,
+                            UseShipyardBerth = settings.UseShipyardBerth && ShipyardStart.Available(port) };
                         return true;
                     }
                     ++count;
                     if (random.Next(count) == 0)
-                        chosen = new StartPair { Port = port, Boat = boat };
+                        chosen = new StartPair { Port = port, Boat = boat,
+                            UseShipyardBerth = settings.UseShipyardBerth && ShipyardStart.Available(port) };
                 }
             if (chosen != null) return true;
             reason = settings.RandomPort && settings.ShipyardPortsOnly
@@ -557,6 +561,7 @@ namespace NewBeginnings
     {
         internal bool RandomPort { get; set; }
         internal bool ShipyardPortsOnly { get; set; }
+        internal bool UseShipyardBerth { get; set; }
         internal bool RandomBoat { get; set; }
         internal int PortIndex { get; set; }
         internal string DestinationKey { get; set; }

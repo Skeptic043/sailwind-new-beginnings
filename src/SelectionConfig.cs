@@ -9,6 +9,7 @@ namespace NewBeginnings
         private readonly ConfigEntry<string> lastDestination;
         private readonly ConfigEntry<bool> randomPort;
         private readonly ConfigEntry<bool> shipyardPortsOnly;
+        private readonly ConfigEntry<bool> useShipyardBerth;
         private readonly ConfigEntry<bool> includeModPorts;
         private readonly ConfigEntry<bool> enablePirateIsland;
         private readonly ConfigEntry<bool> enableSaffronIsland;
@@ -45,6 +46,8 @@ namespace NewBeginnings
                 "Choose a random starting location from the checked geographic pools and enabled mod ports.");
             shipyardPortsOnly = file.Bind("Selection", "ShipyardPortsOnly", false,
                 "When Random Port is enabled, limit eligible locations to detected shipyards. Ignore individual island exclusions without changing them. Spoiler location options still apply.");
+            useShipyardBerth = file.Bind("Selection", "UseShipyardBerth", false,
+                "Place the starting boat at the selected shipyard's release berth when available, with the player and supplies ashore. Applies to manual and random starts. Does not enter shipyard service automatically.");
             includeModPorts = file.Bind("Random Port Pools", "IncludeModPorts", false,
                 "Include detected mod starting locations in random starts regardless of their geographic pool. Shipyard, spoiler and placement requirements still apply.");
             enablePirateIsland = file.Bind("Spoilers", "EnablePirateIsland", false,
@@ -100,6 +103,7 @@ namespace NewBeginnings
             Settings.DestinationKey = lastDestination.Value ?? "";
             Settings.RandomPort = randomPort.Value;
             Settings.ShipyardPortsOnly = shipyardPortsOnly.Value;
+            Settings.UseShipyardBerth = useShipyardBerth.Value;
             Settings.IncludeModPorts = includeModPorts.Value;
             Settings.EnablePirateIsland = enablePirateIsland.Value;
             Settings.EnableSaffronIsland = enableSaffronIsland.Value;
@@ -141,6 +145,7 @@ namespace NewBeginnings
             lastDestination.Value = Settings.DestinationKey ?? "";
             randomPort.Value = Settings.RandomPort;
             shipyardPortsOnly.Value = Settings.ShipyardPortsOnly;
+            useShipyardBerth.Value = Settings.UseShipyardBerth;
             includeModPorts.Value = Settings.IncludeModPorts;
             enablePirateIsland.Value = Settings.EnablePirateIsland;
             enableSaffronIsland.Value = Settings.EnableSaffronIsland;

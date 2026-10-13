@@ -16,7 +16,9 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 ## How it works
 
-Choose a port and boat, or randomize one or both, then press Continue to start a new game. Turn on Random Port or Random Boat to change its options and open the exclusion menu. In the exclusion menu, uncheck entries to leave them out of the pool for random starts, then click Done to save changes. Shipyard Ports Only limits random starts to locations with a detected shipyard.
+Choose a port and boat, or randomize one or both, then press Continue to start a new game. Open Spawn options to adjust random port pools, boat sizes, shipyard settings and individual exclusions. Turn on Random Port or Random Boat to edit its filters. In the exclusion menu, uncheck entries to leave them out of random starts, then click Done to save changes or Back to discard them. Shipyard Ports Only limits random starts to locations with a detected shipyard.
+
+Use shipyard berth starts your boat at the selected shipyard's release berth when one is available. It works with manually selected and random ports, and starts disabled. The boat waits there until you board it or admit it to the shipyard, while you and your supplies start ashore nearby. Ports without a shipyard keep their ordinary starting berth.
 
 When added ports are detected, Mod ports appears with the Random Port pool checkboxes. It starts unchecked. Turning it on adds those locations to Random Port regardless of the region checkboxes, so you can leave every other pool unchecked for mod ports only. Shipyard restrictions and boat placement checks still apply. You can also choose an added location manually without enabling this checkbox. Chronos has its own unchecked pool option for including its original berth in random starts.
 

@@ -219,7 +219,7 @@ namespace NewBeginnings
             Func<Transform, IEnumerator> continuation = null)
         {
             sequence = null;
-            if (pending == null || !pending.Port.UsesCustomBerth || !ReferenceEquals(menu, pendingMenu)) return false;
+            if (pending == null || !pending.UsesCustomBerth || !ReferenceEquals(menu, pendingMenu)) return false;
             var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
             pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
             sequence = PrepareCustomStart(menu, pair, options, snapshot, nativeStart, continuation);
@@ -427,8 +427,17 @@ namespace NewBeginnings
             CustomPlacement placement = null;
             try
             {
-                if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason))
+                if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason, pair.UseShipyardBerth))
                     return NoPlacement("The selected start could not be planned: " + reason);
+                if (selected.Berth == null)
+                {
+                    // The selected yard disappeared during scenery loading.
+                    // Keep the ordinary berth selected by the existing native
+                    // resolver, while completing this already-started lifecycle.
+                    Plugin.Instance?.Warn("The shipyard berth is unavailable. Using this location's ordinary starting berth.");
+                    selected.Berth = OrdinaryBerthPlan(selected);
+                    selected.Recovery = null;
+                }
                 if (selected.Boat != pair.Boat.Boat || selected.Saveable != pair.Boat.Saveable)
                     Plugin.Instance?.Warn("The selected boat changed while scenery loaded. Using the boat now loaded for that selection.");
                 if (selected.Ropes == null || selected.Ropes.anchor == null || selected.Ropes.GetAnchorController() == null)
@@ -453,6 +462,23 @@ namespace NewBeginnings
         {
             Plugin.Instance?.Error(reason + " This start is incomplete and no regional start was substituted.", null);
             return null;
+        }
+
+        private static StartBerthPlan OrdinaryBerthPlan(ResolvedStart selected)
+        {
+            var native = selected.NativeBerth;
+            var rotation = native != null ? selected.Body.rotation : selected.Recovery.boatPos.rotation;
+            var position = native != null ? selected.Body.position :
+                AdjustLargeBoatBerth(selected, GetBerthPosition(selected), rotation);
+            var shore = native != null ? native.ShorePosition : selected.Recovery.transform.position;
+            var frame = selected.Destination.DockRoot;
+            return new StartBerthPlan { Destination = selected.Destination, Frame = frame,
+                LocalPosition = frame.InverseTransformPoint(position), LocalRotation = Quaternion.Inverse(frame.rotation) * rotation,
+                LocalShorePosition = frame.InverseTransformPoint(shore),
+                Front = selected.FrontMooring, Back = selected.BackMooring,
+                FrontSpring = selected.FrontMooring?.spring, BackSpring = selected.BackMooring?.spring,
+                FrontRope = native?.FrontRope, BackRope = native?.BackRope,
+                ClearanceVerified = false, DepartureVerified = false, LandingVerified = false };
         }
 
         private static bool NativeRecoveryReady(out string reason)
@@ -540,7 +566,7 @@ namespace NewBeginnings
                     anchorBody.isKinematic = false;
                     s.Ropes.anchor.OnLoad(false, s.Berth.AnchorLength);
                 }
-                else if (s.Berth.Mode == StartBerthMode.OffshoreHeld)
+                else if (s.Berth.OffshoreHeld)
                 {
                     StowOffshoreAnchor();
                     stationKeeper = PirateStationKeeper.Attach(s.Body, s.Berth.Frame);
@@ -549,6 +575,8 @@ namespace NewBeginnings
                 {
                     anchorBody.position = s.Body.transform.TransformPoint(anchorBoatLocal);
                     frontRope = s.Berth.FrontRope; backRope = s.Berth.BackRope;
+                    if (frontRope == null || backRope == null)
+                        TryStartupSetup("choose starter mooring ropes", () => ChooseMooringRopes(s, out frontRope, out backRope));
                     var frontReady = TryMoorAt(frontRope, s.FrontMooring, s.Body);
                     var backReady = TryMoorAt(backRope, s.BackMooring, s.Body);
                     if (!frontReady || !backReady) { frontRope = null; backRope = null; }

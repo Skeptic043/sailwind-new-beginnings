@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.2.10")]
+    [BepInPlugin(Id, "New Beginnings", "1.3.0")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -1015,10 +1015,10 @@ namespace NewBeginnings
             if (docksideMarker == null) return false;
             if (docksideFrontMooring == null || docksideBackMooring == null)
             {
-                // An anchored custom start has no dock pair. It still needs a
+                // A held start can have no dock pair. It still needs a
                 // verified wave upper bound, never just the sampler's mean sea
                 // level output. All ordinary surface and clearance rules apply.
-                if (docksideDestination == null || !docksideDestination.UsesCustomBerth ||
+                if (docksideDestination == null ||
                     !TrySeaUpperBound(out var upperBound)) return false;
                 return point.y >= upperBound + .35f &&
                     point.y <= docksideMarker.position.y + (IsTerrainCollider(candidate) ? 6f : 3f);

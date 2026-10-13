@@ -1,5 +1,23 @@
 # Release notes
 
+## Version 1.3.0
+
+### Added
+
+- Spawn options groups random port pools, boat sizes, shipyard settings and exclusions in a separate menu. Existing choices carry over.
+- Use shipyard berth optionally starts your boat at the selected shipyard's release berth, with you and your supplies ashore nearby. It applies to manual and random starts and is disabled by default.
+
+### Changed
+
+- The main menu keeps port and boat selection, random toggles, Spawn options and Starting options. Exclusion menus have separate Back and Done buttons to discard or save changes.
+
+<details>
+<summary>Spoiler: Saffron starting position</summary>
+
+- Moved the landing closer to the water and the boat closer to shore, keeping the boat facing north.
+
+</details>
+
 ## Version 1.2.10
 
 ### Changed

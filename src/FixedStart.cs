@@ -15,6 +15,7 @@ namespace NewBeginnings
         public RecoveryPort Recovery;
         internal PortChoice Destination;
         internal StartBerthPlan Berth;
+        internal bool UseShipyardBerth;
         internal Transform ShoreFrame => Recovery != null ? Recovery.transform : Destination?.DockRoot;
         internal Transform BerthFrame => Recovery != null ? Recovery.boatPos : Berth?.Frame;
         internal IslandHorizon Island => Destination?.Island ?? Port?.GetComponentInParent<IslandHorizon>();
@@ -162,14 +163,14 @@ namespace NewBeginnings
                     // The menu lists every structurally usable pair. Check the
                     // chosen recovery berth here, so a problem shows its reason
                     // instead of the regional start silently running in its place.
-                    if (!pair.Port.UsesCustomBerth &&
+                    if (!pair.UsesCustomBerth &&
                         !TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out _, out reason))
                     {
                         activeUi.ShowBlockedStart(reason);
                         plugin.Warn("New game blocked by New Beginnings selection: " + reason);
                         return false;
                     }
-                    if (pair.Port.UsesCustomBerth && (!nativeTweenSeamReady ||
+                    if (pair.UsesCustomBerth && (!nativeTweenSeamReady ||
                         !TryGetNativeStartActors(__instance, out _, out _)))
                     {
                         activeUi.ShowBlockedStart("The native player-start sequence is unavailable for this location.");
@@ -238,7 +239,7 @@ namespace NewBeginnings
                         plugin.Warn("New Beginnings skipped; vanilla new game will run. " + reason);
                         return true;
                     }
-                    customStart = pair.Port.UsesCustomBerth;
+                    customStart = pair.UsesCustomBerth;
                     if (customStart && !nativeTweenSeamReady)
                         throw new InvalidOperationException("The native player-start seam is unavailable.");
                     // Scrambled Seas may move every island, recovery marker and boat
@@ -252,7 +253,7 @@ namespace NewBeginnings
                     pendingOptions = plugin.StartOptions.Copy();
                     if (!pendingOptions.TryValidate(out var optionsReason))
                         throw new InvalidOperationException(optionsReason);
-                    if (pair.Port.UsesCustomBerth)
+                    if (pair.UsesCustomBerth)
                     {
                         pendingCustomSnapshot = new CustomStartSnapshot(__instance, (int)previousRegion);
                         customFlightGeneration = customGeneration;
@@ -460,7 +461,7 @@ namespace NewBeginnings
 
         internal static bool ApplyPendingAtStart(StartMenu menu, ref Transform startPos)
         {
-            if (pending == null || !ReferenceEquals(menu, pendingMenu) || pending.Port.UsesCustomBerth) return false;
+            if (pending == null || !ReferenceEquals(menu, pendingMenu) || pending.UsesCustomBerth) return false;
             var pair = pending;
             var options = pendingOptions;
             pending = null;
@@ -550,6 +551,12 @@ namespace NewBeginnings
         // boat mutation is permitted until these relocation-only guards pass.
         private static bool TryResolveRelocation(ResolvedStart selected, out string reason)
         {
+            if (selected.UseShipyardBerth && ShipyardStart.TryPlan(selected.Destination, out var yardPlan))
+            {
+                selected.Berth = yardPlan;
+                reason = null;
+                return true;
+            }
             if (selected.Destination != null && selected.Destination.UsesCustomBerth)
             {
                 if (!StartBerthPlanner.TryPlan(selected.Destination, selected.Body, selected.Ropes, selected.Size,
@@ -580,14 +587,16 @@ namespace NewBeginnings
             return true;
         }
 
-        private static bool TryResolve(PortChoice destination, int boatSceneIndex, BoatSize? size, out ResolvedStart result, out string reason)
+        private static bool TryResolve(PortChoice destination, int boatSceneIndex, BoatSize? size, out ResolvedStart result, out string reason,
+            bool useShipyardBerth = false)
         {
             result = null;
             reason = null;
             if (destination == null || !StartDestinations.IsCurrent(destination))
             { reason = "The selected starting location is no longer loaded."; return false; }
             var portIndex = destination.Index;
-            var custom = destination.UsesCustomBerth;
+            var yardStart = useShipyardBerth && ShipyardStart.Available(destination);
+            var custom = destination.UsesCustomBerth || yardStart;
             var ports = Port.ports;
             if (!custom && (ports == null || portIndex < 0 || portIndex >= ports.Length || ports[portIndex] == null ||
                 ports[portIndex].portIndex != portIndex))
@@ -636,7 +645,8 @@ namespace NewBeginnings
             NativeBerth.Plan nativeBerth = null;
             if (!custom) NativeBerth.TryResolve(port, boat, saveable, body, ropes, out nativeBerth);
             var relocation = new ResolvedStart { Port = port, Recovery = recovery,
-                Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes, Size = size };
+                Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes, Size = size,
+                UseShipyardBerth = yardStart };
             if (nativeBerth == null && !TryResolveRelocation(relocation, out reason)) return false;
             frontMooring = nativeBerth != null ? nativeBerth.Front : relocation.FrontMooring;
             backMooring = nativeBerth != null ? nativeBerth.Back : relocation.BackMooring;
@@ -659,7 +669,7 @@ namespace NewBeginnings
                 Port = port, Recovery = recovery, Destination = destination, Berth = relocation.Berth, Boat = boat, Saveable = saveable,
                 Body = body, Ropes = ropes, FrontMooring = frontMooring,
                 BackMooring = backMooring, StarterSet = sets[0], Region = region, NativeBerth = nativeBerth,
-                Size = size
+                Size = size, UseShipyardBerth = yardStart
             };
             return true;
         }
