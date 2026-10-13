@@ -26,26 +26,16 @@ namespace NewBeginnings
         internal static bool IsSirenSong(Port port) => port != null && port.transform.parent != null &&
             port.transform.parent.name == IslandName;
 
-        // The unsold Cog still holds the recovery springs until VacateForStart
-        // moves it, so berth checks before that point treat it as leaving.
-        internal static Rigidbody VacatingBody(ResolvedStart selected)
+        internal static bool VacateForStart(ResolvedStart selected)
         {
-            if (selected == null || !IsSirenSong(selected.Port)) return null;
-            var cog = FindCog();
-            return cog != null && !cog.isPurchased() && cog.GetComponent<SaveableObject>() != selected.Saveable
-                ? cog.GetComponent<Rigidbody>() : null;
-        }
-
-        internal static void VacateForStart(ResolvedStart selected)
-        {
-            if (selected == null || !IsSirenSong(selected.Port)) return;
+            if (selected == null || !IsSirenSong(selected.Port)) return false;
             var cog = FindCog();
             if (cog != null && cog.GetComponent<SaveableObject>() == selected.Saveable)
             {
                 Plugin.Instance?.Report("Siren Song: the Cog is the selected starting boat, so it keeps the recovery berth.");
-                return;
+                return false;
             }
-            Move(cog, selected.Port, selected.Recovery, "new game");
+            return Move(cog, selected.Port, selected.Recovery, "new game");
         }
 
         [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
@@ -113,35 +103,35 @@ namespace NewBeginnings
 
         // Never throws and never blocks the caller. A step that cannot be done
         // is logged and the Cog is left as it is at that point.
-        private static void Move(PurchasableBoat cog, Port port, RecoveryPort recovery, string occasion)
+        private static bool Move(PurchasableBoat cog, Port port, RecoveryPort recovery, string occasion)
         {
-            void Skip(string reason) => Plugin.Instance?.Warn($"Siren Song: the Cog was not moved to the end of the dock ({occasion}): {reason}");
+            var moved = false;
+            void Skip(string reason) => Plugin.Instance?.Warn(moved
+                ? $"Siren Song: the Cog reached the end of the dock, but its mooring setup did not finish ({occasion}): {reason}"
+                : $"Siren Song: the Cog did not reach the end of the dock ({occasion}): {reason}");
             try
             {
-                if (cog == null) { Skip("the Cog for sale (scene boat 40) was not found."); return; }
+                if (cog == null) { Skip("the Cog for sale (scene boat 40) was not found."); return false; }
                 if (cog.isPurchased())
                 {
                     Plugin.Instance?.Report($"Siren Song: the Cog is owned, so it stays where it is ({occasion}).");
-                    return;
+                    return false;
                 }
-                if (recovery == null || recovery.boatPos == null) { Skip("Siren Song's recovery berth is unavailable."); return; }
+                if (recovery == null || recovery.boatPos == null) { Skip("Siren Song's recovery berth is unavailable."); return false; }
                 var island = port != null ? port.transform.parent : null;
                 var docks = island == null ? new GPButtonDockMooring[0] :
                     island.GetComponentsInChildren<GPButtonDockMooring>(true).Where(dock => dock != null &&
                         dock.transform.parent == island && dock.spring != null).ToArray();
                 var a = docks.Where(dock => dock.name == EndCleatA).ToArray();
                 var b = docks.Where(dock => dock.name == EndCleatB).ToArray();
-                if (a.Length != 1 || b.Length != 1) { Skip($"{EndCleatA} and {EndCleatB} were not found once each."); return; }
+                if (a.Length != 1 || b.Length != 1) { Skip($"{EndCleatA} and {EndCleatB} were not found once each."); return false; }
                 var front = a[0];
                 var back = b[0];
                 var body = cog.GetComponent<Rigidbody>();
                 var ropes = cog.GetComponent<BoatMooringRopes>();
                 if (body == null || ropes == null || ropes.ropes == null || ropes.ropes.Length < 2 || ropes.ropes.Any(rope => rope == null))
-                { Skip("the Cog has no hull body or mooring ropes."); return; }
-                foreach (var dock in new[] { front, back })
-                    if (dock.spring.connectedBody != null && dock.spring.connectedBody != body)
-                    { Skip($"{dock.name} is in use by {dock.spring.connectedBody.name}."); return; }
-                if (!TryReadHull(body, out var hull)) { Skip("the Cog's hull capsule could not be measured."); return; }
+                { Skip("the Cog has no hull body or mooring ropes."); return false; }
+                if (!TryReadHull(body, out var hull)) { Skip("the Cog's hull capsule could not be measured."); return false; }
 
                 var root = body.transform.position;
                 var rotation = body.transform.rotation;
@@ -150,7 +140,7 @@ namespace NewBeginnings
                 {
                     if (!TryBerthPose(hull, Flat(root), Flat(front.transform.position), Flat(back.transform.position),
                         Flat(recovery.boatPos.position), towardBack, out var position, out var yaw))
-                    { Skip("the end-of-dock berth geometry could not be computed."); return; }
+                    { Skip("the end-of-dock berth geometry could not be computed."); return false; }
                     poses.Add(new KeyValuePair<Vector3, Quaternion>(new Vector3(position.x, root.y, position.y),
                         YawRotation(yaw) * rotation));
                 }
@@ -158,7 +148,11 @@ namespace NewBeginnings
                 var anchorBody = ropes.anchor != null ? ropes.anchor.GetComponent<Rigidbody>() : null;
                 var anchorLocal = anchorBody != null ? body.transform.InverseTransformPoint(anchorBody.position) : Vector3.zero;
                 var anchorRotation = anchorBody != null ? Quaternion.Inverse(rotation) * anchorBody.rotation : Quaternion.identity;
-                ropes.UnmoorAllRopes();
+                try { ropes.UnmoorAllRopes(); }
+                catch (Exception exception)
+                {
+                    Plugin.Instance?.Warn("Siren Song: an original Cog mooring could not be released. Moving it to the requested berth anyway. " + exception.Message);
+                }
                 // Face whichever way gives the boat's own ropes the better
                 // dock-facing pair, using the same rope choice as a starter.
                 var best = -1;
@@ -167,6 +161,7 @@ namespace NewBeginnings
                 for (var index = 0; index < poses.Count; ++index)
                 {
                     Place(body, poses[index].Key, poses[index].Value);
+                    moved = true;
                     if (!FixedStart.TryPairMooringRopes(body.transform, ropes.ropes, front.transform.position,
                         back.transform.position, out _, out _, out var priority, out var distance, out _)) continue;
                     if (priority < bestPriority || priority == bestPriority && distance < bestDistance)
@@ -174,6 +169,7 @@ namespace NewBeginnings
                 }
                 if (best < 0) best = 0;
                 Place(body, poses[best].Key, poses[best].Value);
+                moved = true;
                 if (anchorBody != null)
                 {
                     anchorBody.position = body.transform.TransformPoint(anchorLocal);
@@ -184,17 +180,21 @@ namespace NewBeginnings
                 Physics.SyncTransforms();
                 if (!FixedStart.TryPairMooringRopes(body.transform, ropes.ropes, front.transform.position,
                     back.transform.position, out var frontRope, out var backRope, out _, out _, out _))
-                { Skip("the Cog has no distinct mooring ropes at opposite ends; it was left unmoored at the end of the dock."); return; }
-                FixedStart.MoorAt(frontRope, front, body);
-                FixedStart.MoorAt(backRope, back, body);
+                { Skip("the Cog has no distinct mooring ropes at opposite ends; it was left unmoored at the end of the dock."); return true; }
+                var frontReady = FixedStart.TryMoorAt(frontRope, front, body);
+                var backReady = FixedStart.TryMoorAt(backRope, back, body);
+                if (!frontReady || !backReady)
+                { Skip("one or both end cleats could not be connected. The selected start continues."); return true; }
                 var line = Flat(back.transform.position) - Flat(front.transform.position);
                 var bow = Vector2.Dot(Flat(body.transform.forward), line) >= 0f ? back : front;
                 Plugin.Instance?.Report($"Siren Song: moved the unsold Cog to {front.name} and {back.name} ({occasion}), " +
                     $"hull axis {hull.Radius + DockClearance:F2} m out from the cleats, bow toward {bow.name}.");
+                return true;
             }
             catch (Exception exception)
             {
                 Skip(exception.Message);
+                return moved;
             }
         }
 

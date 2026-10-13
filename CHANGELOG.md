@@ -1,5 +1,17 @@
 # Release notes
 
+## Version 1.2.9
+
+### Fixed
+
+- Mooring and other optional setup failures keep your selected boat, location and starting options instead of substituting a regional start.
+- A selected starter boat is still granted if its purchase prompt disappears during the new-game transition.
+- Offshore boats waiting for you to board resume their hold after saving and loading. This applies to holds saved with this version, including after Scrambled Seas moves the islands.
+
+### Changed
+
+- Removed a repeated supply-space check during startup. Supplies still use the existing placement checks.
+
 ## Version 1.2.8
 
 ### Changed

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    // Runtime-only offshore hold. Ownership can be granted while the player is
+    // Offshore hold. Ownership can be granted while the player is
     // still ashore; boarding, rather than purchase, hands the hull to physics.
     internal sealed class PirateStationKeeper : MonoBehaviour
     {
@@ -11,6 +11,7 @@ namespace NewBeginnings
         private Transform frame;
         private Vector3 localPosition;
         private float localYaw;
+        private bool awaitingLoad;
 
         internal static PirateStationKeeper Attach(Rigidbody body, Transform frame)
         {
@@ -25,6 +26,27 @@ namespace NewBeginnings
 
         internal static void RemoveActive() => Remove(active);
 
+        internal static void Restore(Rigidbody body, Transform frame, Vector3 position, float yaw)
+        {
+            var keeper = Attach(body, frame);
+            keeper.localPosition = position;
+            keeper.localYaw = yaw;
+            keeper.awaitingLoad = true;
+        }
+
+        internal static bool TryGetHold(out Rigidbody heldBody, out Transform heldFrame,
+            out Vector3 position, out float yaw)
+        {
+            heldBody = null; heldFrame = null; position = default(Vector3); yaw = 0f;
+            if (active == null || active.body == null || active.frame == null) return false;
+            // A save can run after boarding but before the next physics tick.
+            if (GameState.playing && GameState.currentBoat == active.body.transform)
+            { RemoveActive(); return false; }
+            heldBody = active.body; heldFrame = active.frame;
+            position = active.localPosition; yaw = active.localYaw;
+            return true;
+        }
+
         internal static void Remove(PirateStationKeeper keeper)
         {
             if (keeper == null) return;
@@ -35,6 +57,10 @@ namespace NewBeginnings
 
         private void FixedUpdate()
         {
+            // Native LoadGame restores objects before its animation finishes
+            // moving the world. Keep the saved target in its island frame.
+            if (awaitingLoad && GameState.currentlyLoading) return;
+            awaitingLoad = false;
             if (Plugin.Instance == null || !Plugin.Instance.isActiveAndEnabled ||
                 GameState.currentlyLoading || body == null || frame == null ||
                 (GameState.playing && GameState.currentBoat == body.transform))

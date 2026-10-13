@@ -41,13 +41,13 @@ With standard supplies enabled, your starting port determines the regional suppl
 
 Boats that need to be moved away from their normal starting locations receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
-At Siren Song, the Cog for sale moves to the free cleats at the end of the dock so your boat can use the normal berth. This also happens when you load a save with your boat in that berth.
+At Siren Song, the Cog for sale moves to the cleats at the end of the dock so your boat can use the normal berth. This also happens when you load a save with your boat in that berth. The move uses that fixed position even if the dock is crowded.
 
 ## Configuration
 
 The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`. After launching once, settings can also be changed in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
-Once startup finishes, including mooring setup and the one-time hull repair, New Beginnings no longer moves the player, boat or supplies or changes their state, and can be safely uninstalled.
+Most setup finishes shortly after starting, including mooring setup and the one-time hull repair. Offshore boats remain held until you board them, and that unfinished hold is saved and restored when you load. Earlier saves without a saved hold do not gain one. At Siren Song, the Cog can also be moved when loading a save. Removing New Beginnings stops these behaviors, so board an offshore starter before uninstalling if you want its hold to finish normally.
 
 Port authors can optionally [register a preferred starting site](PORT_AUTHORS.md) when automatic dock discovery needs more information.
 
