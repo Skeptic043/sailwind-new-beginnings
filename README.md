@@ -16,7 +16,7 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 ## How it works
 
-Choose a port and boat, or randomize one or both, then press Continue to start a new game. The main screen has the region and boat-size checkboxes. Turn on Random Port or Random Boat to edit its filters. Starting options contains Money, Reputation, Equipment and Spawn tabs. Open Spawn for shipyard settings, secret islands and individual exclusions. In the exclusion menu, uncheck entries to leave them out of random starts, then click Done to save changes or Back to discard them. Shipyard Ports Only limits random starts to locations with a detected shipyard.
+Choose a port and boat, or randomize one or both, then press Continue to start a new game. The main screen has the region and boat-size checkboxes. Starting options contains Money, Reputation, Equipment and Spawn tabs. Open Spawn for shipyard settings, secret islands and individual exclusions. You can edit these settings before turning on random selection. In the exclusion menu, uncheck entries to leave them out of random starts, then click Done to save changes or Back to discard them. Shipyard Ports Only limits random starts to locations with a detected shipyard.
 
 Use shipyard berth starts your boat at the selected shipyard's release berth when one is available. It works with manually selected and random ports, and starts disabled. The boat waits there until you board it or admit it to the shipyard, while you and your supplies start ashore nearby. Ports without a shipyard keep their ordinary starting berth.
 
@@ -34,6 +34,8 @@ Secret islands in the Spawn tab enables Chronos, Pirate Island and Saffron Islan
 Pirate Island is the far-western hideout in Al'Ankh waters. The secret islands start disabled, and Mod ports does not enable them. The grouped switch is also available in the Configuration Manager spoiler options. Existing individual location settings remain saved.
 
 At Pirate Island, Small boats can use the existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land. Your boat waits in open water off the east coast and is held in place until you board it. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
+
+At Fort Juniper, your boat starts alongside the open side of the lower-left dock with you and your supplies on the pier. If its mooring lines cannot reach the dock cleats, the boat is held in place until you board it.
 
 </details>
 

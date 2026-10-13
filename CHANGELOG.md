@@ -1,5 +1,17 @@
 # Release notes
 
+## Version 1.3.2
+
+### Changed
+
+- Island and boat exclusions can now be edited at any time. Shipyard ports only can also be changed without turning on Random Port first.
+- Exclusion pages sit higher so their Back and Done buttons remain on the parchment.
+
+### Fixed
+
+- Fort Juniper starts now place every boat alongside the open side of the lower-left dock instead of using the cramped inner harbour.
+- Starting supplies now use their authored collider geometry while inactive, preventing placement checks from treating crates and barrels as tiny points or checking stale positions.
+
 ## Version 1.3.1
 
 ### Changed

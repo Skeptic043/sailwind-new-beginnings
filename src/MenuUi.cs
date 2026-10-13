@@ -488,7 +488,7 @@ namespace NewBeginnings
             portExclusions.description = "Choose which islands can be selected by Random Port.";
             boatExclusions.description = "Choose which boats can be selected by Random Boat.";
             shipyardPortsOnly = MakeButton(page, "Shipyard ports only", -1.05f, -.06f, 1.55f, .44f,
-                () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
+                ToggleShipyardPortsOnly);
             shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Secret island settings still apply.";
             useShipyardBerth = MakeButton(page, "Use shipyard berth", 1.05f, -.06f, 1.55f, .44f,
                 () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); });
@@ -496,13 +496,13 @@ namespace NewBeginnings
             secretIslands = MakeButton(page, "Secret islands", 0f, -.32f, 1.55f, .44f,
                 ToggleSecretIslands);
             secretIslands.description = "Include secret islands in manual and random starting locations.";
-            MakeLabel(page, "Spawn options explanation", "Spawn settings apply immediately", 0f, -.58f, .009f);
         }
 
         private void BuildEditor(Transform root)
         {
             editorRoot = new GameObject("New Beginnings exclusion editor");
             editorRoot.transform.SetParent(root, false);
+            editorRoot.transform.localPosition = Vector3.up * StartingOptionsOffsetY;
             editorRoot.SetActive(false);
             var page = editorRoot.transform;
             editorTitle = MakeLabel(page, "Exclusion editor title", "Random Start Exclusions",
@@ -553,12 +553,9 @@ namespace NewBeginnings
 
         internal void CloseExclusions() => CloseEditor(false);
 
-        private bool CanEditExclusions(bool boats) => settings != null &&
-            (boats ? settings.RandomBoat : settings.RandomPort && !settings.ShipyardPortsOnly);
-
         private void OpenEditor(bool boats)
         {
-            if (startingOptions == null || !startingOptions.SpawnTabOpen || editing || !CanEditExclusions(boats) ||
+            if (startingOptions == null || !startingOptions.SpawnTabOpen || editing || settings == null ||
                 individualExclusions == null || editorRoot == null) return;
             RefreshCatalog();
             // Edit a draft: Done applies it, any other close discards it.
@@ -567,8 +564,7 @@ namespace NewBeginnings
             editingBoats = boats;
             editorPage = 0;
             startingOptions.ShowExclusionEditor(true);
-            // Set both tabs from the current random modes before activation,
-            // including the first opening and every reopening of this page.
+            // Prepare the draft before activating either exclusion tab.
             RefreshEditor();
             editorRoot.SetActive(true);
             HideNativeRegionChoice();
@@ -592,7 +588,7 @@ namespace NewBeginnings
 
         private void ShowEditorTab(bool boats)
         {
-            if (!editing || !CanEditExclusions(boats) || editingBoats == boats) return;
+            if (!editing || editingBoats == boats) return;
             editingBoats = boats;
             editorPage = 0;
             RefreshEditor();
@@ -613,7 +609,7 @@ namespace NewBeginnings
 
         private void ToggleEditorRow(int row)
         {
-            if (!editing || !CanEditExclusions(editingBoats) || editorDraft == null) return;
+            if (!editing || editorDraft == null) return;
             var index = editorPage * EditorRowsPerPage + row;
             if (editingBoats)
             {
@@ -637,16 +633,6 @@ namespace NewBeginnings
         private void RefreshEditor()
         {
             if (!editing || catalog == null || editorDraft == null) return;
-            if (!CanEditExclusions(editingBoats))
-            {
-                if (!CanEditExclusions(!editingBoats))
-                {
-                    CloseEditor(false);
-                    return;
-                }
-                editingBoats = !editingBoats;
-                editorPage = 0;
-            }
             var ports = editingBoats ? null : EditorPorts();
             var boats = editingBoats ? EditorBoats() : null;
             var count = editingBoats ? boats.Length : ports.Length;
@@ -656,11 +642,8 @@ namespace NewBeginnings
             var pages = Math.Max(1, (count + EditorRowsPerPage - 1) / EditorRowsPerPage);
             editorPage = (editorPage % pages + pages) % pages;
             editorTitle.text = editingBoats ? "Random Boat Exclusions" : "Random Island Exclusions";
-            var showTabs = CanEditExclusions(false) && CanEditExclusions(true);
-            SetButtonVisible(editorIslands, showTabs);
-            SetButtonVisible(editorBoats, showTabs);
-            SetEnabled(editorIslands, showTabs && editingBoats);
-            SetEnabled(editorBoats, showTabs && !editingBoats);
+            SetEnabled(editorIslands, editingBoats);
+            SetEnabled(editorBoats, !editingBoats);
             SetButtonText(editorIslands, editingBoats ? "Islands" : "[Islands]");
             SetButtonText(editorBoats, editingBoats ? "[Boats]" : "Boats");
             editorSummary.text = (count - excluded) + " of " + count + " " +
@@ -872,6 +855,12 @@ namespace NewBeginnings
             Changed();
         }
 
+        private void ToggleShipyardPortsOnly()
+        {
+            settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly;
+            Changed();
+        }
+
         private void Changed()
         {
             changed?.Invoke();
@@ -893,7 +882,7 @@ namespace NewBeginnings
             SetButtonVisible(portNext, !EditingAny);
             var showSpawnOptions = startingOptions != null && startingOptions.SpawnTabOpen && !editing;
             SetButtonVisible(shipyardPortsOnly, showSpawnOptions);
-            SetEnabled(shipyardPortsOnly, settings.RandomPort);
+            SetEnabled(shipyardPortsOnly, true);
             SetButtonText(shipyardPortsOnly, (settings.ShipyardPortsOnly ? "[x] " : "[ ] ") + "Shipyard ports only");
             SetButtonVisible(useShipyardBerth, showSpawnOptions);
             SetEnabled(useShipyardBerth, true);
@@ -935,10 +924,10 @@ namespace NewBeginnings
             SetButtonText(boatExclusions, "Boat exclusions...");
             // RefreshCatalog can also run with the editor open. Keep these
             // controls hidden then, including their native pointer colliders.
-            SetButtonVisible(portExclusions, showSpawnOptions && settings.RandomPort);
-            SetButtonVisible(boatExclusions, showSpawnOptions && settings.RandomBoat);
-            SetEnabled(portExclusions, CanEditExclusions(false) && individualExclusions != null);
-            SetEnabled(boatExclusions, settings.RandomBoat && individualExclusions != null);
+            SetButtonVisible(portExclusions, showSpawnOptions);
+            SetButtonVisible(boatExclusions, showSpawnOptions);
+            SetEnabled(portExclusions, individualExclusions != null);
+            SetEnabled(boatExclusions, individualExclusions != null);
 
             continueAvailable = !FixedStart.TryGetStartBlock(out var reason) &&
                 catalog.TryChoose(settings, individualExclusions, new System.Random(1), out _, out reason, availabilityOnly: true);

@@ -149,6 +149,8 @@ namespace NewBeginnings
             if (!StartDestinations.IsCurrent(destination) || Plugin.Instance == null)
                 return Fail("The starting location is no longer loaded.", out reason);
             if (!TryHull(body, ropes, out var hull, out reason) || !TryHeight(body, out var height, out reason)) return false;
+            if (destination.SiteIdentity == "site:oldchronian|fort-juniper" &&
+                TryFortOuter(destination, body, ropes, hull, height, out plan, out reason)) return true;
             var survey = new Survey(destination.HiddenKey == "pirate");
             if (destination.HiddenKey == "saffron")
             {
@@ -196,6 +198,55 @@ namespace NewBeginnings
         }
 
         private const int MaximumCleats = 128;
+
+        private static bool TryFortOuter(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
+            Hull hull, float height, out StartBerthPlan plan, out string reason)
+        {
+            plan = null; reason = null;
+            var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
+                .Where(c => StartDestinations.Loaded(c) && c.transform.parent != null &&
+                    c.transform.parent.name == "FORT_dock4").ToArray();
+            var front = cleats.FirstOrDefault(c => c.name == "FORT_dock_mooring_4S5");
+            var back = cleats.FirstOrDefault(c => c.name == "FORT_dock_mooring_4S1");
+            var forward = front != null && back != null ?
+                Vector3.ProjectOnPlane(front.transform.position - back.transform.position, Vector3.up) : Vector3.zero;
+            if (!Finite(forward) || forward.sqrMagnitude < .01f)
+            {
+                Plugin.Instance.Warn("Fort Juniper's outer dock cleats are unavailable; using the ordinary dock placement.");
+                return false;
+            }
+            forward = forward.normalized;
+            var outward = Vector3.Cross(forward, Vector3.up);
+            var midpoint = (front.transform.position + back.transform.position) * .5f;
+            var rotation = Quaternion.LookRotation(forward, Vector3.up);
+            // Every hull lies alongside Dock4's southwest face, bow northwest. Measure
+            // width and capsule-centre offset instead of choosing by size class.
+            var position = midpoint + outward * (hull.Radius + 2f) - rotation * hull.Center;
+            position.y = height;
+            var seed = midpoint - outward * 2f;
+            var verified = Plugin.Instance.TryFindStartShore(destination, seed, position,
+                out var shore, out _, out _, front.transform, back.transform);
+            if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
+            plan = Make(destination, position, rotation, shore);
+            plan.Front = front; plan.Back = back;
+            plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
+            plan.LandingVerified = verified;
+            plan.ClearanceVerified = plan.DepartureVerified = false;
+            // Reach or an occupied cleat changes securing only. Neither can
+            // move this start back into the inner harbour or prevent it.
+            if (ValidCleat(destination, front, body, ropes) && ValidCleat(destination, back, body, ropes) &&
+                front.spring != back.spring && RopePair(hull, position, rotation, front, back, out var frontRope, out var backRope))
+            {
+                plan.FrontRope = frontRope; plan.BackRope = backRope;
+            }
+            else
+            {
+                plan.Mode = StartBerthMode.OffshoreHeld;
+                plan.OffshoreDiagnostics = "Fort Juniper's starter uses the outer dock edge and is held until boarding because its mooring ropes could not be connected there.";
+            }
+            if (!verified) Note(plan, "Fort Juniper's dry landing was not verified; the player uses the outer dock reference.");
+            return true;
+        }
 
         private static bool TrySurveyDock(PortChoice destination, Rigidbody body, BoatMooringRopes ropes, Hull hull, float height,
             GPButtonDockMooring[] cleats, Survey survey, out StartBerthPlan plan, out string reason)

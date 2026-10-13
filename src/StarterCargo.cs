@@ -1054,55 +1054,19 @@ namespace NewBeginnings
         private static Vector3 PutBottomOnSurface(ShipItem item, Vector3 surface,
             Quaternion rotation)
         {
-            var originalRotation = item.transform.rotation;
-            try
-            {
-                // The native oar may have toppled before relocation. Measure
-                // its bottom after restoring the captured upright rotation.
-                if (rotation != originalRotation)
-                {
-                    item.transform.rotation = rotation;
-                    Physics.SyncTransforms();
-                }
-                return new Vector3(surface.x,
-                    surface.y + BottomOffset(item) + 0.04f, surface.z);
-            }
-            finally
-            {
-                if (rotation != originalRotation)
-                {
-                    item.transform.rotation = originalRotation;
-                    Physics.SyncTransforms();
-                }
-            }
-        }
-
-        private static float BottomOffset(ShipItem item)
-        {
-            var collider = item.GetComponent<Collider>();
-            if (collider != null && collider.enabled &&
-                collider.gameObject.activeInHierarchy)
-            {
-                var bounds = collider.bounds;
-                var offset = item.transform.position.y - bounds.min.y;
-                if (!float.IsNaN(offset) && !float.IsInfinity(offset) &&
-                    bounds.size.y > 0.02f &&
-                    offset >= -0.1f && offset < 2f)
-                    return Mathf.Clamp(offset, 0.05f, 1.5f);
-            }
-            return 0.35f;
+            var bottom = StarterCargoGeometry.TryBounds(item, rotation, out var bounds)
+                ? item.transform.position.y - bounds.min.y : 0.35f;
+            return new Vector3(surface.x, surface.y + bottom + 0.04f, surface.z);
         }
 
         private static float FootprintRadius(ShipItem item)
         {
-            var collider = item.GetComponent<Collider>();
-            if (collider != null && collider.enabled &&
-                collider.gameObject.activeInHierarchy)
+            if (StarterCargoGeometry.TryBounds(item, PlacementRotation(item), out var bounds))
             {
-                var bounds = collider.bounds;
-                if (bounds.size.x > 0.02f && bounds.size.z > 0.02f)
-                    return Mathf.Clamp(Mathf.Max(bounds.extents.x,
-                        bounds.extents.z), 0.18f, 0.7f);
+                var offset = bounds.center - item.transform.position;
+                var x = Mathf.Abs(offset.x) + bounds.extents.x;
+                var z = Mathf.Abs(offset.z) + bounds.extents.z;
+                return Mathf.Max(0.18f, Mathf.Sqrt(x * x + z * z));
             }
             return 0.3f;
         }
@@ -1143,7 +1107,7 @@ namespace NewBeginnings
                     avoidGround.HasValue &&
                     new Vector2(point.x - avoidGround.Value.x,
                         point.z - avoidGround.Value.z).magnitude < 1.1f ||
-                    IsInsideEmbarkVolume(item, point) ||
+                    IsInsideEmbarkVolume(item, point, selectedRotation) ||
                     (oar ? !HasOarBaseSupport(item, point,
                         selectedRotation) : !HasSupportFootprint(item, point)) ||
                     !HasCargoClearance(item, point, selectedRotation, collider))
@@ -1182,7 +1146,7 @@ namespace NewBeginnings
                     Mathf.Abs(surface.y - pivotGround.y) > 0.45f)
                     return false;
             }
-            return !IsInsideEmbarkVolume(item, basePoint);
+            return !IsInsideEmbarkVolume(item, pivotGround, rotation);
         }
 
         private static Vector3 OarBaseGround(ShipItem item,
@@ -1208,7 +1172,7 @@ namespace NewBeginnings
             {
                 var horizontal = new Vector2(candidate.Point.x - slot.Point.x,
                     candidate.Point.z - slot.Point.z);
-                var spacing = slot.LargeSupport ? 1.15f : 0.9f;
+                var spacing = slot.LargeSupport ? 1.15f : 1f;
                 if (horizontal.magnitude <
                     (candidate.Radius + slot.Radius) * spacing)
                     return false;
@@ -1262,7 +1226,7 @@ namespace NewBeginnings
                     continue;
                 if (skipRejectedAnchors && RejectedAnchorGround.Any(point =>
                     AreAnchorCandidatesNear(surface, GroundToWorld(armed, point)))) continue;
-                if (IsInsideEmbarkVolume(support, surface)) continue;
+                if (IsInsideEmbarkVolume(support, surface, PlacementRotation(support))) continue;
                 if (!HasSupportFootprint(support, surface) ||
                     !HasCargoClearance(support, surface, PlacementRotation(support), collider)) continue;
                 // Adjacent planks may be separate colliders, but the surface
@@ -1294,40 +1258,22 @@ namespace NewBeginnings
             // A supply needs its own physical space, not the player's taller
             // capsule. Keep fixture/hull collision checks when probing cargo
             // ground without the player-clearance policy.
-            var source = item.GetComponent<Collider>();
-            if (source == null || !source.enabled) return false;
-            var previousRotation = item.transform.rotation;
-            try
+            if (!StarterCargoGeometry.TryBounds(item, rotation, out var source)) return false;
+            var bounds = CargoClearanceBounds(source, item.transform.position,
+                surface, item.transform.position.y - source.min.y);
+            foreach (var overlap in Physics.OverlapBox(bounds.center, bounds.extents,
+                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
             {
-                if (rotation != previousRotation)
-                {
-                    item.transform.rotation = rotation;
-                    Physics.SyncTransforms();
-                }
-                var bounds = CargoClearanceBounds(source.bounds,
-                    item.transform.position, surface, BottomOffset(item));
-                foreach (var overlap in Physics.OverlapBox(bounds.center, bounds.extents,
-                    Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
-                {
-                    if (overlap == null || overlap == ground ||
-                        overlap.CompareTag("Player") ||
-                        overlap.bounds.max.y <= surface.y + 0.08f) continue;
-                    var otherItem = overlap.GetComponentInParent<ShipItem>();
-                    var otherBody = overlap.GetComponentInParent<ItemRigidbody>();
-                    if (otherItem != null && Captured.Contains(otherItem) ||
-                        otherBody != null && Captured.Contains(otherBody.GetShipItem())) continue;
-                    return false;
-                }
-                return true;
+                if (overlap == null || overlap == ground ||
+                    overlap.CompareTag("Player") ||
+                    overlap.bounds.max.y <= surface.y + 0.08f) continue;
+                var otherItem = overlap.GetComponentInParent<ShipItem>();
+                var otherBody = overlap.GetComponentInParent<ItemRigidbody>();
+                if (otherItem != null && Captured.Contains(otherItem) ||
+                    otherBody != null && Captured.Contains(otherBody.GetShipItem())) continue;
+                return false;
             }
-            finally
-            {
-                if (rotation != previousRotation)
-                {
-                    item.transform.rotation = previousRotation;
-                    Physics.SyncTransforms();
-                }
-            }
+            return true;
         }
 
         private static Bounds CargoClearanceBounds(Bounds source, Vector3 itemPosition,
@@ -1336,31 +1282,17 @@ namespace NewBeginnings
                 (source.center - itemPosition), source.size);
 
         private static bool HasSupportFootprint(ShipItem support, Vector3 center)
-        {
-            if (!IsNativeCup(support)) return HasSupportFootprintCore(support, center);
-            var original = support.transform.rotation;
-            try
-            {
-                support.transform.rotation = PlacementRotation(support);
-                Physics.SyncTransforms();
-                return HasSupportFootprintCore(support, center);
-            }
-            finally
-            {
-                support.transform.rotation = original;
-                Physics.SyncTransforms();
-            }
-        }
+            => HasSupportFootprintCore(support, center);
 
         private static bool HasSupportFootprintCore(ShipItem support, Vector3 center)
         {
             // Test under the base's four edges, not just its pivot. Clamp
             // unusually large modded collider bounds to a local footprint so
             // oversized interaction colliders do not make every dock fail.
-            var collider = support.GetComponent<Collider>();
-            var bounds = collider != null && collider.enabled &&
-                collider.gameObject.activeInHierarchy ? collider.bounds :
-                new Bounds(support.transform.position, Vector3.one * 0.7f);
+            var bounds = StarterCargoGeometry.TryBounds(support, PlacementRotation(support), out var measured)
+                ? measured : new Bounds(support.transform.position, Vector3.one * 0.7f);
+            var pivotOffset = bounds.center - support.transform.position;
+            center += new Vector3(pivotOffset.x, 0f, pivotOffset.z);
             var x = Mathf.Clamp(bounds.extents.x * 0.7f, 0.2f, 0.55f);
             var z = Mathf.Clamp(bounds.extents.z * 0.7f, 0.2f, 0.55f);
             var offsets = new[]
@@ -1533,16 +1465,16 @@ namespace NewBeginnings
             return true;
         }
 
-        private static bool IsInsideEmbarkVolume(ShipItem item, Vector3 surface)
+        private static bool IsInsideEmbarkVolume(ShipItem item, Vector3 surface, Quaternion? rotation = null)
         {
             // ShipItem.OnTriggerEnter remembers every collider tagged
             // EmbarkCol, and its next native update reparents the item to a
             // boat. Probe the space a placed item occupies, not merely the
             // floor point. Any boat's active embark trigger is unsafe here.
-            var horizontal = LooseFootprintRadius(item) + 0.15f;
-            var center = surface + Vector3.up * 1.2f;
-            var halfExtents = new Vector3(horizontal, 1.2f, horizontal);
-            foreach (var overlap in Physics.OverlapBox(center, halfExtents,
+            if (!StarterCargoGeometry.TryBounds(item, rotation ?? item.transform.rotation, out var source)) return true;
+            var bounds = CargoClearanceBounds(source, item.transform.position,
+                surface, item.transform.position.y - source.min.y);
+            foreach (var overlap in Physics.OverlapBox(bounds.center, bounds.extents + Vector3.one * .15f,
                 Quaternion.identity, ~0, QueryTriggerInteraction.Collide))
                 if (overlap != null && overlap.CompareTag("EmbarkCol"))
                     return true;
