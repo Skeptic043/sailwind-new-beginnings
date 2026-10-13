@@ -1,5 +1,14 @@
 # Release notes
 
+## Version 1.3.6
+
+### Changed
+
+- Shipyard berth starts now connect the starter boat to nearby mooring cleats when its lines can reach. The existing hold remains available when a shipyard berth cannot be moored.
+- Fort Juniper now places the player and supplies on the same shipyard dock as the starter boat and closer to it.
+- Starter supply columns hold no more than three items, and remaining ground supplies stay within a slightly tighter area around the player.
+- On'na starts can now use its separate mooring posts. When the native ropes reach the closest pair, the starter boat is moored instead of held nearby.
+
 ## Version 1.3.5
 
 ### Changed

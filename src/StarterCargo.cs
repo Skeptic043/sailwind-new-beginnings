@@ -53,7 +53,7 @@ namespace NewBeginnings
             public Bounds RelativeBounds;
         }
 
-        private const int MaxColumnItems = 4;
+        private const int MaxColumnItems = 3;
         private const float MaxColumnHeight = 2.1f;
         private static Dictionary<ShipItem, CargoShape> planningShapes;
         private static readonly HashSet<ShipItem> StackedItems = new HashSet<ShipItem>();
@@ -1226,7 +1226,7 @@ namespace NewBeginnings
             // large selections around the player and leave unusable gaps.
             foreach (var sample in CompactGroundSamples(groupGround, playerGround, marker, radius))
             {
-                if (Vector3.Distance(sample, playerGround) > 4.75f) continue;
+                if (Vector3.Distance(sample, playerGround) > 4.25f) continue;
                 if (!IsSlotClear(new GroundSlot
                 {
                     Point = oar ? OarBaseGround(item, sample, selectedRotation) : sample,
@@ -1235,7 +1235,7 @@ namespace NewBeginnings
                 if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var point, out var collider) ||
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(point.y - groupGround.y) > 0.45f ||
-                    Vector3.Distance(point, playerGround) > 4.75f ||
+                    Vector3.Distance(point, playerGround) > 4.25f ||
                     avoidGround.HasValue &&
                     new Vector2(point.x - avoidGround.Value.x,
                         point.z - avoidGround.Value.z).magnitude < 1.1f ||
@@ -1535,7 +1535,7 @@ namespace NewBeginnings
                     continue;
                 }
                 var horizontal = new Vector2(point.x - ground.x, point.z - ground.z);
-                // Candidate centers stay within 4.75m; allow some native
+                // Candidate centers stay within 4.25m; allow some native
                 // physics settling while still requiring local land support.
                 if (horizontal.magnitude > 5.5f ||
                     point.y > ground.y + 3.5f || item.currentActualBoat != null)

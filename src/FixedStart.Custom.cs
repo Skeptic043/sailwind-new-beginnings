@@ -569,7 +569,21 @@ namespace NewBeginnings
                 else if (s.Berth.OffshoreHeld)
                 {
                     StowOffshoreAnchor();
-                    stationKeeper = PirateStationKeeper.Attach(s.Body, s.Berth.Frame);
+                    if (s.Berth.Mode == StartBerthMode.ShipyardHeld &&
+                        s.Berth.FrontRope != null && s.Berth.BackRope != null)
+                    {
+                        frontRope = s.Berth.FrontRope; backRope = s.Berth.BackRope;
+                        var frontReady = TryMoorAt(frontRope, s.FrontMooring, s.Body);
+                        var backReady = TryMoorAt(backRope, s.BackMooring, s.Body);
+                        if (frontReady && backReady) s.Berth.Mode = StartBerthMode.Moored;
+                        else
+                        {
+                            if (frontRope.IsMoored()) TryStartupSetup("release an incomplete shipyard mooring", frontRope.Unmoor);
+                            if (backRope.IsMoored()) TryStartupSetup("release an incomplete shipyard mooring", backRope.Unmoor);
+                            frontRope = null; backRope = null;
+                        }
+                    }
+                    if (s.Berth.OffshoreHeld) stationKeeper = PirateStationKeeper.Attach(s.Body, s.Berth.Frame);
                 }
                 else
                 {

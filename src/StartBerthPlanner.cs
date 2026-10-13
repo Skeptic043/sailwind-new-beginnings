@@ -248,6 +248,39 @@ namespace NewBeginnings
             return true;
         }
 
+        internal static bool TryFortShipyardShore(PortChoice destination, Vector3 release, out Vector3 shore)
+        {
+            shore = Vector3.zero;
+            var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true);
+            var left = cleats.FirstOrDefault(c => StartDestinations.Loaded(c) && c.name == "FORT_dock_mooring_1L6");
+            var right = cleats.FirstOrDefault(c => StartDestinations.Loaded(c) && c.name == "FORT_dock_mooring_1R6");
+            if (left == null || right == null) return false;
+            var midpoint = (left.transform.position + right.transform.position) * .5f;
+            var seaward = Vector3.ProjectOnPlane(release - midpoint, Vector3.up);
+            shore = midpoint - seaward.normalized * 2f;
+            return Finite(shore);
+        }
+
+        // Choose native lines at the already selected pose. Failure changes
+        // securing only: the boat remains here under the existing hold.
+        internal static void PrepareShipyardMoorings(StartBerthPlan plan, Rigidbody body, BoatMooringRopes ropes)
+        {
+            if (!TryHull(body, ropes, out var hull, out _)) return;
+            var cleats = plan.Destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
+                .Where(c => ValidCleat(plan.Destination, c, body, ropes))
+                .OrderBy(c => (c.transform.position - plan.Position).sqrMagnitude).ToArray();
+            foreach (var front in cleats)
+                foreach (var back in cleats)
+                {
+                    if (front == back || front.spring == back.spring ||
+                        !RopePair(hull, plan.Position, plan.Rotation, front, back, out var frontRope, out var backRope)) continue;
+                    plan.Front = front; plan.Back = back;
+                    plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
+                    plan.FrontRope = frontRope; plan.BackRope = backRope;
+                    return;
+                }
+        }
+
         internal static bool TryNativeShipyard(PortChoice destination, Shipyard yard, Rigidbody body, BoatMooringRopes ropes,
             out StartBerthPlan plan, out string reason)
         {
@@ -457,7 +490,22 @@ namespace NewBeginnings
             GPButtonDockMooring front = null, back = null;
             if (closest != null) { front = closest.A; back = closest.B; }
             else if (cleats.Length > 0) front = cleats[0];
-            return TryBestEffortOffshore(destination, hull, height, front, back, failure, out plan, out reason);
+            if (!TryBestEffortOffshore(destination, hull, height, front, back, failure, out plan, out reason)) return false;
+            // Separate posts need not have a continuous quay between them.
+            // When support rejected every pair before any pose was tried,
+            // test native rope reach once at this same best-effort pose.
+            if (best.FirstPair == null && front != null && back != null)
+            {
+                if (RopePair(hull, plan.Position, plan.Rotation, front, back, out var frontRope, out var backRope))
+                {
+                    plan.Mode = StartBerthMode.Moored;
+                    plan.ClearanceVerified = plan.DepartureVerified = false;
+                    plan.FrontRope = frontRope; plan.BackRope = backRope;
+                    plan.OffshoreDiagnostics = "Best-effort moored start: continuous dock support was not verified, but the native ropes reach the closest pair at this pose. " + failure;
+                }
+                else plan.OffshoreDiagnostics += " The closest-pair rope test also failed.";
+            }
+            return true;
         }
 
         // Hold the boat beside the dock where a moored hull would lie, or at
@@ -523,7 +571,7 @@ namespace NewBeginnings
             }
             plan = OffshorePlan(destination, position, rotation, landing);
             plan.LandingVerified = landingVerified;
-            plan.OffshoreDiagnostics = "Best-effort offshore start: no surveyed berth let the mooring ropes reach the dock, so the boat is held in open water " +
+            plan.OffshoreDiagnostics = "Best-effort offshore start: no moored berth was selected, so the boat is held in open water " +
                 (front == null ? "at the starting marker" : "beside the closest dock cleats, and the player lands on that dock") + ". " + failure;
             return true;
         }

@@ -60,7 +60,11 @@ namespace NewBeginnings
             if (!Usable(yard)) return false;
             if (HasNativeYard(destination) && (destination.Index == 0 || destination.Index == 9 || destination.Index == 22))
             {
-                if (StartBerthPlanner.TryNativeShipyard(destination, yard, body, ropes, out plan, out var berthReason)) return true;
+                if (StartBerthPlanner.TryNativeShipyard(destination, yard, body, ropes, out plan, out var berthReason))
+                {
+                    StartBerthPlanner.PrepareShipyardMoorings(plan, body, ropes);
+                    return true;
+                }
                 Plugin.Instance.Warn("The shipyard's dock could not be measured (" + berthReason +
                     "). The start uses its release marker and shore reference.");
             }
@@ -73,6 +77,8 @@ namespace NewBeginnings
             var seed = destination.Index == 22 && HasNativeYard(destination) && StartDestinations.Loaded(destination.Recovery)
                 ? destination.Recovery.transform.position
                 : documents != null ? documents.transform.position : yard.transform.position;
+            if (destination.SiteIdentity == "site:oldchronian|fort-juniper" &&
+                StartBerthPlanner.TryFortShipyardShore(destination, marker.position, out var dockShore)) seed = dockShore;
             var verified = Plugin.Instance.TryFindStartShore(destination, seed, seed,
                 out var shore, out _, out var reason);
             if (!verified)
@@ -87,6 +93,7 @@ namespace NewBeginnings
                 LocalRotation = Quaternion.Inverse(frame.rotation) * marker.rotation,
                 LocalShorePosition = frame.InverseTransformPoint(shore),
                 LandingVerified = verified, ClearanceVerified = false, DepartureVerified = false };
+            StartBerthPlanner.PrepareShipyardMoorings(plan, body, ropes);
             return true;
         }
     }
