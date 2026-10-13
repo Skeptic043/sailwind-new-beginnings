@@ -1,5 +1,12 @@
 # Release notes
 
+## Version 1.3.7
+
+### Fixed
+
+- Shipyard starts now choose the closest reachable native mooring pair for the boat's actual rope positions, preventing crossed lines at Fort Juniper.
+- Starter supplies now sample narrow and angled docks more closely without widening their placement area.
+
 ## Version 1.3.6
 
 ### Changed

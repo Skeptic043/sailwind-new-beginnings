@@ -1267,7 +1267,9 @@ namespace NewBeginnings
             if (forward.sqrMagnitude < .01f) forward = Vector3.forward;
             forward.Normalize();
             var right = new Vector3(forward.z, 0f, -forward.x);
-            var spacing = Mathf.Max(.45f, radius * 2f + .08f);
+            // Sample between full item widths so narrow, angled docks are not
+            // skipped. Reserved slots still enforce the actual item spacing.
+            var spacing = Mathf.Max(.45f, radius + .04f);
             var offsets = from x in Enumerable.Range(-3, 7)
                           from z in Enumerable.Range(-3, 7)
                           where x != 0 || z != 0

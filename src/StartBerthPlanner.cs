@@ -267,17 +267,23 @@ namespace NewBeginnings
         {
             if (!TryHull(body, ropes, out var hull, out _)) return;
             var cleats = plan.Destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
-                .Where(c => ValidCleat(plan.Destination, c, body, ropes))
-                .OrderBy(c => (c.transform.position - plan.Position).sqrMagnitude).ToArray();
+                .Where(c => ValidCleat(plan.Destination, c, body, ropes)).ToArray();
+            // Nearest to the hull root can reverse the bow and stern lines.
+            // Compare the actual assigned rope endpoints across all pairs.
+            var best = float.PositiveInfinity;
             foreach (var front in cleats)
                 foreach (var back in cleats)
                 {
                     if (front == back || front.spring == back.spring ||
                         !RopePair(hull, plan.Position, plan.Rotation, front, back, out var frontRope, out var backRope)) continue;
+                    var frontPoint = plan.Position + plan.Rotation * hull.RopePositions[Array.IndexOf(hull.Ropes, frontRope)];
+                    var backPoint = plan.Position + plan.Rotation * hull.RopePositions[Array.IndexOf(hull.Ropes, backRope)];
+                    var distance = Vector3.Distance(frontPoint, front.transform.position) + Vector3.Distance(backPoint, back.transform.position);
+                    if (distance >= best) continue;
+                    best = distance;
                     plan.Front = front; plan.Back = back;
                     plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
                     plan.FrontRope = frontRope; plan.BackRope = backRope;
-                    return;
                 }
         }
 
