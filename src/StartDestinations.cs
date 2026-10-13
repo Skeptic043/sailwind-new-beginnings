@@ -12,10 +12,14 @@ namespace NewBeginnings
     {
         internal static bool Loaded(Component item) => item != null && item.gameObject.scene.IsValid() && item.gameObject.scene.isLoaded;
 
-        internal static bool ValidPort(Port port) => Loaded(port) && port.enabled && Port.ports != null &&
+        internal static bool ValidPort(Port port) => ValidPort(port, Resources.FindObjectsOfTypeAll<Port>());
+
+        // Discovery shares one scene snapshot across its ports. Standalone
+        // identity checks still enumerate fresh objects at their call site.
+        internal static bool ValidPort(Port port, Port[] scenePorts) => Loaded(port) && port.enabled && Port.ports != null &&
             port.portIndex >= 0 && port.portIndex < Port.ports.Length && Port.ports[port.portIndex] == port &&
             (int)port.region >= 0 && (int)port.region <= 2 &&
-            Resources.FindObjectsOfTypeAll<Port>().Count(item => Loaded(item) && item.enabled && item.portIndex == port.portIndex) == 1;
+            scenePorts.Count(item => Loaded(item) && item.enabled && item.portIndex == port.portIndex) == 1;
 
         private static bool OptionalCurrent(Component value, IslandHorizon island) =>
             ReferenceEquals(value, null) || Loaded(value) && value.GetComponentInParent<IslandHorizon>() == island;

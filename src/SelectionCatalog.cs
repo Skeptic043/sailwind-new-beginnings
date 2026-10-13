@@ -175,6 +175,7 @@ namespace NewBeginnings
 
             var registered = RecoveryPortsField.GetValue(null) as List<RecoveryPort>;
             var seenPortIndexes = new HashSet<int>();
+            var scenePorts = Resources.FindObjectsOfTypeAll<Port>();
             if (Port.ports == null)
                 result.Rejections.Add("Ports have not registered yet.");
             else
@@ -207,7 +208,7 @@ namespace NewBeginnings
                         result.Rejections.Add($"Port {index} does not match Port.ports registration.");
                         continue;
                     }
-                    if (!StartDestinations.ValidPort(port))
+                    if (!StartDestinations.ValidPort(port, scenePorts))
                     {
                         result.Rejections.Add($"Port {index} has an unsupported starter region.");
                         continue;
@@ -289,10 +290,12 @@ namespace NewBeginnings
                         Plugin.Instance?.Warn("A purchasable boat candidate was skipped: " + failure);
                 }
             }
-            // Keep the manual selectors in geographic groups. A port with no
-            // classified pool remains selectable at the end.
+            // Show native ports first, then mod locations. Keep geographic and
+            // name ordering within each group, with unclassified ports last.
             result.Ports.Sort((left, right) =>
             {
+                var byMod = left.IsModded.CompareTo(right.IsModded);
+                if (byMod != 0) return byMod;
                 var byPool = PoolSortKey(left.Pool).CompareTo(PoolSortKey(right.Pool));
                 return byPool != 0 ? byPool : string.Compare(left.DisplayName, right.DisplayName, StringComparison.OrdinalIgnoreCase);
             });
@@ -476,7 +479,7 @@ namespace NewBeginnings
 
         internal bool TryChoose(SelectionSettings settings,
             IndividualExclusions individualExclusions, System.Random random,
-            out StartPair chosen, out string reason)
+            out StartPair chosen, out string reason, bool availabilityOnly = false)
         {
             chosen = null;
             reason = null;
@@ -531,6 +534,13 @@ namespace NewBeginnings
                 foreach (var boat in boats)
                 {
                     if (!FixedStart.IsPairViable(port, boat)) continue;
+                    // Displaying availability needs one usable pair. Actual
+                    // selection still samples the complete set uniformly.
+                    if (availabilityOnly)
+                    {
+                        chosen = new StartPair { Port = port, Boat = boat };
+                        return true;
+                    }
                     ++count;
                     if (random.Next(count) == 0)
                         chosen = new StartPair { Port = port, Boat = boat };

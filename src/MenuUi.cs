@@ -214,8 +214,6 @@ namespace NewBeginnings
             // catalog live only while this panel is active, without saving settings.
             if (registrationRevision != StartPorts.Revision || Time.realtimeSinceStartup >= nextDiscoveryRefresh)
             {
-                registrationRevision = StartPorts.Revision;
-                nextDiscoveryRefresh = Time.realtimeSinceStartup + 2f;
                 RefreshCatalog();
             }
             HideNativeRegionChoice();
@@ -264,6 +262,13 @@ namespace NewBeginnings
                 if (catalogFaultLogged) return;
                 catalogFaultLogged = true;
                 Plugin.Instance?.Error("New Beginnings catalog is unavailable; Sailwind's normal start remains available.", exception);
+            }
+            finally
+            {
+                // Opening the panel or changing settings already refreshed it.
+                // Do not repeat discovery during the same opening animation.
+                registrationRevision = StartPorts.Revision;
+                nextDiscoveryRefresh = Time.realtimeSinceStartup + 2f;
             }
         }
 
@@ -437,7 +442,7 @@ namespace NewBeginnings
             shipyardPortsOnly = MakeButton(root, "Shipyard ports only", -1.05f, -.53f, 1.55f, .44f,
                 () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
             shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Spoiler location options still apply.";
-            includeModPorts = MakeButton(root, "Include mod ports", -.91f, -.16f, .60f, .44f,
+            includeModPorts = MakeButton(root, "Include mod ports", -.41f, -.16f, .60f, .44f,
                 ToggleModPorts);
             includeModPorts.description = "Include detected mod locations regardless of region. Select a geographic pool before turning off the last enabled pool.";
             boatPrevious = MakeButton(root, "Previous boat", .27f, .19f, .28f, .52f,
@@ -446,9 +451,9 @@ namespace NewBeginnings
             boatNext = MakeButton(root, "Next boat", 1.83f, .19f, .28f, .52f,
                 () => CycleBoat(1));
 
-            var poolX = new[] { -1.77f, -1.29f, -.81f, -.33f, -1.62f };
-            var poolY = new[] { 0f, 0f, 0f, 0f, -.16f };
-            var poolWidth = new[] { .44f, .44f, .44f, .44f, .74f };
+            var poolX = new[] { -1.69f, -1.05f, -.41f, -1.77f, -1.13f };
+            var poolY = new[] { 0f, 0f, 0f, -.16f, -.16f };
+            var poolWidth = new[] { .60f, .60f, .60f, .44f, .74f };
             portPools = new MenuUiButton[PoolOrder.Length];
             for (var i = 0; i < portPools.Length; ++i)
             {
@@ -910,7 +915,7 @@ namespace NewBeginnings
             SetEnabled(boatExclusions, settings.RandomBoat && individualExclusions != null);
 
             continueAvailable = !FixedStart.TryGetStartBlock(out var reason) &&
-                catalog.TryChoose(settings, individualExclusions, new System.Random(1), out _, out reason);
+                catalog.TryChoose(settings, individualExclusions, new System.Random(1), out _, out reason, availabilityOnly: true);
             ApplyContinueState();
             if (continueAvailable)
             {

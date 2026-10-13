@@ -1,5 +1,16 @@
 # Release notes
 
+## Version 1.2.10
+
+### Changed
+
+- Al'Ankh, Emerald and Aestrin use wider buttons on the top row. FFL moves to the row below with Small Islands and Mod ports.
+- Mod-added starting locations appear together after the other ports in the selector and island exclusions.
+
+### Fixed
+
+- Reduced repeated catalog work when opening and refreshing the starting menu.
+
 ## Version 1.2.9
 
 ### Fixed
