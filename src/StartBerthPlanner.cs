@@ -288,9 +288,18 @@ namespace NewBeginnings
             // Dragon Cliffs' outer pier avoids the crane on the opposite pier.
             // Half a metre along its deck places the seed on a plank, not its seam.
             if (destination.Index == 9) landing -= span.normalized * .5f;
+            var landingFront = front.transform; var landingBack = back.transform;
+            // Kicia Bay shares the ordinary player's dock, while the boat
+            // remains at the shipyard. Recovery's root is the shore marker.
+            if (destination.Index == 22 && StartDestinations.Loaded(destination.Recovery))
+            {
+                landing = destination.Recovery.transform.position;
+                landingFront = destination.Recovery.mooringFront;
+                landingBack = destination.Recovery.mooringBack;
+            }
             var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : landing;
             var verified = Plugin.Instance.TryFindStartShore(destination, seed, seed,
-                out var shore, out _, out _, front.transform, back.transform);
+                out var shore, out _, out _, landingFront, landingBack);
             if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
             plan = Make(destination, position, marker.rotation, shore);
             plan.Mode = StartBerthMode.ShipyardHeld;

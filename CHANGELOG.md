@@ -1,5 +1,15 @@
 # Release notes
 
+## Version 1.3.5
+
+### Changed
+
+- Kicia Bay shipyard starts now place the player and supplies at Kicia's ordinary landing on the neighboring dock. The boat remains at the shipyard berth.
+
+### Fixed
+
+- Starter supplies now use nearby supported positions when dock seams or fixed props prevent the usual compact layout, instead of withholding the complete group.
+
 ## Version 1.3.4
 
 ### Changed

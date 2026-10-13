@@ -70,7 +70,9 @@ namespace NewBeginnings
             // hierarchy. Their owner reference identifies the shore counter.
             var documents = Resources.FindObjectsOfTypeAll<ShipyardDocuments>()
                 .FirstOrDefault(d => StartDestinations.Loaded(d) && d.shipyard == yard);
-            var seed = documents != null ? documents.transform.position : yard.transform.position;
+            var seed = destination.Index == 22 && HasNativeYard(destination) && StartDestinations.Loaded(destination.Recovery)
+                ? destination.Recovery.transform.position
+                : documents != null ? documents.transform.position : yard.transform.position;
             var verified = Plugin.Instance.TryFindStartShore(destination, seed, seed,
                 out var shore, out _, out var reason);
             if (!verified)

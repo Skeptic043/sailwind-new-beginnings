@@ -906,7 +906,7 @@ namespace NewBeginnings
                         anchorGround,
                         foodSupport == avoidItem ? avoidGround : null,
                         out foodGround,
-                        out reason))
+                        out reason, otherRadius: FootprintRadius(anchor)))
                     continue;
 
                 var authoredAnchor = AuthoredPositions[anchor];
@@ -1220,6 +1220,8 @@ namespace NewBeginnings
             if (marker == null) return false;
             var radius = LooseFootprintRadius(item);
             var oar = IsNativeOar(item);
+            var fallback = Vector3.zero;
+            var fallbackDistance = float.PositiveInfinity;
             // Fill adjacent rows around the supplies. Radial rings spread
             // large selections around the player and leave unusable gaps.
             foreach (var sample in CompactGroundSamples(groupGround, playerGround, marker, radius))
@@ -1237,15 +1239,24 @@ namespace NewBeginnings
                     avoidGround.HasValue &&
                     new Vector2(point.x - avoidGround.Value.x,
                         point.z - avoidGround.Value.z).magnitude < 1.1f ||
-                    IsInsideEmbarkVolume(item, point, selectedRotation) ||
-                    (oar ? !HasOarBaseSupport(item, point,
-                        selectedRotation) : !HasSupportFootprint(item, point)) ||
-                    !HasCargoClearance(item, point, selectedRotation, collider))
+                    IsInsideEmbarkVolume(item, point, selectedRotation))
                     continue;
+                var distance = Vector3.Distance(point, playerGround);
+                if (distance < fallbackDistance)
+                {
+                    fallback = point;
+                    fallbackDistance = distance;
+                }
+                if ((oar ? !HasOarBaseSupport(item, point, selectedRotation) :
+                        !HasSupportFootprint(item, point)) ||
+                    !HasCargoClearance(item, point, selectedRotation, collider)) continue;
                 selected = point;
                 return true;
             }
-            return false;
+            // A dock seam or a nearby fixture must not strand the whole roster.
+            // The center is supported, outside boats and separate from supplies.
+            selected = fallback;
+            return !float.IsPositiveInfinity(fallbackDistance);
         }
 
         private static IEnumerable<Vector3> CompactGroundSamples(Vector3 center, Vector3 playerGround,
@@ -1341,7 +1352,7 @@ namespace NewBeginnings
             Collider playerCollider, ShipItem support, Vector3? otherGroup,
             Vector3? avoidGround,
             out Vector3 selected, out string reason,
-            List<Vector3> rejectedGrounds = null)
+            List<Vector3> rejectedGrounds = null, float otherRadius = 0f)
         {
             selected = Vector3.zero;
             reason = "no nearby clear wharf/shore point supports " +
@@ -1353,6 +1364,8 @@ namespace NewBeginnings
                 new[] { 1.9f, 2.3f, 2.7f, 3.2f } :
                 new[] { 1.1f, 1.35f, 1.7f, 2.0f, 2.4f };
             var bestScore = float.PositiveInfinity;
+            var fallbackScore = float.PositiveInfinity;
+            var fallback = Vector3.zero;
             foreach (var radius in radii)
             foreach (var direction in directions)
             {
@@ -1367,23 +1380,31 @@ namespace NewBeginnings
                     out var collider) || !IsVerifiedLandCollider(collider)) continue;
                 if (Mathf.Abs(surface.y - playerGround.y) > 0.45f ||
                     otherGroup.HasValue &&
-                    Vector3.Distance(surface, otherGroup.Value) < 1.35f ||
+                    Vector3.Distance(surface, otherGroup.Value) <
+                        Mathf.Max(1.35f, (FootprintRadius(support) + otherRadius) * 1.15f) ||
                     avoidGround.HasValue &&
                     new Vector2(surface.x - avoidGround.Value.x,
                         surface.z - avoidGround.Value.z).magnitude < 0.9f)
                     continue;
                 if (IsInsideEmbarkVolume(support, surface, PlacementRotation(support))) continue;
+                var score = radius + Mathf.Abs(surface.y - playerGround.y) * 3f +
+                    (collider == playerCollider ? 0f : 0.2f);
+                if (score < fallbackScore)
+                {
+                    fallbackScore = score;
+                    fallback = surface;
+                }
                 if (!HasSupportFootprint(support, surface) ||
                     !HasCargoClearance(support, surface, PlacementRotation(support), collider)) continue;
                 // Adjacent planks may be separate colliders, but the surface
                 // should have comparable height and stay near the player.
-                var score = radius + Mathf.Abs(surface.y - playerGround.y) * 3f +
-                    (collider == playerCollider ? 0f : 0.2f);
                 if (score >= bestScore) continue;
                 bestScore = score;
                 selected = surface;
             }
-            return !float.IsPositiveInfinity(bestScore);
+            if (!float.IsPositiveInfinity(bestScore)) return true;
+            selected = fallback;
+            return !float.IsPositiveInfinity(fallbackScore);
         }
 
         private static bool HasCargoClearance(ShipItem item, Vector3 surface,
