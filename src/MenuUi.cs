@@ -63,6 +63,7 @@ namespace NewBeginnings
         private MenuUiButton randomPort;
         private MenuUiButton shipyardPortsOnly;
         private MenuUiButton useShipyardBerth;
+        private MenuUiButton secretIslands;
         private MenuUiButton includeModPorts;
         private MenuUiButton randomBoat;
         private MenuUiButton portPrevious;
@@ -74,8 +75,6 @@ namespace NewBeginnings
         private MenuUiButton portExclusions;
         private MenuUiButton boatExclusions;
         private readonly List<GameObject> mainControls = new List<GameObject>();
-        private GameObject spawnRoot;
-        private bool spawnOptionsOpen;
         private GameObject editorRoot;
         private TextMesh editorTitle;
         private TextMesh editorSummary;
@@ -85,7 +84,7 @@ namespace NewBeginnings
         private MenuUiButton editorPrevious;
         private MenuUiButton editorNext;
         private StartingOptionsUi startingOptions;
-        private bool EditingAny => spawnOptionsOpen || editing || startingOptions != null && startingOptions.IsOpen;
+        private bool EditingAny => editing || startingOptions != null && startingOptions.IsOpen;
         private bool editing;
         private bool editingBoats;
         private bool confirmWasActive;
@@ -103,7 +102,7 @@ namespace NewBeginnings
         private const float SeasContentWidth = .90f;
         private const int EditorRowsPerPage = 4;
 
-        // Chronos is a spoiler pool, set only from the Configuration Manager spoiler drawer.
+        // Secret islands are controlled separately from the geographic pools.
         private static readonly PortPool[] PoolOrder =
             { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin,
               PortPool.FireFishLagoon, PortPool.SmallIslands };
@@ -166,7 +165,6 @@ namespace NewBeginnings
                 foreach (Transform child in choiceRoot)
                     if (child.name.StartsWith("New Beginnings ", StringComparison.Ordinal))
                         mainControls.Add(child.gameObject);
-                BuildSpawnOptions(choiceRoot);
                 BuildEditor(choiceRoot);
                 startingOptions = StartingOptionsUi.Create(this, choiceRoot);
                 built = true;
@@ -199,7 +197,6 @@ namespace NewBeginnings
             if (reloadSource != null) reloadSource.SettingsReloaded -= OnSettingsReloaded;
             reloadSource = null;
             if (editing) CloseEditor(false);
-            CloseSpawnOptions();
             startingOptions?.Close(false);
         }
 
@@ -450,37 +447,9 @@ namespace NewBeginnings
             boatNext = MakeButton(root, "Next boat", 1.83f, .19f, .28f, .52f,
                 () => CycleBoat(1));
 
-            var spawn = MakeButton(root, "Spawn options", -1.05f, -.08f, 1.65f, .52f,
-                OpenSpawnOptions);
-            SetButtonText(spawn, "Spawn options...");
-            spawn.description = "Port pools, boat sizes, shipyard settings and individual exclusions.";
-            var options = MakeButton(root, "Starting options", 1.05f, -.08f, 1.65f, .52f,
-                () => startingOptions?.Open());
-            SetButtonText(options, "Starting options...");
-            options.description = "Starting money, reputation and equipment.";
-            // Shown above the title, clear of the lower controls.
-            status = MakeLabel(root, "Selection status", "", 0f, .88f, .009f);
-            status.color = WarningInk;
-        }
-
-        private void BuildSpawnOptions(Transform root)
-        {
-            spawnRoot = new GameObject("New Beginnings spawn options");
-            spawnRoot.transform.SetParent(root, false);
-            spawnRoot.SetActive(false);
-            var page = spawnRoot.transform;
-            MakeLabel(page, "Spawn options title", "Spawn Options", 0f, .78f, .016f);
-            MakeLabel(page, "Port pools heading", "Random Port Pools", -1.05f, .33f, .012f);
-            MakeLabel(page, "Boat sizes heading", "Random Boat Sizes", 1.05f, .33f, .012f);
-            shipyardPortsOnly = MakeButton(page, "Shipyard ports only", -1.05f, -.53f, 1.55f, .44f,
-                () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
-            shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Spoiler location options still apply.";
-            useShipyardBerth = MakeButton(page, "Use shipyard berth", 1.05f, -.53f, 1.55f, .44f,
-                () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); });
-            useShipyardBerth.description = "Start at the selected shipyard's berth when one is available.";
-            includeModPorts = MakeButton(page, "Include mod ports", -.41f, -.16f, .60f, .44f,
+            includeModPorts = MakeButton(root, "Include mod ports", -.41f, -.16f, .60f, .44f,
                 ToggleModPorts);
-            includeModPorts.description = "Include detected mod locations regardless of region. Select a geographic pool before turning off the last enabled pool.";
+            includeModPorts.description = "Include detected mod locations regardless of region. Keep another starting pool enabled before turning this off.";
             var poolX = new[] { -1.69f, -1.05f, -.41f, -1.77f, -1.13f };
             var poolY = new[] { 0f, 0f, 0f, -.16f, -.16f };
             var poolWidth = new[] { .60f, .60f, .60f, .44f, .74f };
@@ -488,7 +457,7 @@ namespace NewBeginnings
             for (var i = 0; i < portPools.Length; ++i)
             {
                 var index = i;
-                portPools[i] = MakeButton(page, "Port pool " + PoolLabels[i],
+                portPools[i] = MakeButton(root, "Port pool " + PoolLabels[i],
                     poolX[i], poolY[i], poolWidth[i], .44f,
                     () => TogglePortPool(PoolOrder[index]));
             }
@@ -497,37 +466,37 @@ namespace NewBeginnings
             for (var i = 0; i < boatSizes.Length; ++i)
             {
                 var index = i;
-                boatSizes[i] = MakeButton(page, "Boat size " + SizeOrder[i],
+                boatSizes[i] = MakeButton(root, "Boat size " + SizeOrder[i],
                     sizeX[i], 0f, .55f, .44f,
                     () => ToggleBoatSize(SizeOrder[index]));
             }
-            portExclusions = MakeButton(page, "Island exclusions", -1.05f, -.34f,
+            var options = MakeButton(root, "Starting options", 0f, -.40f, 1.65f, .52f,
+                () => startingOptions?.Open());
+            SetButtonText(options, "Starting options...");
+            options.description = "Starting money, reputation, equipment and spawn settings.";
+            // Shown above the title, clear of the lower controls.
+            status = MakeLabel(root, "Selection status", "", 0f, .88f, .009f);
+            status.color = WarningInk;
+        }
+
+        internal void BuildSpawnOptions(Transform page)
+        {
+            portExclusions = MakeButton(page, "Island exclusions", -1.05f, .20f,
                 1.55f, .44f, () => OpenEditor(false));
-            boatExclusions = MakeButton(page, "Boat exclusions", 1.05f, -.34f,
+            boatExclusions = MakeButton(page, "Boat exclusions", 1.05f, .20f,
                 1.55f, .44f, () => OpenEditor(true));
             portExclusions.description = "Choose which islands can be selected by Random Port.";
             boatExclusions.description = "Choose which boats can be selected by Random Boat.";
-            var done = MakeButton(page, "Back from spawn options", 0f, -.76f, .82f, .64f,
-                CloseSpawnOptions);
-            SetButtonText(done, "Back");
-        }
-
-        private void OpenSpawnOptions()
-        {
-            if (EditingAny || spawnRoot == null) return;
-            spawnOptionsOpen = true;
-            ShowSubmenu(true);
-            spawnRoot.SetActive(true);
-            RefreshDisplay();
-        }
-
-        private void CloseSpawnOptions()
-        {
-            if (!spawnOptionsOpen) return;
-            if (editing) CloseEditor(false);
-            spawnOptionsOpen = false;
-            spawnRoot.SetActive(false);
-            ShowSubmenu(false);
+            shipyardPortsOnly = MakeButton(page, "Shipyard ports only", -1.05f, -.06f, 1.55f, .44f,
+                () => { if (settings.RandomPort) { settings.ShipyardPortsOnly = !settings.ShipyardPortsOnly; Changed(); } });
+            shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Secret island settings still apply.";
+            useShipyardBerth = MakeButton(page, "Use shipyard berth", 1.05f, -.06f, 1.55f, .44f,
+                () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); });
+            useShipyardBerth.description = "Start at the selected shipyard's berth when one is available.";
+            secretIslands = MakeButton(page, "Secret islands", 0f, -.32f, 1.55f, .44f,
+                ToggleSecretIslands);
+            secretIslands.description = "Include secret islands in manual and random starting locations.";
+            MakeLabel(page, "Spawn options explanation", "Spawn settings apply immediately", 0f, -.58f, .009f);
         }
 
         private void BuildEditor(Transform root)
@@ -564,9 +533,7 @@ namespace NewBeginnings
             done.description = "Save individual island and boat exclusions.";
         }
 
-        internal void ShowStartingOptions(bool visible) => ShowSubmenu(visible);
-
-        private void ShowSubmenu(bool visible)
+        internal void ShowStartingOptions(bool visible)
         {
             if (visible)
             {
@@ -582,12 +549,16 @@ namespace NewBeginnings
             if (!visible) RefreshDisplay();
         }
 
+        internal void RefreshSpawnOptions() => RefreshDisplay();
+
+        internal void CloseExclusions() => CloseEditor(false);
+
         private bool CanEditExclusions(bool boats) => settings != null &&
             (boats ? settings.RandomBoat : settings.RandomPort && !settings.ShipyardPortsOnly);
 
         private void OpenEditor(bool boats)
         {
-            if (!spawnOptionsOpen || editing || !CanEditExclusions(boats) ||
+            if (startingOptions == null || !startingOptions.SpawnTabOpen || editing || !CanEditExclusions(boats) ||
                 individualExclusions == null || editorRoot == null) return;
             RefreshCatalog();
             // Edit a draft: Done applies it, any other close discards it.
@@ -595,7 +566,7 @@ namespace NewBeginnings
             editing = true;
             editingBoats = boats;
             editorPage = 0;
-            spawnRoot.SetActive(false);
+            startingOptions.ShowExclusionEditor(true);
             // Set both tabs from the current random modes before activation,
             // including the first opening and every reopening of this page.
             RefreshEditor();
@@ -613,7 +584,7 @@ namespace NewBeginnings
             }
             editorDraft = null;
             editorRoot.SetActive(false);
-            spawnRoot.SetActive(spawnOptionsOpen);
+            startingOptions?.ShowExclusionEditor(false);
             HideNativeRegionChoice();
             RefreshDisplay();
             if (save) changed?.Invoke();
@@ -884,7 +855,7 @@ namespace NewBeginnings
         private void ToggleModPorts()
         {
             if (!settings.RandomPort || catalog == null || !catalog.Ports.Any(item => item.IsModded)) return;
-            if (settings.IncludeModPorts && settings.PortPools.Count == 0) return;
+            if (settings.IncludeModPorts && settings.PortPools.Count == 0 && !settings.AnySecretIslandsEnabled) return;
             settings.IncludeModPorts = !settings.IncludeModPorts;
             Changed();
         }
@@ -893,6 +864,12 @@ namespace NewBeginnings
         {
             if (!settings.RandomBoat) return;
             if (settings.SetBoatSize(size, !settings.BoatSizes.Contains(size))) Changed();
+        }
+
+        private void ToggleSecretIslands()
+        {
+            settings.SetSecretIslands(!settings.SecretIslandsEnabled);
+            Changed();
         }
 
         private void Changed()
@@ -914,17 +891,20 @@ namespace NewBeginnings
             portValuePanel.SetActive(!EditingAny);
             SetButtonVisible(portPrevious, !EditingAny);
             SetButtonVisible(portNext, !EditingAny);
-            var showSpawnOptions = spawnOptionsOpen && !editing;
+            var showSpawnOptions = startingOptions != null && startingOptions.SpawnTabOpen && !editing;
             SetButtonVisible(shipyardPortsOnly, showSpawnOptions);
             SetEnabled(shipyardPortsOnly, settings.RandomPort);
             SetButtonText(shipyardPortsOnly, (settings.ShipyardPortsOnly ? "[x] " : "[ ] ") + "Shipyard ports only");
             SetButtonVisible(useShipyardBerth, showSpawnOptions);
             SetEnabled(useShipyardBerth, true);
             SetButtonText(useShipyardBerth, (settings.UseShipyardBerth ? "[x] " : "[ ] ") + "Use shipyard berth");
+            SetButtonVisible(secretIslands, showSpawnOptions);
+            SetButtonText(secretIslands, (settings.SecretIslandsEnabled ? "[x] " :
+                settings.AnySecretIslandsEnabled ? "[~] " : "[ ] ") + "Secret islands");
             var hasModPorts = catalog.Ports.Any(item => item.IsModded);
-            SetButtonVisible(includeModPorts, showSpawnOptions && hasModPorts);
+            SetButtonVisible(includeModPorts, !EditingAny && hasModPorts);
             SetEnabled(includeModPorts, settings.RandomPort && hasModPorts &&
-                (!settings.IncludeModPorts || settings.PortPools.Count > 0));
+                (!settings.IncludeModPorts || settings.PortPools.Count > 0 || settings.AnySecretIslandsEnabled));
             SetButtonText(includeModPorts, (settings.IncludeModPorts ? "[x] " : "[ ] ") + "Mod ports");
             SetEnabled(portPrevious, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
             SetEnabled(portNext, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
@@ -942,7 +922,7 @@ namespace NewBeginnings
                 var checkedPool = settings.PortPools.Contains(PoolOrder[i]);
                 SetButtonText(portPools[i], (checkedPool ? "[x] " : "[ ] ") + PoolLabels[i]);
                 SetEnabled(portPools[i], settings.RandomPort &&
-                    (!checkedPool || settings.PortPools.Count > 1 || settings.IncludeModPorts));
+                    (!checkedPool || settings.PortPools.Count > 1 || settings.IncludeModPorts || settings.AnySecretIslandsEnabled));
             }
             for (var i = 0; i < boatSizes.Length; ++i)
             {

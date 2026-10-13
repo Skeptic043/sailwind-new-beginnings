@@ -475,9 +475,20 @@ namespace NewBeginnings
 
         private static bool IsShipyardPort(PortChoice port) => port.HasShipyard;
 
+        private static bool IsChronos(PortChoice port) => port.Index == 21 && port.SiteIdentity == null &&
+            string.Equals(port.IdentityName, "port 21 M chronos", StringComparison.Ordinal);
+
+        private static bool IsSecretPort(PortChoice port) => IsChronos(port) ||
+            port.HiddenKey == "pirate" || port.HiddenKey == "saffron";
+
+        private static bool InRandomPool(PortChoice port, SelectionSettings settings) =>
+            IsSecretPort(port) || (port.IsModded ? settings.IncludeModPorts :
+                port.Pool.HasValue && settings.PortPools.Contains(port.Pool.Value));
+
         internal IEnumerable<PortChoice> VisiblePorts(SelectionSettings settings) => Ports.Where(item =>
             item.HiddenKey != "pirate" || settings.EnablePirateIsland).Where(item =>
-            item.HiddenKey != "saffron" || settings.EnableSaffronIsland);
+            item.HiddenKey != "saffron" || settings.EnableSaffronIsland).Where(item =>
+            !IsChronos(item) || settings.PortPools.Contains(PortPool.Chronos));
 
         internal bool TryChoose(SelectionSettings settings,
             IndividualExclusions individualExclusions, System.Random random,
@@ -490,15 +501,15 @@ namespace NewBeginnings
                 reason = "Selection settings or random source are missing.";
                 return false;
             }
-            if (settings.RandomPort && settings.PortPools.Count == 0 && !settings.IncludeModPorts ||
+            if (settings.RandomPort && settings.PortPools.Count == 0 && !settings.IncludeModPorts &&
+                !settings.AnySecretIslandsEnabled ||
                 settings.RandomBoat && settings.BoatSizes.Count == 0)
             {
                 reason = "At least one random port pool and boat size pool must remain selected.";
                 return false;
             }
             var ports = settings.RandomPort
-                ? VisiblePorts(settings).Where(item => (item.IsModded ? settings.IncludeModPorts :
-                    item.Pool.HasValue && settings.PortPools.Contains(item.Pool.Value)) &&
+                ? VisiblePorts(settings).Where(item => InRandomPool(item, settings) &&
                     (settings.ShipyardPortsOnly ? IsShipyardPort(item) :
                      individualExclusions == null || !individualExclusions.IsPortExcluded(item))).ToArray()
                 : VisiblePorts(settings).Where(item => string.IsNullOrEmpty(settings.DestinationKey)
@@ -512,8 +523,7 @@ namespace NewBeginnings
             {
                 reason = settings.RandomPort && settings.ShipyardPortsOnly
                     ? "No shipyard starting locations match the enabled pools."
-                    : settings.RandomPort && Ports.Any(item => item.Pool.HasValue &&
-                    settings.PortPools.Contains(item.Pool.Value))
+                    : settings.RandomPort && VisiblePorts(settings).Any(item => InRandomPool(item, settings))
                     ? "Every island in the checked pools is individually excluded from random starts."
                     : settings.RandomPort ? "No starting locations match the enabled pools."
                     : "The selected starting location is unavailable or disabled.";
@@ -574,9 +584,22 @@ namespace NewBeginnings
         internal readonly HashSet<BoatSize> BoatSizes = new HashSet<BoatSize>
             { BoatSize.Small, BoatSize.Medium, BoatSize.Large };
 
+        internal bool SecretIslandsEnabled => EnablePirateIsland && EnableSaffronIsland &&
+            PortPools.Contains(PortPool.Chronos);
+        internal bool AnySecretIslandsEnabled => EnablePirateIsland || EnableSaffronIsland ||
+            PortPools.Contains(PortPool.Chronos);
+
+        internal void SetSecretIslands(bool enabled)
+        {
+            EnablePirateIsland = EnableSaffronIsland = enabled;
+            if (enabled) PortPools.Add(PortPool.Chronos); else PortPools.Remove(PortPool.Chronos);
+            if (PortPools.Count == 0 && !IncludeModPorts) PortPools.Add(PortPool.AlAnkh);
+        }
+
         internal bool SetPortPool(PortPool pool, bool enabled)
         {
-            if (!enabled && !IncludeModPorts && PortPools.Count == 1 && PortPools.Contains(pool)) return false;
+            if (!enabled && !IncludeModPorts && !EnablePirateIsland && !EnableSaffronIsland &&
+                PortPools.Count == 1 && PortPools.Contains(pool)) return false;
             if (enabled) PortPools.Add(pool); else PortPools.Remove(pool);
             return true;
         }

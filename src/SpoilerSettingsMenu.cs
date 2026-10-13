@@ -31,16 +31,17 @@ namespace NewBeginnings
                     revealed = GUILayout.Button("Reveal spoiler locations");
                 }
                 if (!revealed) return;
-                GUILayout.Label("Enabled locations are available manually and in the Small Islands random pool.",
+                GUILayout.Label("Secret islands include Chronos, Pirate Island and Saffron Island. Enabled locations are available for manual and random starts, independently of geographic pools.",
                     noteStyle, GUILayout.ExpandWidth(true));
-                var allowPirate = GUILayout.Toggle(pirate.Value, "Enable Pirate Island");
-                if (allowPirate != pirate.Value) pirate.Value = allowPirate;
-                var allowSaffron = GUILayout.Toggle(saffron.Value, "Enable Saffron Island");
-                if (allowSaffron != saffron.Value) saffron.Value = allowSaffron;
-                GUILayout.Label("Chronos is always available manually. This adds it to Random Port.",
-                    noteStyle, GUILayout.ExpandWidth(true));
-                var includeChronos = GUILayout.Toggle(chronos.Value, "Include Chronos in Random Port");
-                if (includeChronos != chronos.Value) chronos.Value = includeChronos;
+                var enabled = settings.SecretIslandsEnabled;
+                var next = GUILayout.Toggle(enabled, settings.AnySecretIslandsEnabled && !enabled
+                    ? "Secret islands (some enabled)" : "Secret islands");
+                if (next != enabled)
+                {
+                    pirate.Value = next;
+                    saffron.Value = next;
+                    chronos.Value = next;
+                }
             }
         }
     }

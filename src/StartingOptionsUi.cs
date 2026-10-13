@@ -133,9 +133,11 @@ namespace NewBeginnings
         private const int EquipmentRows = 10;
         private MenuUi owner;
         private StartingOptionsSettings draft;
+        private GameObject contentRoot;
         private GameObject moneyPage;
         private GameObject reputationPage;
         private GameObject equipmentPage;
+        private GameObject spawnPage;
         private TextMesh message;
         private TextMesh multiplierLabel;
         private TextMesh equipmentSummary;
@@ -155,6 +157,7 @@ namespace NewBeginnings
         private MenuUiButton moneyTab;
         private MenuUiButton reputationTab;
         private MenuUiButton equipmentTab;
+        private MenuUiButton spawnTab;
         private EquipmentEntry[] equipment = new EquipmentEntry[0];
         private int vanillaEquipmentCount;
         private int page;
@@ -167,6 +170,7 @@ namespace NewBeginnings
         private readonly EquipmentButtonRepeat equipmentRepeat = new EquipmentButtonRepeat();
         private bool selectAll;
         internal bool IsOpen { get; private set; }
+        internal bool SpawnTabOpen => IsOpen && tab == 3;
 
         internal static StartingOptionsUi Create(MenuUi owner, Transform parent)
         {
@@ -183,7 +187,7 @@ namespace NewBeginnings
         private GameObject Page(string name)
         {
             var root = new GameObject(name);
-            root.transform.SetParent(transform, false);
+            root.transform.SetParent(contentRoot.transform, false);
             root.transform.localPosition = Vector3.up * .20f;
             return root;
         }
@@ -199,12 +203,18 @@ namespace NewBeginnings
 
         private void Build()
         {
-            owner.MakeLabel(transform, "Starting options title", "Starting Options", 0f, .96f, .016f);
-            moneyTab = Button(transform, "Money tab", "Money", -1.18f, .75f, .90f, .47f, () => ShowTab(0));
-            reputationTab = Button(transform, "Reputation tab", "Reputation", 0f, .75f, 1.08f, .47f, () => ShowTab(1));
-            equipmentTab = Button(transform, "Equipment tab", "Equipment", 1.18f, .75f, 1.05f, .47f, () => ShowTab(2));
-            message = owner.MakeLabel(transform, "Starting options message", "", 0f, -.78f, .009f);
-            Button(transform, "Save starting options", "Done", 0f, -.97f, .82f, .64f, () => Close(true));
+            contentRoot = new GameObject("Starting options content");
+            contentRoot.transform.SetParent(transform, false);
+            var content = contentRoot.transform;
+            owner.MakeLabel(content, "Starting options title", "Starting Options", 0f, .96f, .016f);
+            moneyTab = Button(content, "Money tab", "Money", -1.50f, .75f, .80f, .47f, () => ShowTab(0));
+            reputationTab = Button(content, "Reputation tab", "Reputation", -.50f, .75f, .94f, .47f, () => ShowTab(1));
+            equipmentTab = Button(content, "Equipment tab", "Equipment", .50f, .75f, .94f, .47f, () => ShowTab(2));
+            spawnTab = Button(content, "Spawn tab", "Spawn", 1.50f, .75f, .80f, .47f, () => ShowTab(3));
+            message = owner.MakeLabel(content, "Starting options message", "", 0f, -.78f, .009f);
+            Button(content, "Save starting options", "Done", 0f, -.97f, .82f, .64f, () => Close(true));
+            spawnPage = Page("Spawn");
+            owner.BuildSpawnOptions(spawnPage.transform);
 
             moneyPage = Page("Money");
             multiplierLabel = owner.MakeLabel(moneyPage.transform, "Money multiplier value", "", 0f, .33f, .012f);
@@ -301,6 +311,7 @@ namespace NewBeginnings
             focusedEquipment = -1;
             equipmentRepeat.Stop();
             owner.ShowStartingOptions(true);
+            contentRoot.SetActive(true);
             gameObject.SetActive(true);
             ShowTab(0);
         }
@@ -308,6 +319,7 @@ namespace NewBeginnings
         internal void Close(bool save)
         {
             if (!IsOpen) return;
+            owner.CloseExclusions();
             Blur();
             if (save)
             {
@@ -361,13 +373,23 @@ namespace NewBeginnings
             moneyPage.SetActive(tab == 0);
             reputationPage.SetActive(tab == 1);
             equipmentPage.SetActive(tab == 2);
+            spawnPage.SetActive(tab == 3);
             MenuUi.SetEnabled(moneyTab, tab != 0);
             MenuUi.SetEnabled(reputationTab, tab != 1);
             MenuUi.SetEnabled(equipmentTab, tab != 2);
+            MenuUi.SetEnabled(spawnTab, tab != 3);
             message.text = "";
             RefreshMoney();
             RefreshReputation();
             RefreshEquipment();
+            owner.RefreshSpawnOptions();
+        }
+
+        internal void ShowExclusionEditor(bool visible)
+        {
+            Blur();
+            // Keep this component active so nested editing preserves its draft.
+            contentRoot.SetActive(!visible);
         }
 
         private void RefreshMoney()

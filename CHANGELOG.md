@@ -1,5 +1,12 @@
 # Release notes
 
+## Version 1.3.1
+
+### Changed
+
+- Region and boat-size checkboxes remain on the main screen. Starting options now has a Spawn tab for exclusions and shipyard settings, replacing the separate Spawn options menu.
+- Added a Secret islands toggle in the Spawn tab. It switches the hidden starting locations on or off together for manual and random selection, independently of geographic pools. Existing settings carry over.
+
 ## Version 1.3.0
 
 ### Added

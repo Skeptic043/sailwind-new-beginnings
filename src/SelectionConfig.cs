@@ -43,7 +43,7 @@ namespace NewBeginnings
             lastDestination = file.Bind("Selection", "LastSelectedDestination", "",
                 "Stable identity of the last manually selected starting location. Empty uses LastSelectedPort. Missing locations retain their selection until you choose another.");
             randomPort = file.Bind("Selection", "RandomPort", false,
-                "Choose a random starting location from the checked geographic pools and enabled mod ports.");
+                "Choose a random starting location from the checked geographic pools, enabled secret islands and mod ports.");
             shipyardPortsOnly = file.Bind("Selection", "ShipyardPortsOnly", false,
                 "When Random Port is enabled, limit eligible locations to detected shipyards. Ignore individual island exclusions without changing them. Spoiler location options still apply.");
             useShipyardBerth = file.Bind("Selection", "UseShipyardBerth", false,
@@ -51,12 +51,12 @@ namespace NewBeginnings
             includeModPorts = file.Bind("Random Port Pools", "IncludeModPorts", false,
                 "Include detected mod starting locations in random starts regardless of their geographic pool. Shipyard, spoiler and placement requirements still apply.");
             enablePirateIsland = file.Bind("Spoilers", "EnablePirateIsland", false,
-                Hidden("Enable Pirate Island as a manual starting location and in the Small Islands random pool."));
+                Hidden("Enable Pirate Island for manual and random starts, independently of geographic pools."));
             enableSaffronIsland = file.Bind("Spoilers", "EnableSaffronIsland", false,
-                Hidden("Enable Saffron Island as a manual starting location and in the Small Islands random pool."));
+                Hidden("Enable Saffron Island for manual and random starts, independently of geographic pools."));
             // Same key as before, so existing choices carry over. Shown only in the spoiler drawer.
             chronos = file.Bind("Random Port Pools", "Chronos", false,
-                Hidden("Include ordinary Chronos in random starts. Fort Juniper follows IncludeModPorts separately."));
+                Hidden("Enable ordinary Chronos for manual and random starts. Fort Juniper follows IncludeModPorts separately."));
             var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland, chronos);
             file.Bind("Advanced", "SpoilerOptions", "",
                 new ConfigDescription("Reveal optional hidden starting locations.", null,
@@ -122,7 +122,7 @@ namespace NewBeginnings
             if (smallBoats.Value) Settings.BoatSizes.Add(BoatSize.Small);
             if (mediumBoats.Value) Settings.BoatSizes.Add(BoatSize.Medium);
             if (largeBoats.Value) Settings.BoatSizes.Add(BoatSize.Large);
-            if (Settings.PortPools.Count == 0 && !Settings.IncludeModPorts)
+            if (Settings.PortPools.Count == 0 && !Settings.IncludeModPorts && !Settings.AnySecretIslandsEnabled)
             {
                 Settings.PortPools.Add(PortPool.AlAnkh);
                 warnings.Warn("Every random port pool was disabled; Al'Ankh was restored.");
