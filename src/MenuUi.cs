@@ -14,7 +14,7 @@ namespace NewBeginnings
         private static readonly FieldInfo OutlineField = AccessTools.Field(typeof(GoPointerButton), "outline");
         internal Action Clicked;
         internal Action<RaycastHit> Hit;
-        internal int FullSizeTextLength;
+        internal float TextScaleOverride;
 
         public override void Start()
         {
@@ -483,19 +483,19 @@ namespace NewBeginnings
         internal void BuildSpawnOptions(Transform page)
         {
             portExclusions = MakeButton(page, "Island exclusions", -.90f, -.05f,
-                1.55f, .44f, () => OpenEditor(false), fullSizeTextLength: 24);
+                1.55f, .44f, () => OpenEditor(false), textScale: .011f);
             boatExclusions = MakeButton(page, "Boat exclusions", .90f, -.05f,
-                1.55f, .44f, () => OpenEditor(true), fullSizeTextLength: 24);
+                1.55f, .44f, () => OpenEditor(true), textScale: .011f);
             portExclusions.description = "Choose which islands can be selected by Random Port.";
             boatExclusions.description = "Choose which boats can be selected by Random Boat.";
             shipyardPortsOnly = MakeButton(page, "Shipyard ports only", -.90f, -.31f, 1.55f, .44f,
-                ToggleShipyardPortsOnly, fullSizeTextLength: 24);
+                ToggleShipyardPortsOnly, textScale: .011f);
             shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Secret island settings still apply.";
             useShipyardBerth = MakeButton(page, "Use shipyard berth", .90f, -.31f, 1.55f, .44f,
-                () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); }, fullSizeTextLength: 24);
+                () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); }, textScale: .011f);
             useShipyardBerth.description = "Start at the selected shipyard's berth when one is available.";
             secretIslands = MakeButton(page, "Secret islands", 0f, -.57f, 1.55f, .44f,
-                ToggleSecretIslands, fullSizeTextLength: 24);
+                ToggleSecretIslands, textScale: .011f);
             secretIslands.description = "Include secret islands in manual and random starting locations.";
         }
 
@@ -686,12 +686,12 @@ namespace NewBeginnings
         }
 
         internal MenuUiButton MakeButton(Transform root, string name, float x, float y,
-            float width, float height, Action onClick, int fullSizeTextLength = 12)
+            float width, float height, Action onClick, float textScale = 0f)
         {
             var visual = MakeButtonVisual(root, name, x, y, width, height, out var surface);
             var target = surface.gameObject.AddComponent<MenuUiButton>();
             target.Clicked = onClick;
-            target.FullSizeTextLength = fullSizeTextLength;
+            target.TextScaleOverride = textScale;
             target.lookText = name;
             target.description = "New Beginnings";
             target.gameObject.name = "New Beginnings trigger " + name;
@@ -783,12 +783,11 @@ namespace NewBeginnings
             var text = ButtonText(button);
             if (text == null) return;
             text.text = value;
-            // Keep glyph proportions and the button's label capacity on every
-            // refresh. Wide Spawn controls allow longer labels at full size.
+            // Keep a control's chosen label size through state refreshes.
             var width = button.transform.localScale.x;
-            var capacity = button.FullSizeTextLength;
-            var shrink = Mathf.Min(1f, (float)capacity / Math.Max(capacity, value.Length));
-            var size = .014f * shrink * Mathf.Min(1f, width / .72f);
+            var shrink = Mathf.Min(1f, 12f / Math.Max(12, value.Length));
+            var size = button.TextScaleOverride > 0f ? button.TextScaleOverride :
+                .014f * shrink * Mathf.Min(1f, width / .72f);
             text.transform.localScale = Vector3.one * size;
         }
 

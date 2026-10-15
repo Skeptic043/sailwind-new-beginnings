@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.12
+
+### Changed
+
+- Spawn labels use a smaller size between their original size and the previous update, keeping the centered layout.
+
 ## Version 1.3.11
 
 ### Changed
