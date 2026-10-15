@@ -10,8 +10,7 @@ namespace NewBeginnings
     // adjustment, cast-off, recovery and saved-game loading keep their ownership.
     internal static class StarterMooring
     {
-        private const float AddedSlack = 3f;
-        private const float LeopardAddedSlack = 5f;
+        private const float AddedSlack = 1f;
         private const float ReadyTimeout = 20f;
         private static readonly FieldInfo SpringField = AccessTools.Field(typeof(PickupableBoatMooringRope), "mooredToSpring");
         private static readonly FieldInfo LengthField = AccessTools.Field(typeof(PickupableBoatMooringRope), "currentRopeLengthSquared");
@@ -139,8 +138,7 @@ namespace NewBeginnings
                         {
                             var distanceSquared = (float)DistanceMethod.Invoke(line.Rope, null);
                             var maximumSquared = (float)MaxLengthField.GetValue(null) + 25f;
-                            var addedSlack = FixedStart.IsLeopardStart(selected) ? LeopardAddedSlack : AddedSlack;
-                            var lengthSquared = SlackLengthSquaredWithAllowance(distanceSquared, maximumSquared, addedSlack);
+                            var lengthSquared = SlackLengthSquared(distanceSquared, maximumSquared);
                             if (!float.IsNaN(lengthSquared))
                             {
                                 // Both native length representations must agree.
@@ -150,7 +148,7 @@ namespace NewBeginnings
                                 LengthField.SetValue(line.Rope, lengthSquared);
                                 line.Dock.spring.maxDistance = (float)Math.Sqrt(lengthSquared);
                                 line.LengthApplied = true;
-                                Plugin.Instance.DebugLog($"Starter mooring slack: {line.Rope.name}, distance {Math.Sqrt(distanceSquared):F2} m, length {Math.Sqrt(lengthSquared):F2} m (up to {addedSlack:F1} m extra).");
+                                Plugin.Instance.DebugLog($"Starter mooring slack: {line.Rope.name}, distance {Math.Sqrt(distanceSquared):F2} m, length {Math.Sqrt(lengthSquared):F2} m (up to {AddedSlack:F1} m extra).");
                             }
                         }
                         // Physics readiness can precede the observer mirror's
@@ -189,17 +187,12 @@ namespace NewBeginnings
             SpringField.GetValue(line.Rope) as SpringJoint == line.Dock.spring &&
             line.Dock.spring.connectedBody == body;
 
-        internal static float SlackLengthSquared(float distanceSquared, float maximumSquared) =>
-            SlackLengthSquaredWithAllowance(distanceSquared, maximumSquared, AddedSlack);
-
-        private static float SlackLengthSquaredWithAllowance(float distanceSquared,
-            float maximumSquared, float addedSlack)
+        internal static float SlackLengthSquared(float distanceSquared, float maximumSquared)
         {
             if (float.IsNaN(distanceSquared) || float.IsInfinity(distanceSquared) || distanceSquared < 0f ||
                 float.IsNaN(maximumSquared) || float.IsInfinity(maximumSquared) || maximumSquared <= 0f ||
-                distanceSquared >= maximumSquared || float.IsNaN(addedSlack) ||
-                float.IsInfinity(addedSlack) || addedSlack < 0f) return float.NaN;
-            var length = Math.Min(Math.Sqrt(distanceSquared) + addedSlack, Math.Sqrt(maximumSquared));
+                distanceSquared >= maximumSquared) return float.NaN;
+            var length = Math.Min(Math.Sqrt(distanceSquared) + AddedSlack, Math.Sqrt(maximumSquared));
             return (float)(length * length);
         }
 

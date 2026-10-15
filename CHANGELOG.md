@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.8
+
+### Changed
+
+- Starting mooring lines now receive up to one metre of extra slack on every boat, reduced from three metres on most boats and five on Leopard.
+
 ## Version 1.3.7
 
 ### Fixed
