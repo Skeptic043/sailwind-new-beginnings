@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using HarmonyLib;
 using UnityEngine;
 
 namespace NewBeginnings
@@ -14,17 +13,12 @@ namespace NewBeginnings
         private static int generation;
         private static ResolvedStart pending;
 
-        internal static void Cancel()
-        {
-            Cancel("startup operation reset");
-        }
-
-        private static void Cancel(string reason)
+        internal static void Cancel(string reason = null)
         {
             var selected = pending;
             ClearPending();
             if (selected != null)
-                Plugin.Instance?.Report($"Startup hull repair cancelled for boat {BoatLabel(selected)}: {reason}.");
+                Plugin.Instance?.Report($"Startup hull repair cancelled for boat {BoatLabel(selected)}: {reason ?? "startup operation reset"}.");
         }
 
         private static void ClearPending()
@@ -55,12 +49,6 @@ namespace NewBeginnings
                 Cancel("coroutine could not be scheduled");
                 Plugin.Instance?.Warn("Startup hull repair could not be scheduled: " + exception.Message);
             }
-        }
-
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel("saved-game load");
         }
 
         private static string BoatLabel(ResolvedStart selected) => selected?.Saveable != null

@@ -119,6 +119,7 @@ static class KemyPackingChecks
         UnityEngine.Object.failCloneAt = UnityEngine.Object.cloneCalls + 2;
         check(!AdditionalEquipment.Append(failing, Array.Empty<ShipItem>()) && failing.StarterSet.transform.children.Count == 0, "partial Kemy clone failure not rolled back");
         UnityEngine.Object.failCloneAt = 0;
+        check(!AdditionalEquipment.Append(failing, Array.Empty<ShipItem>()) && AdditionalEquipment.TryPack(failing, _ => throw new Exception("packed after failure"), out _), "failed start did not keep its finished failure state");
         AdditionalEquipment.Reset();
         var next = new ResolvedStart
         {

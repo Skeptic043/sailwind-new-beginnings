@@ -207,11 +207,5 @@ namespace NewBeginnings
         {
             private static void Prefix(PickupableBoatMooringRope __instance) => Relinquish(__instance);
         }
-
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel();
-        }
     }
 }

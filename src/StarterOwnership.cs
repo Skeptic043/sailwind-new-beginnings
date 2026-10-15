@@ -35,11 +35,5 @@ namespace NewBeginnings
                 Plugin.Instance?.Warn("The selected starter's purchase prompt disappeared. Its native new-game ownership grant was completed.");
             }
         }
-
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel();
-        }
     }
 }

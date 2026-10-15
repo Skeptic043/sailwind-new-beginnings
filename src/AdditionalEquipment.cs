@@ -346,13 +346,11 @@ namespace NewBeginnings
                     gameObject.transform.SetParent(staging == null ? null : staging.transform, true);
                     UnityEngine.Object.Destroy(gameObject);
                 }
-                Extras.Clear();
-                WallHooks.Clear();
-                WallHookBoxes.Clear();
-                PackingCandidates.Clear();
-                ScaledPackingTools.Clear();
-                ScaledStarterMaps.Clear();
-                Carriers.Clear();
+                Reset();
+                // A repeated Append for this start reports the same failure,
+                // and packing treats it as finished.
+                owner = selected;
+                appended = true;
                 packingComplete = true;
                 Plugin.Instance?.Error("Starter crate and additional equipment initialization failed; normal supplies will use dockside ground placement.", exception);
                 return false;

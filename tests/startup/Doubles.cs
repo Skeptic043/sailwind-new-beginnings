@@ -840,13 +840,20 @@ namespace NewBeginnings
         internal int Cancellations;
         internal readonly List<string> Errors = new();
         internal readonly List<string> Warnings = new();
+        internal bool Tracking, DocksideSet;
         internal void CancelPlayerStartTracking()
         {
             Cancellations++;
+            if (Tracking)
+                CancelRecord.Calls.Add("PlayerStartTracking");
+            Tracking = false;
         }
 
         internal void ClearDocksideSurface()
         {
+            if (DocksideSet)
+                CancelRecord.Calls.Add("DocksideSurface");
+            DocksideSet = false;
         }
 
         internal void Warn(string text) => Warnings.Add(text);
@@ -862,23 +869,27 @@ namespace NewBeginnings
             return t;
         }
 
-        internal void BeginPlayerStartTracking(StartMenu menu, UnityEngine.Transform target)
-        {
-        }
+        internal void BeginPlayerStartTracking(StartMenu menu, UnityEngine.Transform target) => Tracking = true;
     }
 
     internal class MenuUi
     {
+        internal static int BlockedShown;
         internal static MenuUi ActiveFor(StartMenu menu) => new();
-        internal void ShowBlockedStart(string reason)
-        {
-        }
+        internal void ShowBlockedStart(string reason) => BlockedShown++;
     }
 
     internal static class BerthClearance
     {
         internal static bool Throw;
         internal static UnityEngine.Vector3 AdjustCrabBeach(ResolvedStart s, UnityEngine.Vector3 p) => Throw ? throw new InvalidOperationException("Injected Crab Beach failure") : p + new UnityEngine.Vector3(1, 0, 0);
+    }
+
+    // Armed side-system work that a cancellation actually released, in call
+    // order. Like production, cancelling unarmed work records nothing.
+    internal static class CancelRecord
+    {
+        internal static readonly List<string> Calls = new();
     }
 
     internal static class StarterCargo
@@ -891,21 +902,36 @@ namespace NewBeginnings
             Armed = true;
         }
 
-        internal static void Disarm() => Armed = false;
+        internal static void Disarm()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StarterCargo");
+            Armed = false;
+        }
     }
 
     internal static class StartingValues
     {
         internal static bool Armed;
         internal static void Arm(ResolvedStart x) => Armed = true;
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StartingValues");
+            Armed = false;
+        }
     }
 
     internal static class LeopardStarterRig
     {
         internal static bool Armed;
         internal static void Arm(StartMenu m, ResolvedStart x) => Armed = true;
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("LeopardStarterRig");
+            Armed = false;
+        }
     }
 
     internal static class StarterMooring
@@ -913,14 +939,24 @@ namespace NewBeginnings
         internal static bool Armed;
         internal static void Arm(StartMenu m, ResolvedStart x, PickupableBoatMooringRope a, PickupableBoatMooringRope b) => Armed = true;
 
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StarterMooring");
+            Armed = false;
+        }
     }
 
     internal static class StarterBoatRepair
     {
         internal static bool Armed;
         internal static void Arm(StartMenu m, ResolvedStart x) => Armed = true;
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel(string reason = null)
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StarterBoatRepair:" + (reason ?? "default"));
+            Armed = false;
+        }
     }
 
     internal static partial class FixedStart

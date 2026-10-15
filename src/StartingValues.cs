@@ -94,13 +94,5 @@ namespace NewBeginnings
                 return __exception;
             }
         }
-
-        // Loading a save never arms values. Clear an interrupted new-game request
-        // before native loading can raise its own justStarted flag.
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
-        private static class LoadPatch
-        {
-            private static void Prefix() => Cancel();
-        }
     }
 }

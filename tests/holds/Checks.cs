@@ -63,6 +63,14 @@ static class Checks
             keeper = PirateStationKeeper.Attach(body, island.transform);
         }
 
+        // Production LoadGame prefixes: FixedStart.CancelStartWork removes the
+        // active hold, then OffshoreHoldSave drops the previous save's marker.
+        internal static void BeforeLoad()
+        {
+            PirateStationKeeper.RemoveActive();
+            OffshoreHoldSave.ClearBeforeLoad();
+        }
+
         internal Dictionary<string, string> SaveRoundtrip()
         {
             OffshoreHoldSave.Save();
@@ -71,7 +79,7 @@ static class Checks
 
         internal void Load(Dictionary<string, string> data)
         {
-            OffshoreHoldSave.ClearBeforeLoad();
+            BeforeLoad();
             GameState.currentlyLoading = true;
             GameState.modData = data;
             OffshoreHoldSave.Load();
@@ -111,7 +119,7 @@ static class Checks
         Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _) && GameState.modData["other.mod"] == "incoming", "switching saves leaked old hold");
         f = new Fixture();
         f.SaveRoundtrip();
-        OffshoreHoldSave.ClearBeforeLoad();
+        Fixture.BeforeLoad();
         GameState.currentlyLoading = true;
         OffshoreHoldSave.Load();
         Check(!GameState.modData.ContainsKey(OffshoreHoldSave.Key) && !PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "legacy null mod dictionary inherited prior marker");

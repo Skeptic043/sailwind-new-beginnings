@@ -135,13 +135,6 @@ public class StartMenu
 {
 }
 
-public class SaveLoadManager
-{
-    public void LoadGame()
-    {
-    }
-}
-
 public class GameState
 {
     public static bool playing;
@@ -339,7 +332,8 @@ class TestHarness
         Check(Plugin.Instance.Warnings == 1 && front.currentRopeLengthSquared == 72900 && !Step(), "hidden island geometry expires once with no writes");
         Arm();
         Ready();
-        Patch("CancelOnLoad");
+        // A saved-game load reaches this through FixedStart.CancelStartWork.
+        StarterMooring.Cancel();
         Check(!Step() && front.currentRopeLengthSquared == 72900, "saved load cancels pending slack");
         Arm();
         Ready();

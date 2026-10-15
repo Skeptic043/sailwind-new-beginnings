@@ -13,15 +13,15 @@ namespace NewBeginnings
         internal const string Key = Plugin.Id + ".offshoreHold.v1";
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
+        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
         private static class BeforeLoad
         {
             private static void Prefix() => ClearBeforeLoad();
         }
 
+        // FixedStart.CancelStartWork removes the active hold before a load.
         internal static void ClearBeforeLoad()
         {
-            PirateStationKeeper.RemoveActive();
             // Native LoadGame replaces this dictionary only when the incoming
             // save has one. Do not inherit our previous save's marker otherwise.
             GameState.modData?.Remove(Key);

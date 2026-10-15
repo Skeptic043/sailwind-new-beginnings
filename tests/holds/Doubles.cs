@@ -10,6 +10,10 @@ namespace HarmonyLib
         public HarmonyPatch(Type type, string method)
         {
         }
+
+        public HarmonyPatch(Type type, string method, Type[] arguments)
+        {
+        }
     }
 }
 

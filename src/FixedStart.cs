@@ -162,16 +162,9 @@ namespace NewBeginnings
                 pending = null;
                 pendingMenu = null;
                 pendingOptions = null;
-                CancelStart();
-                StartingValues.Cancel();
+                CancelStartWork();
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
-                StarterMooring.Cancel();
-                StarterBoatRepair.Cancel();
-                LeopardStarterRig.Cancel();
-                Plugin.Instance?.CancelPlayerStartTracking();
-                Plugin.Instance?.ClearDocksideSurface();
-                StarterCargo.Disarm();
                 var plugin = Plugin.Instance;
                 if (plugin == null || !ScrambledSeasIntegration.CanSelect) return true;
 
@@ -244,11 +237,10 @@ namespace NewBeginnings
             {
                 if (__exception != null)
                 {
-                    CancelStart();
+                    CancelStartWork();
                     pending = null;
                     pendingMenu = null;
                     pendingOptions = null;
-                    StartingValues.Cancel();
                 }
                 return __exception;
             }

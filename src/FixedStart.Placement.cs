@@ -85,10 +85,38 @@ namespace NewBeginnings
             CleanupStart(() => snapshot?.Restore("Starting-location preparation was cancelled."));
         }
 
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
+        // The one owner of "cancel everything for the current start". Each
+        // subsystem keeps its own Arm/Cancel and generation; this only fixes
+        // which of them are cancelled and in what order. CancelStart runs
+        // first, so an in-flight placement rolls back before the armed work
+        // it scheduled is cancelled.
+        internal static void CancelStartWork(string reason = null)
+        {
+            CancelStart();
+            CancelArmedSystems(reason);
+        }
+
+        // Also run by an in-flight start's cleanup, which CancelStart may
+        // invoke, so it must not call CancelStart itself. Every Cancel is
+        // idempotent; a second pass after that cleanup changes nothing.
+        private static void CancelArmedSystems(string reason = null)
+        {
+            CleanupStart(StarterMooring.Cancel);
+            CleanupStart(() => StarterBoatRepair.Cancel(reason));
+            CleanupStart(() => Plugin.Instance?.CancelPlayerStartTracking());
+            CleanupStart(() => Plugin.Instance?.ClearDocksideSurface());
+            CleanupStart(StarterCargo.Disarm);
+            CleanupStart(StartingValues.Cancel);
+            CleanupStart(StarterOwnership.Cancel);
+            CleanupStart(LeopardStarterRig.Cancel);
+        }
+
+        // Loading a save never arms startup work. Cancel an interrupted
+        // new-game start before native loading raises its own justStarted.
+        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
         private static class CancelBeforeLoad
         {
-            private static void Prefix() => CancelStart();
+            private static void Prefix() => CancelStartWork("saved-game load");
         }
 
         // Native FadeIslandMenu owns a separate Juicebox tween and a delayed
@@ -249,7 +277,7 @@ namespace NewBeginnings
                 finally
                 {
                     StartupProfiler.Cancel();
-                    DisarmStart();
+                    CancelArmedSystems();
                     CleanupStart(() => snapshot?.Restore(cancelled));
                     ClearStartTiming();
                     Plugin.Instance?.Warn(cancelled);
@@ -380,18 +408,6 @@ namespace NewBeginnings
         {
             if (placement != null) return placement.Selected.Boat != null && placement.Selected.Boat.isPurchased();
             return false;
-        }
-
-        private static void DisarmStart()
-        {
-            CleanupStart(StarterMooring.Cancel);
-            CleanupStart(StarterBoatRepair.Cancel);
-            CleanupStart(() => Plugin.Instance?.CancelPlayerStartTracking());
-            CleanupStart(() => Plugin.Instance?.ClearDocksideSurface());
-            CleanupStart(StarterCargo.Disarm);
-            CleanupStart(StartingValues.Cancel);
-            StarterOwnership.Cancel();
-            CleanupStart(LeopardStarterRig.Cancel);
         }
 
         // Returns null only when no placement could be produced. A problem that

@@ -145,12 +145,6 @@ namespace NewBeginnings
             catch (Exception exception) { Plugin.Instance.Warn("Leopard starter sail could not be scheduled: " + exception.Message); }
         }
 
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel();
-        }
-
         private static bool StillSelected(StartMenu menu, ResolvedStart selected, int token)
         {
             return token == generation && Plugin.Instance != null &&

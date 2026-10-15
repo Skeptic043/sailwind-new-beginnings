@@ -1505,13 +1505,7 @@ namespace NewBeginnings
         private void OnDestroy()
         {
             Config.SettingChanged -= OnConfigSettingChanged;
-            FixedStart.CancelStart();
-            StartingValues.Cancel();
-            StarterMooring.Cancel();
-            StarterBoatRepair.Cancel();
-            CancelPlayerStartTracking();
-            ClearDocksideSurface();
-            StarterCargo.Disarm();
+            FixedStart.CancelStartWork();
             harmony?.UnpatchSelf();
             if (ReferenceEquals(Instance, this)) Instance = null;
         }

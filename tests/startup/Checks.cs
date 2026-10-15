@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using NewBeginnings;
 using UnityEngine;
 
@@ -279,6 +280,8 @@ static class Checks
             RecoverableSetupFailuresKeepSelection,
             PreGrantNativeExceptionKeepsStart,
             LoadPrefixCancelsBeforeMutation,
+            CancelStartWorkCancelsEachSubsystemOnce,
+            CancelStartWorkInFlightUnwindsOnce,
             ForeignLoadDoesNotReceiveSnapshot,
             ResolveFailureIsIncomplete,
             NoFactoryKeepsPlacement,
@@ -990,6 +993,50 @@ static class Checks
         Check(GameState.lastOwnedBoat == saved && GameState.lastBoat == saved && PlayerGold.currency[0] == 700 && f.Menu.Observer.position.x == 888, "cancelled callback mutated incoming save");
         Check(!f.Selected.Boat.purchased && f.Menu.Native.Moves == 1 && f.Menu.Native.Disposed, "saved-game transition allowed stale grant");
         GameState.currentlyLoading = false;
+    }
+
+    // The single cancellation list: every armed side system once, in one
+    // order, through both the shared entry point and the saved-game prefix.
+    static void CancelStartWorkCancelsEachSubsystemOnce()
+    {
+        var ownershipPending = typeof(StarterOwnership).GetField("pending", BindingFlags.NonPublic | BindingFlags.Static);
+        foreach (var (cancel, repairReason) in new (Action, string)[] { (() => FixedStart.CancelStartWork(), "default"), (FixedStart.LoadPrefixFixture, "saved-game load") })
+        {
+            Plugin.Instance = new();
+            ArmEverySideSystem();
+            StarterOwnership.Arm(new ResolvedStart());
+            PirateStationKeeper.Attach(null, null);
+            CancelRecord.Calls.Clear();
+            cancel();
+            Check(CancelRecord.Calls.SequenceEqual(new[] { "StarterMooring", "StarterBoatRepair:" + repairReason, "PlayerStartTracking", "DocksideSurface", "StarterCargo", "StartingValues", "LeopardStarterRig" }), "cancellation list not each subsystem once: " + string.Join(",", CancelRecord.Calls));
+            Check(!StarterCargo.Armed && !StartingValues.Armed && !LeopardStarterRig.Armed && !StarterMooring.Armed && !StarterBoatRepair.Armed, "armed subsystem survived cancellation");
+            Check(ownershipPending.GetValue(null) == null && PirateStationKeeper.Active == null, "ownership or offshore hold survived cancellation");
+        }
+    }
+
+    static void ArmEverySideSystem()
+    {
+        StarterCargo.Armed = StartingValues.Armed = LeopardStarterRig.Armed = StarterMooring.Armed = StarterBoatRepair.Armed = true;
+        Plugin.Instance.BeginPlayerStartTracking(null, null);
+        Plugin.Instance.DocksideSet = true;
+    }
+
+    // Before the grant, CancelStart's cleanup and CancelStartWork's direct
+    // pass both run the list. The second pass finds nothing armed, so the
+    // start unwinds, reports and restores its snapshot only once.
+    static void CancelStartWorkInFlightUnwindsOnce()
+    {
+        var f = new Fixture();
+        f.Until(() => f.Menu.Native != null);
+        ArmEverySideSystem();
+        CancelRecord.Calls.Clear();
+        MenuUi.BlockedShown = 0;
+        FixedStart.CancelStartWork();
+        f.Restored();
+        f.Finish();
+        Check(CancelRecord.Calls.SequenceEqual(new[] { "StarterMooring", "StarterBoatRepair:default", "PlayerStartTracking", "DocksideSurface", "StarterCargo", "StartingValues", "LeopardStarterRig" }), "in-flight cancellation released armed work other than once: " + string.Join(",", CancelRecord.Calls));
+        Check(Plugin.Instance.Warnings.Count(w => w == "Starting-location preparation was cancelled.") == 1, "in-flight cancellation warned other than once");
+        Check(MenuUi.BlockedShown == 1 && !f.Selected.Boat.purchased && f.Menu.Native.Disposed, "in-flight snapshot not restored exactly once or start not released");
     }
 
     static void ForeignLoadDoesNotReceiveSnapshot()
