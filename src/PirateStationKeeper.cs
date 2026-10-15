@@ -87,7 +87,10 @@ namespace NewBeginnings
         }
 
         private static bool UserHasTakenControl(Rigidbody heldBody) =>
-            GameState.currentBoat == heldBody.transform || GameState.currentShipyard != null &&
+            // Native boarding stores the hull's immediate worldBoat child.
+            // Ancestor matching would also accept a separate boat nested here.
+            GameState.currentBoat != null && (GameState.currentBoat == heldBody.transform ||
+                GameState.currentBoat.parent == heldBody.transform) || GameState.currentShipyard != null &&
                 GameState.currentShipyard.GetCurrentBoat() == heldBody.gameObject;
 
         internal static bool TryStowedPosition(Rigidbody hull, Rigidbody anchor, ConfigurableJoint joint,

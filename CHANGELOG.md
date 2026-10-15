@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.10
+
+### Fixed
+
+- Temporary offshore holds now release when you board the starting boat, including after loading a save.
+
 ## Version 1.3.9
 
 ### Changed
