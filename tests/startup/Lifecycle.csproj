@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS0649;CS0414</NoWarn>
+    <ProductionCustomPath Condition="'$(ProductionCustomPath)' == ''">../../src/FixedStart.Custom.cs</ProductionCustomPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Doubles.cs" />
+    <Compile Include="NativeYards.generated.cs" />
+    <Compile Include="Checks.cs" />
+    <Compile Include="$(ProductionCustomPath)" />
+    <Compile Include="../../src/ScrambledSeasIntegration.cs" />
+    <Compile Include="../../src/StartupProfiler.cs" />
+    <Compile Include="../../src/StarterOwnership.cs" />
+    <Compile Include="../../src/ShipyardStart.cs" />
+  </ItemGroup>
+</Project>

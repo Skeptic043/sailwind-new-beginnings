@@ -20,6 +20,8 @@ Use the paths for your own installation or mod profile. Alternatively, place `Be
 
 The Release output is `bin/Release/net471/NewBeginnings.dll`.
 
+Run the automated regression suites using [TESTING.md](TESTING.md).
+
 ## Local packages
 
 Run `Package.ps1` under PowerShell 7 with the same reference arguments. It checks the release metadata, icon and required documentation before producing versioned plugin and source ZIPs under `artifacts/`.

@@ -1,4 +1,9 @@
 /.local/
+/tests/**/bin/
+/tests/**/obj/
+/tests/**/generated/
+/tests/**/*.generated.cs
+/tests/**/*.g.cs
 /bin/
 /obj/
 /artifacts/

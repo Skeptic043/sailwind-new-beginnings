@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net471</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+    <NoWarn>CS0649</NoWarn>
+    <ReferenceDir Condition="'$(ReferenceDir)' == ''">../../.local/references</ReferenceDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Production.generated.cs" />
+    <Compile Include="Checks.cs" />
+    <Compile Include="MenuRefresh.generated.cs" />
+    <Compile Include="MenuRefreshChecks.cs" />
+    <Compile Include="Ui.generated.cs" />
+    <Compile Include="Destination.generated.cs" />
+    <Compile Include="DestinationChecks.cs" />
+    <Compile Include="SpoilerDrawerChecks.cs" />
+    <Compile Include="SecretIslandChecks.cs" />
+    <Compile Include="LifetimeDoubles.cs" Link="LifetimeBoundary.cs" />
+    <Compile Include="../../src/SelectionConfig.cs" />
+    <Compile Include="../../src/SpoilerSettingsMenu.cs" />
+    <Compile Include="../../src/ConfigurationManagerAttributes.cs" />
+    <Compile Include="../../src/StartingOptionsConfig.cs" />
+    <Compile Include="../../src/StartingOptions.cs" />
+    <Compile Include="../../src/IndividualExclusions.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(ReferenceDir)/BepInEx.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

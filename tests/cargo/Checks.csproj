@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS0649;CS0660;CS0661;CS0414</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Mocks.cs" />
+    <Compile Include="Checks.cs" />
+    <Compile Include="StackChecks.cs" />
+    <Compile Include="SurfaceChecks.cs" />
+    <Compile Include="StackMocks.cs" />
+    <Compile Include="Production.generated.cs" />
+    <Compile Include="../../src/StarterCargoGeometry.cs" />
+  </ItemGroup>
+</Project>

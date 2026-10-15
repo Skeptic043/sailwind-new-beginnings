@@ -102,12 +102,24 @@ $releaseNames = @('manifest.json','icon.png','README.md','CHANGELOG.md','LICENSE
 $pluginEntries = @($releaseNames | ForEach-Object { [pscustomobject]@{ Source=(Join-Path $ProjectRoot $_); Name=$_ } })
 $pluginEntries += [pscustomobject]@{ Source=$dllPath; Name='BepInEx/plugins/NewBeginnings/NewBeginnings.dll' }
 # Exact public source allowlist: never recursively archive the working directory.
-$sourceNames = $releaseNames + @('.gitignore','.gitattributes','BUILD.md','assets/icon.svg',
-    'NewBeginnings.csproj','Build.ps1','Package.ps1','tools/Verify-Package.ps1')
+$sourceNames = $releaseNames + @('.gitignore','.gitattributes','BUILD.md','TESTING.md','assets/icon.svg',
+    'NewBeginnings.csproj','Build.ps1','Test.ps1','Package.ps1','tools/Verify-Package.ps1')
 $sourceEntries = @($sourceNames | ForEach-Object { [pscustomobject]@{ Source=(Join-Path $ProjectRoot $_); Name=$_ } })
 $sourceEntries += @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'src') -File -Filter '*.cs' |
     Sort-Object Name | ForEach-Object { [pscustomobject]@{ Source=$_.FullName; Name=('src/' + $_.Name) } })
 if (-not ($sourceEntries.Name -ccontains 'src/Plugin.cs')) { throw 'Source package is missing src/Plugin.cs.' }
+$testsRoot = Join-Path $ProjectRoot 'tests'
+$sourceEntries += @(Get-ChildItem -LiteralPath $testsRoot -File -Recurse |
+    Where-Object {
+        $_.Extension -in @('.cs', '.csproj', '.ps1', '.py', '.md') -and
+        $_.FullName.Substring($testsRoot.Length) -notmatch '[\\/](bin|obj|generated|__pycache__)[\\/]' -and
+        $_.Name -notlike '*.generated.cs' -and $_.Name -notlike '*.g.cs'
+    } | Sort-Object FullName | ForEach-Object {
+        [pscustomobject]@{ Source=$_.FullName; Name=('tests/' + [IO.Path]::GetRelativePath($testsRoot, $_.FullName).Replace('\', '/')) }
+    })
+foreach ($suite in @('equipment', 'cargo', 'startup', 'holds', 'selection', 'berths', 'moorings', 'binding')) {
+    if (-not ($sourceEntries.Name -ccontains "tests/$suite/Run.ps1")) { throw "Source package is missing tests/$suite/Run.ps1." }
+}
 foreach ($entry in $sourceEntries) {
     if (-not [IO.File]::Exists($entry.Source)) { throw "Required source input is missing: $($entry.Name)" }
 }
