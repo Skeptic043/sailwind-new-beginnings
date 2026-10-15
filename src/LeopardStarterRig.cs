@@ -171,8 +171,8 @@ namespace NewBeginnings
                 if (GameState.playing && !GameState.currentlyLoading && selected.Boat.isPurchased()) break;
                 yield return null;
             }
-            // Let the existing hull settling pass complete before creating a
-            // hinged sail. Native attachment handles ropes, registration and angles.
+            // Let native physics run a few steps after placement before creating
+            // a hinged sail. Native attachment handles ropes, registration and angles.
             for (var frame = 0; frame < 4; ++frame) yield return new WaitForFixedUpdate();
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();

@@ -58,18 +58,16 @@ namespace NewBeginnings
 
         // Harmony indexes refer to the factory's first two arguments. This runs
         // after WorldScrambler.Move but before its IEnumerator captures startPos.
-        private static bool BeforePlayerStart(StartMenu __0, ref Transform __1,
+        private static bool BeforePlayerStart(StartMenu __0,
             Transform __2, GameObject __3, ref IEnumerator __result)
         {
             // Its factory replaces the native one completely. Defer this exact
-            // iterator until the custom island has loaded and been prepared.
+            // iterator until the selected island has loaded and been prepared.
             // Pending selection is consumed once, so invoking the factory again
             // at handoff continues through its normal body without recursion.
-            // __1 is Scrambled's own start target, used if no placement exists.
-            if (FixedStart.TryPreparePendingCustom(__0, __1, out var custom,
+            if (FixedStart.TryPreparePendingCustom(__0, out var custom,
                 target => playerStartFactory.Invoke(null, new object[] { __0, target, __2, __3 }) as IEnumerator))
             { __result = custom; return false; }
-            FixedStart.ApplyPendingAtStart(__0, ref __1);
             return true;
         }
     }

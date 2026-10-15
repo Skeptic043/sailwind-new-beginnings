@@ -56,6 +56,8 @@ namespace NewBeginnings
         private StartMenuButton nativeConfirm;
         private bool continueAvailable = true;
         private bool catalogUnavailable;
+        private string catalogUnavailableReason;
+        private const string CatalogUnavailableReason = "No New Beginnings start is available.";
         private bool catalogFaultLogged;
         private TextMesh portValue;
         private GameObject portValuePanel;
@@ -240,7 +242,7 @@ namespace NewBeginnings
                 {
                     var reason = catalog.Rejections.FirstOrDefault() ??
                         "No playable ports or boats were available.";
-                    ShowCatalogUnavailable();
+                    ShowCatalogUnavailable(reason);
                     // The first refresh runs from StartMenu.Awake while this
                     // panel is hidden and before ports register. Only an empty
                     // catalog on a shown menu is worth a warning.
@@ -251,7 +253,7 @@ namespace NewBeginnings
                     else if (!catalogFaultLogged)
                     {
                         catalogFaultLogged = true;
-                        Plugin.Instance?.Warn("New Beginnings catalog has no usable start; Sailwind's normal start remains available. " + reason);
+                        Plugin.Instance?.Warn("New Beginnings catalog has no usable start; Continue is blocked. " + reason);
                     }
                     return;
                 }
@@ -261,10 +263,10 @@ namespace NewBeginnings
             }
             catch (Exception exception)
             {
-                ShowCatalogUnavailable();
+                ShowCatalogUnavailable(exception.Message);
                 if (catalogFaultLogged) return;
                 catalogFaultLogged = true;
-                Plugin.Instance?.Error("New Beginnings catalog is unavailable; Sailwind's normal start remains available.", exception);
+                Plugin.Instance?.Error("New Beginnings catalog is unavailable; Continue is blocked.", exception);
             }
             finally
             {
@@ -275,26 +277,25 @@ namespace NewBeginnings
             }
         }
 
-        internal bool CatalogUnavailable => catalogUnavailable;
-
-        internal void ShowCatalogUnavailable()
+        // Continue stays blocked until a later refresh finds a usable start.
+        // A confirmed New Beginnings start is never replaced by Sailwind's own.
+        internal void ShowCatalogUnavailable(string reason)
         {
             catalog = null;
             catalogUnavailable = true;
-            continueAvailable = !FixedStart.TryGetStartBlock(out var blocked);
+            catalogUnavailableReason = string.IsNullOrEmpty(reason) ? CatalogUnavailableReason : reason;
+            continueAvailable = false;
+            var shown = FixedStart.TryGetStartBlock(out var blocked) ? blocked : catalogUnavailableReason;
             try
             {
                 if (portValue != null) portValue.text = "Unavailable";
                 if (boatValue != null) boatValue.text = "Unavailable";
-                if (status != null) status.text = continueAvailable ?
-                    "New Beginnings unavailable; Sailwind start" : Trim(blocked, 58);
+                if (status != null) status.text = Trim(shown, 58);
                 ApplyContinueState();
             }
             catch (Exception exception)
             {
-                // Keep the native button path available even if a changed menu
-                // no longer accepts one of these optional display updates.
-                Plugin.Instance?.Warn("New Beginnings fallback display could not be updated: " +
+                Plugin.Instance?.Warn("New Beginnings unavailable display could not be updated: " +
                     exception.Message);
             }
         }
@@ -312,7 +313,11 @@ namespace NewBeginnings
                 (!Plugin.Instance.StartOptions.TryValidate(out reason) ||
                  !AdditionalEquipment.TryValidateSelection(Plugin.Instance.StartOptions.EquipmentQuantities.Keys, out reason))) return false;
             RefreshCatalog();
-            if (catalogUnavailable) return true;
+            if (catalogUnavailable)
+            {
+                reason = catalogUnavailableReason;
+                return false;
+            }
             if (catalog != null && catalog.TryChoose(settings, individualExclusions,
                     new System.Random(1), out _, out reason)) return true;
             if (catalog == null) reason = "The start catalog is not ready.";

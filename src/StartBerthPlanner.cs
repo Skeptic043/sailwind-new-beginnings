@@ -9,7 +9,8 @@ namespace NewBeginnings
 {
     // A scene-bound preflight, held in a live frame through origin/scenery movement.
     // It does not own or mutate boats, native recovery registrations or providers.
-    internal enum StartBerthMode { Moored, OffshoreHeld, ShipyardHeld }
+    // Preserved leaves a boat moored at its own authored berth untouched.
+    internal enum StartBerthMode { Moored, OffshoreHeld, ShipyardHeld, Preserved }
 
     internal sealed class StartBerthPlan
     {
@@ -17,22 +18,15 @@ namespace NewBeginnings
         internal Transform Frame;
         internal Vector3 LocalPosition, LocalShorePosition;
         internal Quaternion LocalRotation;
+        // An offshore plan keeps its dock cleats as landing references only.
         internal GPButtonDockMooring Front, Back;
         internal PickupableBoatMooringRope FrontRope, BackRope;
-        internal SpringJoint FrontSpring, BackSpring;
         internal StartBerthMode Mode;
         internal bool OffshoreHeld => Mode == StartBerthMode.OffshoreHeld || Mode == StartBerthMode.ShipyardHeld;
         internal string OffshoreDiagnostics;
-        // A best-effort plan records the checks it did not pass. Revalidation
-        // repeats only the checks that passed, and the warning names the rest.
-        internal bool ClearanceVerified = true, DepartureVerified = true, LandingVerified = true;
-        // Pirate's offshore plan keeps its dock cleats as landing references only.
-        internal bool RetainedDockLanding;
         internal Vector3 Position => Frame.TransformPoint(LocalPosition);
         internal Quaternion Rotation => Frame.rotation * LocalRotation;
         internal Vector3 ShorePosition => Frame.TransformPoint(LocalShorePosition);
-        internal bool Revalidate(Rigidbody body, BoatMooringRopes ropes, out string reason) =>
-            StartBerthPlanner.Revalidate(this, body, ropes, out reason);
     }
 
     internal static class StartBerthPlanner
@@ -140,7 +134,6 @@ namespace NewBeginnings
                     survey, Make(destination, seed, Quaternion.identity, shore), out plan, out reason)) return false;
                 if (!landingVerified)
                 {
-                    plan.LandingVerified = false;
                     Note(plan, "Best-effort landing: Saffron's dry landing was not verified, so the player starts at the selected beach position. " + shoreReason);
                 }
                 return true;
@@ -208,10 +201,7 @@ namespace NewBeginnings
                 if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
                 plan = Make(destination, position, rotation, shore);
                 plan.Front = front; plan.Back = back;
-                plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
                 plan.FrontRope = frontRope; plan.BackRope = backRope;
-                plan.ClearanceVerified = plan.DepartureVerified = false;
-                plan.LandingVerified = verified;
                 if (!canMoor)
                 {
                     plan.Mode = StartBerthMode.OffshoreHeld;
@@ -277,9 +267,6 @@ namespace NewBeginnings
             if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
             plan = Make(destination, position, rotation, shore);
             plan.Front = front; plan.Back = back;
-            plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
-            plan.LandingVerified = verified;
-            plan.ClearanceVerified = plan.DepartureVerified = false;
             // Reach or an occupied cleat changes securing only. Neither can
             // move this start back into the inner harbour or prevent it.
             if (ValidCleat(destination, front, body, ropes) && ValidCleat(destination, back, body, ropes) &&
@@ -330,7 +317,6 @@ namespace NewBeginnings
                     if (distance >= best) continue;
                     best = distance;
                     plan.Front = front; plan.Back = back;
-                    plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
                     plan.FrontRope = frontRope; plan.BackRope = backRope;
                 }
         }
@@ -394,8 +380,6 @@ namespace NewBeginnings
             plan = Make(destination, position, marker.rotation, shore);
             plan.Mode = StartBerthMode.ShipyardHeld;
             plan.Front = front; plan.Back = back;
-            plan.LandingVerified = verified;
-            plan.ClearanceVerified = plan.DepartureVerified = false;
             if (!verified) Plugin.Instance.Warn("The shipyard landing was not verified; the player uses its dock reference.");
             return true;
         }
@@ -472,7 +456,6 @@ namespace NewBeginnings
                     }
                     plan = Make(destination, position, candidateRotation, shore);
                     plan.Front = a; plan.Back = b;
-                    plan.FrontSpring = a.spring; plan.BackSpring = b.spring;
                     plan.FrontRope = frontRope; plan.BackRope = backRope;
                     reason = null;
                     return true;
@@ -538,11 +521,7 @@ namespace NewBeginnings
                     return Fail(failure + " The closest surveyed berth is not finite.", out reason);
                 plan = Make(destination, best.Position, best.Rotation, shore);
                 plan.Front = a; plan.Back = b;
-                plan.FrontSpring = a.spring; plan.BackSpring = b.spring;
                 plan.FrontRope = best.FrontRope; plan.BackRope = best.BackRope;
-                plan.ClearanceVerified = best.Stage >= 2;
-                plan.DepartureVerified = best.Stage >= 3;
-                plan.LandingVerified = verified;
                 plan.OffshoreDiagnostics = "Best-effort moored start: no berth passed every check, so the boat uses the closest surveyed berth, which passed " +
                     (best.Stage == 1 ? "rope reach only" : best.Stage == 2 ? "rope reach and hull clearance" :
                         "rope reach, hull clearance and departure clearance") +
@@ -561,7 +540,6 @@ namespace NewBeginnings
                 if (RopePair(hull, plan.Position, plan.Rotation, front, back, out var frontRope, out var backRope))
                 {
                     plan.Mode = StartBerthMode.Moored;
-                    plan.ClearanceVerified = plan.DepartureVerified = false;
                     plan.FrontRope = frontRope; plan.BackRope = backRope;
                     plan.OffshoreDiagnostics = "Best-effort moored start: continuous dock support was not verified, but the native ropes reach the closest pair at this pose. " + failure;
                 }
@@ -629,10 +607,8 @@ namespace NewBeginnings
             if (front != null && back != null)
             {
                 landing.Front = front; landing.Back = back;
-                landing.FrontSpring = front.spring; landing.BackSpring = back.spring;
             }
             plan = OffshorePlan(destination, position, rotation, landing);
-            plan.LandingVerified = landingVerified;
             plan.OffshoreDiagnostics = "Best-effort offshore start: no moored berth was selected, so the boat is held in open water " +
                 (front == null ? "at the starting marker" : "beside the closest dock cleats, and the player lands on that dock") + ". " + failure;
             return true;
@@ -689,7 +665,6 @@ namespace NewBeginnings
                     // This is a landing proof only, never a candidate boat berth.
                     var landing = Make(destination, seed, Quaternion.identity, shore);
                     landing.Front = pair.A; landing.Back = pair.B;
-                    landing.FrontSpring = pair.A.spring; landing.BackSpring = pair.B.spring;
                     if (TryFixedOffshoreHold(destination, body, hull, height, PirateOffshoreCenter, Vector3.right,
                             survey, landing, out plan, out var anchorReason))
                     { reason = null; return true; }
@@ -707,12 +682,10 @@ namespace NewBeginnings
             if (back != null)
             {
                 dockLanding.Front = front; dockLanding.Back = back;
-                dockLanding.FrontSpring = front.spring; dockLanding.BackSpring = back.spring;
             }
             if (!TryFixedOffshoreHold(destination, body, hull, height, PirateOffshoreCenter, Vector3.right,
                     survey, dockLanding, out plan, out var holdReason))
                 return Fail("Pirate requires an offshore start for this boat. " + holdReason, out reason);
-            plan.LandingVerified = false;
             Note(plan, "Best-effort landing: Pirate's dry landing was not verified (" + landingFailure + "), so the player lands on the dock deck.");
             reason = null;
             return true;
@@ -723,9 +696,7 @@ namespace NewBeginnings
         {
             var plan = Make(destination, position, rotation, landing.ShorePosition);
             plan.Mode = StartBerthMode.OffshoreHeld;
-            plan.RetainedDockLanding = landing.Front != null && landing.Back != null;
             plan.Front = landing.Front; plan.Back = landing.Back;
-            plan.FrontSpring = landing.FrontSpring; plan.BackSpring = landing.BackSpring;
             return plan;
         }
 
@@ -857,47 +828,6 @@ namespace NewBeginnings
                 LocalRotation = Quaternion.Inverse(frame.rotation) * rotation,
                 LocalShorePosition = frame.InverseTransformPoint(shore) };
         }
-
-        internal static bool Revalidate(StartBerthPlan plan, Rigidbody body, BoatMooringRopes ropes, out string reason)
-        {
-            reason = null;
-            if (plan?.Mode == StartBerthMode.ShipyardHeld)
-                return StartDestinations.IsCurrent(plan.Destination) && plan.Frame != null &&
-                    Finite(plan.Position) && Finite(plan.ShorePosition) && IsFiniteRotation(plan.Rotation);
-            var survey = new Survey();
-            if (plan == null || !StartDestinations.IsCurrent(plan.Destination) ||
-                !StartDestinations.SceneryReady(plan.Destination) || plan.Frame != plan.Destination.DockRoot ||
-                plan.Frame == null || !TryHull(body, ropes, out var hull, out reason))
-                return Fail(reason ?? "Starting location changed before placement.", out reason);
-            if (!TryHeight(body, out var height, out reason) || Mathf.Abs(height - plan.Position.y) > .5f)
-                return Fail(reason ?? "The berth moved away from the verified waterline.", out reason);
-            if (!Finite(plan.Position) || !Finite(plan.ShorePosition) || !IsFiniteRotation(plan.Rotation))
-                return Fail("The offshore plan has a non-finite pose.", out reason);
-            // A best-effort plan is not rejected again for a check its survey
-            // already reported failing.
-            if (!plan.OffshoreHeld && (plan.ClearanceVerified && !Clear(body, hull, plan.Position, plan.Rotation, survey, out reason) ||
-                plan.DepartureVerified && !DepartureClear(body, hull, plan.Position, plan.Rotation, survey, out reason))) return false;
-            if (plan.Mode == StartBerthMode.Moored && (!ValidCleat(plan.Destination, plan.Front, body, ropes) ||
-                !ValidCleat(plan.Destination, plan.Back, body, ropes) || plan.Front == plan.Back ||
-                plan.Front.spring != plan.FrontSpring || plan.Back.spring != plan.BackSpring ||
-                plan.FrontSpring == plan.BackSpring ||
-                !RopePair(hull, plan.Position, plan.Rotation, plan.Front, plan.Back, out var front, out var back) ||
-                front != plan.FrontRope || back != plan.BackRope))
-                return Fail("A planned mooring or its rope reach changed.", out reason);
-            if (plan.RetainedDockLanding &&
-                (!ValidCleat(plan.Destination, plan.Front, body, ropes) || !ValidCleat(plan.Destination, plan.Back, body, ropes) ||
-                 plan.Front.spring != plan.FrontSpring || plan.Back.spring != plan.BackSpring))
-                return Fail("The retained dock landing references changed.", out reason);
-            if (plan.LandingVerified && (Plugin.Instance == null || !Plugin.Instance.TryFindStartShore(plan.Destination, plan.ShorePosition,
-                    plan.OffshoreHeld ? plan.ShorePosition : plan.Position, out var shore, out _, out reason,
-                    plan.Front != null ? plan.Front.transform : null, plan.Back != null ? plan.Back.transform : null) ||
-                    Vector3.Distance(shore, plan.ShorePosition) > .5f))
-                return Fail(reason ?? "The planned dry landing is no longer supported.", out reason);
-            return true;
-        }
-
-        private static bool IsFiniteRotation(Quaternion value) =>
-            Finite(value.x) && Finite(value.y) && Finite(value.z) && Finite(value.w);
 
         private static bool TryHull(Rigidbody body, BoatMooringRopes ropes, out Hull hull, out string reason)
         {

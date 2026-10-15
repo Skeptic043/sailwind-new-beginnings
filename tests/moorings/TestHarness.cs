@@ -240,7 +240,6 @@ class TestHarness
     {
         GameState.playing = true;
         GameState.currentlyLoading = false;
-        StarterMooring.MarkSettled(selected);
     }
 
     static void Patch(string name, params object[] args) => typeof(StarterMooring).GetNestedType(name, BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, args);
@@ -289,9 +288,6 @@ class TestHarness
         {
             x = 1006.74f
         };
-        Step();
-        Check(front.currentRopeLengthSquared == 72900 && Plugin.Instance.DebugLogs == 0, "world movement to live endpoints does not bypass final-settle gate");
-        StarterMooring.MarkSettled(selected);
         Step();
         Check(front.currentRopeLengthSquared == 72900 && Plugin.Instance.DebugLogs == 0, "final placement still waits for native kinematic reset");
         front.FinishNativeKinematicReset();
@@ -349,17 +345,6 @@ class TestHarness
         Ready();
         FixedStart.Active = false;
         Check(!Step() && front.currentRopeLengthSquared == 72900, "changed selection cancels operation");
-        Arm();
-        Ready();
-        StarterMooring.MarkSettled(new ResolvedStart());
-        Step();
-        Check(front.currentRopeLengthSquared == 25, "unrelated settle notification cannot clear completed settle");
-        Arm();
-        GameState.playing = true;
-        GameState.currentlyLoading = false;
-        StarterMooring.MarkSettled(new ResolvedStart());
-        Step();
-        Check(front.currentRopeLengthSquared == 72900, "unrelated settle notification cannot authorize this hull");
         Arm();
         Ready();
         selected.Boat.Purchased = false;

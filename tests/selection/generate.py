@@ -126,13 +126,14 @@ assert 'choice.HasShipyard = choice.Yard != null || ShipyardStart.HasNativeYard(
 # Pure selection and menu behavior is extracted unchanged. Unity objects and
 # placement viability are doubles, so this does not establish live discovery.
 ui_members = statement(menu, 'private bool EditingAny =>') + '\n'
+ui_members += statement(menu, 'private const string CatalogUnavailableReason') + '\n'
 ui_members += statement(menu, 'internal void RefreshSpawnOptions() =>') + '\n'
 ui_members += statement(menu, 'internal void CloseExclusions() =>') + '\n'
 ui_members += statement(menu, 'private PortChoice[] EditorPorts()') + '\n'
 ui_members += statement(menu, 'private BoatChoice[] EditorBoats()') + '\n'
 ui_members += menu[menu.index('private bool IsSelectedPort'):menu.index('private void CycleBoat')]
 ui_members += '\n'.join(block(menu, marker) for marker in [
-    'internal bool CanStart(', 'internal void ShowCatalogUnavailable()', 'private void RefreshDisplay()', 'private void CyclePort(', 'private void TogglePortPool(',
+    'internal bool CanStart(', 'internal void ShowCatalogUnavailable(', 'private void RefreshDisplay()', 'private void CyclePort(', 'private void TogglePortPool(',
     'private void ToggleModPorts()', 'private void ToggleSecretIslands()', 'private void ToggleShipyardPortsOnly()',
     'internal void ShowStartingOptions(', 'private void OpenEditor(', 'private void CloseEditor(',
     'private void ToggleEditorRow(', 'private void ShowEditorTab(', 'private void RefreshEditor()', 'private void OnSettingsReloaded()',

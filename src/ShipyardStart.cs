@@ -91,8 +91,7 @@ namespace NewBeginnings
                 Mode = StartBerthMode.ShipyardHeld,
                 LocalPosition = frame.InverseTransformPoint(marker.position),
                 LocalRotation = Quaternion.Inverse(frame.rotation) * marker.rotation,
-                LocalShorePosition = frame.InverseTransformPoint(shore),
-                LandingVerified = verified, ClearanceVerified = false, DepartureVerified = false };
+                LocalShorePosition = frame.InverseTransformPoint(shore) };
             StartBerthPlanner.PrepareShipyardMoorings(plan, body, ropes);
             return true;
         }

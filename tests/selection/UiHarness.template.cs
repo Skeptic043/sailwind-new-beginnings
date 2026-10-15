@@ -105,6 +105,7 @@ class UiHarness
     PanelHarness startingOptions = new();
     readonly List<GameObject> mainControls = new();
     bool catalogUnavailable, built = true;
+    string catalogUnavailableReason;
     void RefreshCatalog()
     {
         RefreshDisplay();
@@ -320,11 +321,14 @@ class UiHarness
         guarded.catalogUnavailable = true;
         FixedStart.BlockStart = true;
         guarded.RefreshDisplay();
-        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out var blocked) && blocked == "Starting blocked for fixture", "start guard did not block Continue and direct CanStart before native fallback");
-        guarded.ShowCatalogUnavailable();
-        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out _), "catalog error fallback bypassed persistent start guard");
+        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out var blocked) && blocked == "Starting blocked for fixture", "start guard did not block Continue and direct CanStart");
+        guarded.ShowCatalogUnavailable("Fixture discovery failed");
+        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out _), "catalog error bypassed persistent start guard");
         FixedStart.BlockStart = false;
-        check(guarded.CanStart(out _), "released guard prevented ordinary native fallback");
+        guarded.ShowCatalogUnavailable("Fixture discovery failed");
+        check(!guarded.continueAvailable && guarded.status.text == "Fixture discovery failed" && !guarded.CanStart(out var unavailable) && unavailable == "Fixture discovery failed", "unavailable catalog did not block Continue with its reason");
+        guarded.ShowCatalogUnavailable("");
+        check(guarded.status.text == CatalogUnavailableReason && !guarded.CanStart(out unavailable) && unavailable == CatalogUnavailableReason, "unavailable catalog without a reason lacked the generic reason");
         Console.WriteLine("PASS extracted production UI state matrix; GameObject activation and pointer parents modeled, no rendered-menu claim.");
     }
 

@@ -29,8 +29,6 @@ namespace NewBeginnings
         private Vector3 lastStartControllerPosition;
         private float startTrackingAt = -1f;
         private float startPlayingAt = -1f;
-        private int settleGeneration;
-        private ProbeVelocityGuard activeProbeGuard;
         private Collider docksideSurfaceCollider;
         private Transform docksideMarker;
         private Transform alternateDocksideAnchor;
@@ -1353,21 +1351,18 @@ namespace NewBeginnings
         }
 
         internal Transform MakeTemporaryStart(ResolvedStart selected, Quaternion rotation,
-            Vector3? shorePosition, Vector3 berthPosition)
+            Vector3 shorePosition, Vector3 berthPosition)
         {
-            var dockMarker = selected.ShoreFrame;
-            if (dockMarker == null) throw new ArgumentNullException(nameof(dockMarker));
+            var shoreFrame = selected.ShoreFrame;
+            if (shoreFrame == null) throw new ArgumentNullException(nameof(shoreFrame));
             if (temporaryStart != null) Destroy(temporaryStart.gameObject);
             ClearDocksideSurface();
-            if (shorePosition.HasValue)
-            {
-                // A private anchor follows the real recovery object's world shifts.
-                // Never alter the native recovery marker or its mooring references.
-                alternateDocksideAnchor = new GameObject("New Beginnings alternate shore anchor").transform;
-                alternateDocksideAnchor.SetParent(dockMarker, false);
-                alternateDocksideAnchor.SetPositionAndRotation(shorePosition.Value, rotation);
-                dockMarker = alternateDocksideAnchor;
-            }
+            // A private anchor follows the real recovery object's world shifts.
+            // Never alter the native recovery marker or its mooring references.
+            alternateDocksideAnchor = new GameObject("New Beginnings alternate shore anchor").transform;
+            alternateDocksideAnchor.SetParent(shoreFrame, false);
+            alternateDocksideAnchor.SetPositionAndRotation(shorePosition, rotation);
+            var dockMarker = alternateDocksideAnchor;
             var marker = new GameObject("New Beginnings temporary player target");
             marker.transform.SetParent(dockMarker, false);
             // The recovery root is the dock-side marker. Its boatPos child is
@@ -1383,9 +1378,7 @@ namespace NewBeginnings
                 string.Equals(selected.Port.gameObject.name, "port A/M 6 (Oasis)", StringComparison.Ordinal);
             docksideFrontMooring = selected.FrontMooring != null ? selected.FrontMooring.transform : null;
             docksideBackMooring = selected.BackMooring != null ? selected.BackMooring.transform : null;
-            // Preserve the native probing direction outside alternate berths.
-            docksideBerthLocal = dockMarker.InverseTransformPoint(shorePosition.HasValue
-                ? berthPosition : selected.BerthFrame.position);
+            docksideBerthLocal = dockMarker.InverseTransformPoint(berthPosition);
             docksideSurfaceCollider = null;
             nextDocksideSurfaceProbe = 0f;
             unresolvedPlayingAt = -1f;
@@ -1495,116 +1488,6 @@ namespace NewBeginnings
             lastSurfaceProbeSummary = null;
         }
 
-        internal void CancelBoatSettle()
-        {
-            ++settleGeneration;
-            StarterMooring.Cancel();
-            StarterBoatRepair.Cancel();
-            activeProbeGuard?.Restore();
-            activeProbeGuard = null;
-        }
-
-        internal void BeginBoatSettle(StartMenu menu, ResolvedStart selected, Vector3 position,
-            Quaternion rotation, ProbeVelocityGuard probeGuard)
-        {
-            // RecoveryPort is moved independently from its island by Scrambled
-            // Seas. Retain the berth offset in the recovery marker's frame so
-            // later floating-origin shifts cannot pull the boat back to old
-            // world coordinates.
-            var marker = selected.BerthFrame;
-            var berthOffset = marker.InverseTransformPoint(position);
-            var berthRotation = Quaternion.Inverse(marker.rotation) * rotation;
-            activeProbeGuard?.Restore();
-            activeProbeGuard = probeGuard;
-            var generation = ++settleGeneration;
-            try
-            {
-                StartCoroutine(StartupProfiler.Measure(SettleBoat(menu, selected, berthOffset, berthRotation,
-                    generation, probeGuard)));
-            }
-            catch
-            {
-                if (ReferenceEquals(activeProbeGuard, probeGuard)) activeProbeGuard = null;
-                probeGuard?.Restore();
-                throw;
-            }
-        }
-
-        private IEnumerator SettleBoat(StartMenu menu, ResolvedStart selected, Vector3 berthOffset,
-            Quaternion berthRotation, int generation, ProbeVelocityGuard probeGuard)
-        {
-            var placementCompleted = false;
-            try
-            {
-                // Native recovery gives physics multiple steps before and after
-                // final placement. Keep BoatProbes from deriving a travel velocity
-                // from the hull's relocation throughout those steps.
-                yield return new WaitForFixedUpdate();
-                yield return new WaitForFixedUpdate();
-                yield return new WaitForEndOfFrame();
-                yield return new WaitForEndOfFrame();
-                var stillActive = false;
-                try
-                {
-                    stillActive = generation == settleGeneration &&
-                        FixedStart.IsSelectionStillActive(menu, selected);
-                }
-                catch (Exception exception)
-                {
-                    Warn("Boat settling was cancelled after selection state changed: " + exception.Message);
-                }
-                if (!stillActive)
-                    yield break;
-                try
-                {
-                    var marker = selected.BerthFrame;
-                    if (marker == null)
-                    {
-                        Warn("Boat settling was cancelled because the selected recovery marker disappeared.");
-                        yield break;
-                    }
-                    var position = marker.TransformPoint(berthOffset);
-                    var rotation = marker.rotation * berthRotation;
-                    if (!IsFinite(position) || !IsFinite(rotation) ||
-                        !IsFinite(selected.ShoreFrame.position) ||
-                        temporaryStart != null && !IsFinite(temporaryStart.position))
-                    {
-                        Warn("Boat settling stopped because a port, berth or player target became non-finite after world movement.");
-                        yield break;
-                    }
-                    DebugLog($"Start settle coordinates: location {selected.ShoreFrame.position}, berth {position}, hull {selected.Body.position}, player target {(temporaryStart != null ? temporaryStart.position.ToString() : "gone")}.");
-                    selected.Saveable.transform.SetPositionAndRotation(position, rotation);
-                    selected.Body.position = position;
-                    selected.Body.rotation = rotation;
-                    selected.Body.velocity = Vector3.zero;
-                    selected.Body.angularVelocity = Vector3.zero;
-                    Physics.SyncTransforms();
-                    if (selected.FrontMooring.spring.connectedBody != selected.Body ||
-                        selected.BackMooring.spring.connectedBody != selected.Body)
-                        Warn("Boat moved after placement, but one of its dock springs disconnected before ownership.");
-                    placementCompleted = true;
-                }
-                catch (Exception exception)
-                {
-                    Warn("Boat settling or rope placement needs an in-game check: " + exception);
-                }
-                yield return new WaitForFixedUpdate();
-                yield return new WaitForFixedUpdate();
-                yield return new WaitForEndOfFrame();
-                yield return new WaitForEndOfFrame();
-                if (placementCompleted && generation == settleGeneration)
-                {
-                    StarterMooring.MarkSettled(selected);
-                    StarterBoatRepair.MarkSettled(selected);
-                }
-            }
-            finally
-            {
-                probeGuard?.Restore();
-                if (ReferenceEquals(activeProbeGuard, probeGuard)) activeProbeGuard = null;
-            }
-        }
-
         private static bool IsFinite(Vector3 value) =>
             IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
 
@@ -1624,7 +1507,8 @@ namespace NewBeginnings
             Config.SettingChanged -= OnConfigSettingChanged;
             FixedStart.CancelCustomStart();
             StartingValues.Cancel();
-            CancelBoatSettle();
+            StarterMooring.Cancel();
+            StarterBoatRepair.Cancel();
             CancelPlayerStartTracking();
             ClearDocksideSurface();
             StarterCargo.Disarm();

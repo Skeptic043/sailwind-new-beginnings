@@ -48,7 +48,6 @@ namespace NewBeginnings
         internal PortChoice Port;
         internal BoatChoice Boat;
         internal bool UseShipyardBerth;
-        internal bool UsesCustomBerth => Port.UsesCustomBerth || UseShipyardBerth;
     }
 
     internal sealed class SelectionCatalog
@@ -265,7 +264,7 @@ namespace NewBeginnings
                     }
                     var body = saveable.GetComponent<Rigidbody>();
                     var ropes = saveable.GetComponent<BoatMooringRopes>();
-                    if (body == null || !ProbeVelocityGuard.CanGuard(saveable) ||
+                    if (body == null ||
                         saveable.GetComponent<BoatDamage>() == null ||
                         saveable.GetComponent<BoatLocalItems>() == null ||
                         ropes == null || ropes.ropes == null || ropes.ropes.Length == 0 ||

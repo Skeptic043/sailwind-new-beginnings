@@ -13,7 +13,6 @@ namespace NewBeginnings
         private const float ReadinessTimeout = 90f;
         private static int generation;
         private static ResolvedStart pending;
-        private static bool settled;
 
         internal static void Cancel()
         {
@@ -32,12 +31,6 @@ namespace NewBeginnings
         {
             ++generation;
             pending = null;
-            settled = false;
-        }
-
-        internal static void MarkSettled(ResolvedStart selected)
-        {
-            if (ReferenceEquals(pending, selected)) settled = true;
         }
 
         internal static void Arm(StartMenu menu, ResolvedStart selected)
@@ -108,7 +101,7 @@ namespace NewBeginnings
                             var purchased = selected.Boat.isPurchased();
                             if (purchased) sawOwnership = true;
                             var awaitingInput = Plugin.Instance.WaitingForPlayerInput();
-                            var ready = settled && GameState.playing && !awaitingInput &&
+                            var ready = GameState.playing && !awaitingInput &&
                                 purchased && !selected.Body.isKinematic &&
                                 selected.Body.gameObject.activeInHierarchy;
                             if (!ready)
@@ -126,7 +119,7 @@ namespace NewBeginnings
                                 if (!awaitingInput) waitingElapsed += elapsed;
                                 if (waitingElapsed >= ReadinessTimeout)
                                 {
-                                    stopReason = $"readiness timed out after 90 seconds (settled={settled}, playing={GameState.playing}, owned={purchased}, kinematic={selected.Body.isKinematic}, active={selected.Body.gameObject.activeInHierarchy})";
+                                    stopReason = $"readiness timed out after 90 seconds (playing={GameState.playing}, owned={purchased}, kinematic={selected.Body.isKinematic}, active={selected.Body.gameObject.activeInHierarchy})";
                                     stop = true;
                                 }
                             }

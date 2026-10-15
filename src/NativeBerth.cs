@@ -21,27 +21,9 @@ namespace NewBeginnings
 
         internal sealed class Plan
         {
-            internal Port Port;
-            internal PurchasableBoat Boat;
-            internal SaveableObject Saveable;
-            internal Rigidbody Body;
-            internal BoatMooringRopes Ropes;
             internal IslandHorizon Island;
             internal GPButtonDockMooring Front, Back;
-            internal SpringJoint FrontSpring, BackSpring;
             internal PickupableBoatMooringRope FrontRope, BackRope;
-            internal bool FrontConnected, BackConnected;
-
-            internal bool Revalidate()
-            {
-                if (!TryResolve(Port, Boat, Saveable, Body, Ropes, out var current)) return false;
-                // Native trigger processing may connect a pending rope. Its
-                // identity and authored dock must remain unchanged.
-                return current.Island == Island && current.Front == Front && current.Back == Back &&
-                    current.FrontSpring == FrontSpring && current.BackSpring == BackSpring &&
-                    current.FrontRope == FrontRope && current.BackRope == BackRope &&
-                    (!FrontConnected || current.FrontConnected) && (!BackConnected || current.BackConnected);
-            }
 
             internal Vector3 ShorePosition
             {
@@ -90,10 +72,8 @@ namespace NewBeginnings
             var frontRopes = ropes.ropes.Where(rope => Matches(rope, front, body, maxLengthSquared, horizonOffset)).ToArray();
             var backRopes = ropes.ropes.Where(rope => Matches(rope, back, body, maxLengthSquared, horizonOffset)).ToArray();
             if (frontRopes.Length != 1 || backRopes.Length != 1 || frontRopes[0] == backRopes[0]) return false;
-            plan = new Plan { Port = port, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes,
-                Island = island, Front = front, Back = back, FrontSpring = front.spring, BackSpring = back.spring,
-                FrontRope = frontRopes[0], BackRope = backRopes[0],
-                FrontConnected = frontRopes[0].IsMoored(), BackConnected = backRopes[0].IsMoored() };
+            plan = new Plan { Island = island, Front = front, Back = back,
+                FrontRope = frontRopes[0], BackRope = backRopes[0] };
             return Finite(plan.ShorePosition);
         }
 

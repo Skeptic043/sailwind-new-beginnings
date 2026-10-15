@@ -123,11 +123,8 @@ static class PirateCandidateChecks
         internal Quaternion LocalRotation;
         internal StartBerthMode Mode;
 
-        internal bool RetainedDockLanding;
         internal string OffshoreDiagnostics;
         internal GPButtonDockMooring Front, Back;
-        internal object FrontSpring, BackSpring;
-        internal bool ClearanceVerified = true, DepartureVerified = true, LandingVerified = true;
         internal PickupableBoatMooringRope FrontRope, BackRope;
         internal Quaternion Rotation => Frame.rotation * LocalRotation;
         internal Vector3 Position => Frame.TransformPoint(LocalPosition);
@@ -253,24 +250,24 @@ static class PirateCandidateChecks
         Plugin.Instance.Fails = true;
         Check(RunSurvey(site, pair, out var plan, out var reason) && reason == null, "survey without an accepted pose failed instead of returning its best effort: " + reason);
         Check(plan.Mode == StartBerthMode.Moored && Near(plan.Position, positions[2]) && plan.Front == a && plan.Back == b && plan.FrontRope == FrontLine && plan.BackRope == BackLine, "best effort did not keep the first pose that passed the most stages");
-        Check(plan.ClearanceVerified && plan.DepartureVerified && !plan.LandingVerified && Near(plan.ShorePosition, deck), "dry-shore-only failure did not land the player on the dock deck between its cleats");
+        Check(plan.OffshoreDiagnostics.Contains("passed rope reach, hull clearance and departure clearance. The player lands on the dock between its cleats.") && Near(plan.ShorePosition, deck), "dry-shore-only failure did not land the player on the dock deck between its cleats");
         Check(plan.OffshoreDiagnostics.StartsWith("Best-effort moored") && plan.OffshoreDiagnostics.Contains("departure clearance") && plan.OffshoreDiagnostics.Contains("Survey: cleats=2") && plan.OffshoreDiagnostics.Contains("DryShore=58"), "best-effort warning lost its survey report: " + plan.OffshoreDiagnostics);
         // Hull clearance passes from the second pose, departure never: stage two wins over stage one.
         Reset();
         clear = n => n >= 2;
         departure = _ => false;
-        Check(RunSurvey(site, pair, out plan, out reason) && plan.Mode == StartBerthMode.Moored && Near(plan.Position, positions[1]) && plan.ClearanceVerified && !plan.DepartureVerified, "hull-clear pose did not outrank rope-only poses");
-        Check(plan.LandingVerified && plan.ShorePosition == Plugin.Instance.Shore && plan.OffshoreDiagnostics.Contains("rope reach and hull clearance"), "best effort skipped an available dry landing");
+        Check(RunSurvey(site, pair, out plan, out reason) && plan.Mode == StartBerthMode.Moored && Near(plan.Position, positions[1]) && plan.OffshoreDiagnostics.Contains("passed rope reach and hull clearance"), "hull-clear pose did not outrank rope-only poses");
+        Check(plan.ShorePosition == Plugin.Instance.Shore && plan.OffshoreDiagnostics.Contains("passed rope reach and hull clearance.") && !plan.OffshoreDiagnostics.Contains("lands on the dock"), "best effort skipped an available dry landing");
         Reset();
         clear = n => n >= 2;
         departure = _ => false;
         Plugin.Instance.Fails = true;
-        Check(RunSurvey(site, pair, out plan, out reason) && !plan.LandingVerified && Near(plan.ShorePosition, deck), "unverified best-effort landing did not fall back to the dock deck");
+        Check(RunSurvey(site, pair, out plan, out reason) && plan.OffshoreDiagnostics.Contains("The player lands on the dock between its cleats.") && Near(plan.ShorePosition, deck), "unverified best-effort landing did not fall back to the dock deck");
         // Ropes never reach: hold the boat offshore beside the closest pair, preferring the seaward side.
         Reset();
         ropes = _ => false;
-        Check(RunSurvey(site, pair, out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && plan.RetainedDockLanding && plan.Front == a && plan.Back == b, "unreachable ropes did not produce an offshore hold beside the closest pair");
-        Check(Near(plan.Position, new Vector3(10, 2, 4)) && Near(plan.ShorePosition, deck) && !plan.LandingVerified && clearCalls == 0, "offshore hold was not beside the dock on its seaward side");
+        Check(RunSurvey(site, pair, out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && plan.Front == a && plan.Back == b, "unreachable ropes did not produce an offshore hold beside the closest pair");
+        Check(Near(plan.Position, new Vector3(10, 2, 4)) && Near(plan.ShorePosition, deck) && plan.OffshoreDiagnostics.Contains("the player lands on that dock") && clearCalls == 0, "offshore hold was not beside the dock on its seaward side");
         Check(plan.OffshoreDiagnostics.StartsWith("Best-effort offshore") && plan.OffshoreDiagnostics.Contains("RopeReach=60"), "offshore warning lost its survey report: " + plan.OffshoreDiagnostics);
         Reset();
         ropes = _ => false;
@@ -286,7 +283,7 @@ static class PirateCandidateChecks
         };
         Reset();
         dockSupported = false;
-        Check(RunSurvey(site, pair, out plan, out reason, nativeHull) && plan.Mode == StartBerthMode.Moored && plan.Front == a && ropeCalls == 1 && plan.OffshoreDiagnostics.Contains("DockSupport=1") && !plan.LandingVerified && !plan.ClearanceVerified && !plan.DepartureVerified, "unsupported quay skipped bounded native rope attempt or claimed physical verification");
+        Check(RunSurvey(site, pair, out plan, out reason, nativeHull) && plan.Mode == StartBerthMode.Moored && plan.Front == a && ropeCalls == 1 && plan.OffshoreDiagnostics.Contains("DockSupport=1") && plan.OffshoreDiagnostics.StartsWith("Best-effort moored start: continuous dock support was not verified"), "unsupported quay skipped bounded native rope attempt or claimed physical verification");
         var fallbackPose = plan.Position;
         Reset();
         dockSupported = false;
@@ -296,7 +293,7 @@ static class PirateCandidateChecks
         // A single cleat, a marker without cleats, and no usable reference at all.
         Reset();
         deckAvailable = false;
-        Check(RunSurvey(site, new[] { a }, out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && !plan.RetainedDockLanding && Near(plan.ShorePosition, a.transform.position), "single cleat produced no hold landing at the cleat");
+        Check(RunSurvey(site, new[] { a }, out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && plan.Back == null && Near(plan.ShorePosition, a.transform.position), "single cleat produced no hold landing at the cleat");
         var marked = new PortChoice
         {
             HiddenKey = "provider:marked",
@@ -308,7 +305,7 @@ static class PirateCandidateChecks
             rotation = Quaternion.LookRotation(new Vector3(1, 0, 0), Vector3.up)
         };
         Reset();
-        Check(RunSurvey(marked, new GPButtonDockMooring[0], out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, new Vector3(50, 2, 50)) && plan.LandingVerified && plan.ShorePosition == Plugin.Instance.Shore, "marker-only location produced no offshore hold at its marker");
+        Check(RunSurvey(marked, new GPButtonDockMooring[0], out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, new Vector3(50, 2, 50)) && plan.ShorePosition == Plugin.Instance.Shore, "marker-only location produced no offshore hold at its marker");
         Reset();
         Check(!RunSurvey(site, new GPButtonDockMooring[0], out plan, out reason) && plan == null && reason.Contains("No dock cleat or starting marker"), "location with no cleat and no marker was not reported as unusable");
         Console.WriteLine("PASS " + (checks - before) + " production dock survey best-effort checks (stage preference, dock landing, offshore hold, unusable input) with controlled physical stages. No live geometry claim.");
@@ -391,7 +388,7 @@ static class PirateCandidateChecks
                 Check(Near(Plugin.Instance.Seed, site.DockRoot.TransformPoint(mid - outward * 2)), "Fort landing seed left Dock4 centerline");
                 ropes = _ => false;
                 Check(TryFortOuter(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out var held, out _) && held.Mode == StartBerthMode.OffshoreHeld && Near(held.Position, moored.Position), "rope failure relocated Fort starter or vetoed start");
-                Check(clearCalls == 0 && departureCalls == 0 && waterCalls == 0 && !held.ClearanceVerified && !held.DepartureVerified, "Fort outer placement performed alternate clearance search");
+                Check(clearCalls == 0 && departureCalls == 0 && waterCalls == 0, "Fort outer placement performed alternate clearance search");
                 west.Occupied = true;
                 ropes = _ => true;
                 Check(TryFortOuter(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out held, out _) && held.Mode == StartBerthMode.OffshoreHeld && Near(held.Position, expected), "occupied outer cleat relocated or vetoed Fort starter");
@@ -400,7 +397,7 @@ static class PirateCandidateChecks
                 Check(TryFortOuter(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out held, out _) && held.Mode == StartBerthMode.OffshoreHeld && Near(held.Position, expected) && held.Front == west, "disabled Dock4 cleat abandoned the selected pose instead of holding it");
                 Plugin.Instance.Fails = true;
                 deckAvailable = false;
-                Check(TryFortOuter(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out held, out _) && !held.LandingVerified && Near(held.ShorePosition, Plugin.Instance.Seed), "unverified Fort shore blocked finite dock reference");
+                Check(TryFortOuter(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out held, out _) && Near(held.ShorePosition, Plugin.Instance.Seed), "unverified Fort shore blocked finite dock reference");
                 var oldPosition = held.Position;
                 site.DockRoot.position += new Vector3(100, 0, -200);
                 Check(Near(held.Position, oldPosition + new Vector3(100, 0, -200)), "prepared Fort pose ignored moving world frame");
@@ -691,7 +688,8 @@ static class PirateCandidateChecks
                     site.DockRoot.position -= new Vector3(200, 0, 300);
                     Plugin.Instance.Fails = true;
                     deckAvailable = false;
-                    Check(TryNativeShipyard(site, yard, new Rigidbody(), new BoatMooringRopes(), out plan, out _) && Near(plan.ShorePosition, expectedSeed) && !plan.LandingVerified, "shore warning vetoed chosen yard or moved to root/NPC");
+                    Plugin.Instance.Warnings.Clear();
+                    Check(TryNativeShipyard(site, yard, new Rigidbody(), new BoatMooringRopes(), out plan, out _) && Near(plan.ShorePosition, expectedSeed) && Plugin.Instance.Warnings.Any(w => w.Contains("shipyard landing was not verified")), "shore warning vetoed chosen yard or moved to root/NPC");
                     if (row.Index == 22)
                     {
                         var recovery = site.Recovery;
@@ -870,7 +868,7 @@ static class PirateCandidateChecks
                     PickupableBoatMooringRope.maxLength = unavailable == 2 ? 1 : 900;
                     Plugin.Instance.Fails = true;
                     deckAvailable = false;
-                    Check(TrySirenSong(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out var fallback, out _) && fallback.Mode == StartBerthMode.OffshoreHeld && Near(fallback.Position + fallback.Rotation * hull.Center, oldCenter) && !fallback.LandingVerified, "unavailable cleat/reach/shore vetoed or relocated Siren starter");
+                    Check(TrySirenSong(site, new Rigidbody(), new BoatMooringRopes(), hull, -.2f, out var fallback, out _) && fallback.Mode == StartBerthMode.OffshoreHeld && Near(fallback.Position + fallback.Rotation * hull.Center, oldCenter) && fallback.OffshoreDiagnostics.Contains("dry landing was not verified"), "unavailable cleat/reach/shore vetoed or relocated Siren starter");
                 }
             }
 
@@ -891,15 +889,13 @@ static class PirateCandidateChecks
         var landing = Make(site, new Vector3(1, 0, 1), Quaternion.identity, new Vector3(3, 4, 2));
         landing.Front = front;
         landing.Back = back;
-        landing.FrontSpring = front.spring;
-        landing.BackSpring = back.spring;
         var fixedPose = new Vector3(60.7f, 2, -77.8f);
         Check(new BoatSize? [] { BoatSize.Medium, BoatSize.Large, null }.All(size => PirateRequiresOffshore(site, size)) && !PirateRequiresOffshore(site, BoatSize.Small) && !PirateRequiresOffshore(new PortChoice { HiddenKey = "saffron" }, BoatSize.Large), "mandatory offshore size/site policy changed");
         Reset();
         var plan = Choose(site, landing);
         Check(plan.Mode == StartBerthMode.OffshoreHeld && plan.OffshoreDiagnostics == null && Near(plan.Position, fixedPose) && clearCalls == 1 && departureCalls == 1, "verified fixed hold moved, warned or kept surveying");
         Check(Near(plan.Frame.rotation * plan.LocalRotation * Vector3.forward, new Vector3(1, 0, 0)), "fixed hold bow does not face island east");
-        Check(plan.RetainedDockLanding && plan.ShorePosition == landing.ShorePosition && plan.Front == front && plan.Back == back && plan.FrontSpring == front.spring && plan.BackSpring == back.spring, "offshore result lost exact landing/cleat/spring references");
+        Check(plan.ShorePosition == landing.ShorePosition && plan.Front == front && plan.Back == back, "offshore result lost exact landing/cleat references");
         Reset();
         departure = _ => false;
         plan = Choose(site, landing);
@@ -935,7 +931,7 @@ static class PirateCandidateChecks
         };
         var saffronLanding = Make(saffron, new Vector3(200, 2, 170), Quaternion.identity, new Vector3(201, 3, 171));
         Reset();
-        Check(TryFixedOffshoreHold(saffron, new Rigidbody(), new Hull(), 2, SaffronOffshoreCenter, Vector3.forward, new Survey(true), saffronLanding, out plan, out var saffronReason) && saffronReason == null && plan.Mode == StartBerthMode.OffshoreHeld && !plan.RetainedDockLanding && plan.Front == null && Near(plan.Position, new Vector3(250f, 2, 169.9f)) && Near(plan.Frame.rotation * plan.LocalRotation * Vector3.forward, new Vector3(0, 0, 1)) && plan.ShorePosition == saffronLanding.ShorePosition, "Saffron hold lost its pose, bow, landing or claimed dock references");
+        Check(TryFixedOffshoreHold(saffron, new Rigidbody(), new Hull(), 2, SaffronOffshoreCenter, Vector3.forward, new Survey(true), saffronLanding, out plan, out var saffronReason) && saffronReason == null && plan.Mode == StartBerthMode.OffshoreHeld && plan.Front == null && Near(plan.Position, new Vector3(250f, 2, 169.9f)) && Near(plan.Frame.rotation * plan.LocalRotation * Vector3.forward, new Vector3(0, 0, 1)) && plan.ShorePosition == saffronLanding.ShorePosition, "Saffron hold lost its pose, bow, landing or claimed dock references");
         Reset();
         clear = _ => false;
         Check(TryFixedOffshoreHold(saffron, new Rigidbody(), new Hull(), 2, SaffronOffshoreCenter, Vector3.forward, new Survey(true), saffronLanding, out plan, out saffronReason) && plan.OffshoreDiagnostics.StartsWith("Saffron Island offshore hold") && plan.OffshoreDiagnostics.Contains("hull clearance unverified"), "Saffron hold cancelled or reported another location");
@@ -949,15 +945,15 @@ static class PirateCandidateChecks
         Check(TryPirateOffshore(site, new Rigidbody(), new BoatMooringRopes(), new Hull(), 2, new[] { front, back }, new Survey(true), out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose), "offshore entry returned a hull-at-dock fallback when geometry failed");
         Reset();
         Plugin.Instance.Fails = true;
-        Check(TryPirateOffshore(site, new Rigidbody(), new BoatMooringRopes(), new Hull(), 2, new[] { front, back }, new Survey(true), out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose) && Near(plan.ShorePosition, new Vector3(2, 1.5f, 0)) && !plan.LandingVerified && plan.OffshoreDiagnostics.StartsWith("Best-effort landing") && plan.OffshoreDiagnostics.Contains("injected dry shore failure"), "Pirate offshore start without a verified landing failed or did not land on the dock deck");
+        Check(TryPirateOffshore(site, new Rigidbody(), new BoatMooringRopes(), new Hull(), 2, new[] { front, back }, new Survey(true), out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose) && Near(plan.ShorePosition, new Vector3(2, 1.5f, 0)) && plan.OffshoreDiagnostics.StartsWith("Best-effort landing") && plan.OffshoreDiagnostics.Contains("injected dry shore failure"), "Pirate offshore start without a verified landing failed or did not land on the dock deck");
         // A small boat surveys Pirate's dock first. Without a fully verified
         // moored pose it uses the fixed hold, unless only the dry shore failed.
         Reset();
         departure = _ => false;
-        Check(RunSurvey(site, new[] { front, back }, out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose) && plan.RetainedDockLanding && plan.OffshoreDiagnostics.StartsWith("No clear, reachable moored berth") && plan.OffshoreDiagnostics.Contains("Departure=") && plan.OffshoreDiagnostics.Contains("offshore hold"), "Pirate dock survey without a verified berth did not use the fixed hold or lost its survey report: " + plan?.OffshoreDiagnostics);
+        Check(RunSurvey(site, new[] { front, back }, out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose) && plan.Front == front && plan.Back == back && plan.OffshoreDiagnostics.StartsWith("No clear, reachable moored berth") && plan.OffshoreDiagnostics.Contains("Departure=") && plan.OffshoreDiagnostics.Contains("offshore hold"), "Pirate dock survey without a verified berth did not use the fixed hold or lost its survey report: " + plan?.OffshoreDiagnostics);
         Reset();
         Plugin.Instance.Fails = true;
-        Check(RunSurvey(site, new[] { front, back }, out plan, out failure) && plan.Mode == StartBerthMode.Moored && plan.ClearanceVerified && plan.DepartureVerified && !plan.LandingVerified && plan.OffshoreDiagnostics.StartsWith("Best-effort moored"), "Pirate berth that failed only its dry shore did not keep the best-effort moored start");
+        Check(RunSurvey(site, new[] { front, back }, out plan, out failure) && plan.Mode == StartBerthMode.Moored && plan.OffshoreDiagnostics.StartsWith("Best-effort moored") && plan.OffshoreDiagnostics.Contains("passed rope reach, hull clearance and departure clearance. The player lands on the dock between its cleats."), "Pirate berth that failed only its dry shore did not keep the best-effort moored start");
         Console.WriteLine("PASS " + (checks - fixedBefore) + " actual Pirate and Saffron fixed offshore hold pose/diagnostic/budget and Pirate dock-survey fallback checks with controlled physics stages and managed math. No live clearance/stationkeeping proof.");
         BestEffortChecks();
         return 0;

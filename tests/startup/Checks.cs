@@ -39,7 +39,6 @@ static class Checks
             GameState.currentlyLoading = false;
             Time.frameCount = 0;
             Time.realtimeSinceStartup = 0;
-            ProbeVelocityGuard.Outstanding = 0;
             StarterCargo.ThrowArm = false;
             StarterMooring.Cancel();
             StarterBoatRepair.Cancel();
@@ -116,7 +115,6 @@ static class Checks
             var plan = new StartBerthPlan
             {
                 Destination = site,
-                RetainedDockLanding = pirateOffshore,
                 Position = new(1000, 1, 0),
                 ShorePosition = new(1002, 5, 0),
                 Rotation = Quaternion.identity,
@@ -185,7 +183,7 @@ static class Checks
             Check(n < limit, "iterator failed to finish");
         }
 
-        // Native selection, side systems and the velocity guard are back to their original state.
+        // Native selection and side systems are back to their original state.
         internal void SelectionRestored()
         {
             Check(!Selected.Boat.isPurchased(), "rollback granted boat");
@@ -193,7 +191,6 @@ static class Checks
             Check(Selected.StarterSet.starterBoat == OldBoat, "starter set not restored");
             Check(GameState.lastBoat == OldBoat && GameState.lastOwnedBoat == OldOwned && GameState.lastVisitedPort == OldPort, "native selection fields not restored");
             Check(!StarterCargo.Armed && !StartingValues.Armed && !StarterMooring.Armed && !StarterBoatRepair.Armed && !LeopardStarterRig.Armed, "startup work remains armed");
-            Check(ProbeVelocityGuard.Outstanding == 0, "velocity guard leaked");
         }
 
         internal void HullRestored()
@@ -241,7 +238,7 @@ static class Checks
         internal void GrantedAtBerth(string warning)
         {
             StayedOutOfMenu();
-            Check(Selected.Boat.purchased && Selected.Body.position.x == 1000 && !Selected.Body.isKinematic && ProbeVelocityGuard.Outstanding == 0, "placed boat was not granted at its berth with holds released");
+            Check(Selected.Boat.purchased && Selected.Body.position.x == 1000 && !Selected.Body.isKinematic, "placed boat was not granted at its berth with holds released");
             Check(Plugin.Instance.Warnings.Any(w => w.Contains(warning)), "problem was not logged: " + warning);
         }
     }
@@ -257,7 +254,10 @@ static class Checks
             NativeYardMarkerFallsBack,
             ShipyardReleasePoseAndLanding,
             ShipyardCancellationRestores,
-            ShipyardMarkerUnavailableUsesOrdinary,
+            OrdinaryPortRelocatesToRecoveryBerth,
+            OrdinaryPortPreservesNativeBerth,
+            OrdinaryPreparationFailureIsIncomplete,
+            OrdinaryBerthAdjustmentFailuresStillStart,
             ShipyardPlanAvailabilityAndShoreFallback,
             FortStartupUsesItsShipyard,
             AestrinPrefersLoadedDrydock,
@@ -272,7 +272,6 @@ static class Checks
             ScrambledWaitsThenContinuesOnce,
             ScrambledTargetFailureIsIncomplete,
             ScrambledCancellationNeverContinues,
-            ScrambledOrdinaryPassthrough,
             MenuHideOwnership,
             CancelBeforeOwnership,
             PurchaseUiLostWarnsAndContinues,
@@ -282,7 +281,6 @@ static class Checks
             LoadPrefixCancelsBeforeMutation,
             ForeignLoadDoesNotReceiveSnapshot,
             ResolveFailureIsIncomplete,
-            FinalBerthWarningStillPlaces,
             NoFactoryKeepsPlacement,
             SuccessfulNativeGrantOwnsBoat,
             RollbackErrorStillRestoresPlayer,
@@ -310,13 +308,7 @@ static class Checks
 
     static void BestEffortMooredUsesNativeLines()
     {
-        var f = new Fixture(beforeBegin: x =>
-        {
-            x.Selected.Berth.Mode = StartBerthMode.Moored;
-            x.Selected.Berth.ClearanceVerified = false;
-            x.Selected.Berth.DepartureVerified = false;
-            x.Selected.Berth.LandingVerified = false;
-        });
+        var f = new Fixture(beforeBegin: x => x.Selected.Berth.Mode = StartBerthMode.Moored);
         var target = f.Selected.Berth.Position;
         f.Finish();
         Check(f.Selected.Body.position.Equals(target) && f.Selected.Ropes.ropes.All(r => r.IsMoored()) && StarterMooring.Armed && PirateStationKeeper.Active == null, "best-effort rope-reachable berth did not use native lines at unchanged pose");
@@ -511,33 +503,98 @@ static class Checks
         Check(held.Removed, "cancelled shipyard start kept temporary hold");
     }
 
-    static void ShipyardMarkerUnavailableUsesOrdinary()
+    // An ordinary port keeps its complete native recovery berth and marker.
+    static void SetupOrdinaryPort(Fixture f)
     {
-        foreach (var preserve in new[] { false, true })
+        var s = f.Selected;
+        s.Destination.UsesCustomBerth = false;
+        s.Berth = null;
+        s.Port = On<Port>(At(1000));
+        s.Recovery = new RecoveryPort
+        {
+            gameObject = At(200, 5, 1).gameObject,
+            parentPort = s.Port,
+            boatPos = At(203, 2, 1)
+        };
+    }
+
+    static void OrdinaryPortRelocatesToRecoveryBerth()
+    {
+        foreach (var yardFallback in new[] { false, true })
         {
             var f = new Fixture(beforeBegin: x =>
             {
-                SetupShipyard(x);
-                x.Selected.Destination.Yard.shipReleasePosition = null;
-                x.Selected.Berth = null;
-                x.Selected.Recovery = new RecoveryPort
+                if (yardFallback)
                 {
-                    gameObject = At(200, 5, 1).gameObject,
-                    boatPos = At(203, 2, 1)
-                };
-                if (preserve)
-                    x.Selected.NativeBerth = new NativeBerth.Plan
-                    {
-                        ShorePosition = new(15, 5, 0),
-                        FrontRope = x.Selected.Ropes.ropes[0],
-                        BackRope = x.Selected.Ropes.ropes[1]
-                    };
+                    SetupShipyard(x);
+                    x.Selected.Destination.Yard.shipReleasePosition = null;
+                }
+                SetupOrdinaryPort(x);
             });
+            var recovery = f.Selected.Recovery;
             f.Finish();
-            Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(preserve ? new Vector3(10, 0, 0) : new Vector3(203, 2, 1)), "missing release marker lost ordinary native berth fallback");
-            Check(f.Selected.Berth != null && f.Selected.Recovery == null && PirateStationKeeper.Active == null && StarterMooring.Armed, "ordinary fallback left null berth or retained shipyard hold");
-            Check(Plugin.Instance.Warnings.Any(w => w.Contains("ordinary starting berth")), "missing release marker fallback did not report ordinary berth");
+            Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(new Vector3(204, 2, 2)) && f.Starters.All(b => !b.purchased), "ordinary port did not grant the selected boat at its adjusted recovery berth");
+            Check(f.Selected.Berth.Mode == StartBerthMode.Moored && f.Selected.Ropes.ropes[0].Mooring == f.Selected.FrontMooring && f.Selected.Ropes.ropes[1].Mooring == f.Selected.BackMooring && StarterMooring.Armed, "ordinary port did not moor with the chosen ropes and arm slack");
+            Check(f.Selected.Recovery == recovery && f.Menu.NativeTarget.position.Equals(recovery.transform.position) && PirateStationKeeper.Active == null && Plugin.Instance.LastBerth.Equals(recovery.boatPos.position), "ordinary port lost its recovery marker or probe reference, or kept a hold");
+            Check(Plugin.Instance.Warnings.Any(w => w.Contains("ordinary starting berth")) == yardFallback, "ordinary berth diagnostic did not match the shipyard fallback");
         }
+    }
+
+    static void OrdinaryPortPreservesNativeBerth()
+    {
+        foreach (var cancel in new[] { false, true })
+        {
+            var f = new Fixture(beforeBegin: x =>
+            {
+                SetupOrdinaryPort(x);
+                x.Anchor.OnLoad(true, .4f);
+                x.Selected.NativeBerth = new NativeBerth.Plan
+                {
+                    ShorePosition = new(15, 5, 0),
+                    FrontRope = x.Selected.Ropes.ropes[0],
+                    BackRope = x.Selected.Ropes.ropes[1]
+                };
+            });
+            var anchorCalls = f.Anchor.Calls.Count;
+            if (cancel)
+            {
+                f.Until(() => f.Menu.Native != null);
+                FixedStart.CancelCustomStart();
+                f.Finish();
+                f.Restored();
+            }
+            else
+            {
+                f.Finish();
+                Check(f.Selected.Boat.purchased && f.Starters.All(b => !b.purchased) && f.Selected.Berth.Mode == StartBerthMode.Preserved, "preserved native berth was not granted");
+                Check(f.Menu.NativeTarget.position.Equals(new Vector3(15, 5, 0)) && StarterCargo.Armed && StarterBoatRepair.Armed && Plugin.Instance.Warnings.Count == 0, "preserved native berth lost its landing or startup setup");
+            }
+            Check(f.Selected.Body.position.Equals(new Vector3(10, 0, 0)) && f.Selected.Body.velocity.Equals(new Vector3(1, 2, 3)), "preserved native berth moved the hull");
+            Check(f.Selected.Ropes.ropes[0].Mooring == f.OldCleat && f.Selected.Ropes.ropes[1].Mooring == null && !StarterMooring.Armed, "preserved native berth changed its dock lines or armed slack");
+            Check(f.Anchor.IsSet() && f.Anchor.Length == .4f && f.Anchor.Calls.Count == anchorCalls, "preserved native berth changed its anchor");
+        }
+    }
+
+    static void OrdinaryBerthAdjustmentFailuresStillStart()
+    {
+        BerthClearance.Throw = true;
+        FixedStart.ThrowLargeBoatBerth = true;
+        var f = new Fixture(beforeBegin: SetupOrdinaryPort);
+        f.Finish();
+        Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(new Vector3(203, 2, 1)) && StarterMooring.Armed, "failed berth adjustments did not start at the native berth");
+        Check(Plugin.Instance.Warnings.Any(w => w.Contains("Crab Beach berth clearance was skipped")) && Plugin.Instance.Warnings.Any(w => w.Contains("Large-boat berth distance was skipped")), "failed berth adjustments were not logged");
+    }
+
+    static void OrdinaryPreparationFailureIsIncomplete()
+    {
+        var f = new Fixture(beforeBegin: x =>
+        {
+            SetupOrdinaryPort(x);
+            x.Selected.Recovery.boatPos = null;
+        });
+        f.Finish();
+        f.Incomplete();
+        Check(f.Selected.Body.position.Equals(new Vector3(10, 0, 0)) && Plugin.Instance.Errors.Any(e => e.Contains("could not be placed")), "ordinary port preparation failure moved the boat or was not logged");
     }
 
     static void ShipyardPlanAvailabilityAndShoreFallback()
@@ -555,7 +612,7 @@ static class Checks
         yard.shipReleasePosition = marker;
         Plugin.Instance.ShoreFound = false;
         var counter = Resources.FindObjectsOfTypeAll<ShipyardDocuments>().Single(d => d.shipyard == yard).transform;
-        Check(ShipyardStart.TryPlan(site, out var plan) && !plan.LandingVerified && plan.ShorePosition.Equals(counter.position), "shore probe warning vetoed shipyard start or changed documents reference");
+        Check(ShipyardStart.TryPlan(site, out var plan) && Plugin.Instance.Warnings.Any(w => w.Contains("Shipyard shore placement was not verified")) && plan.ShorePosition.Equals(counter.position), "shore probe warning vetoed shipyard start or changed documents reference");
         Resources.Objects = Array.Empty<Component>();
         Check(ShipyardStart.TryPlan(site, out plan) && plan.ShorePosition.Equals(yard.transform.position), "missing documents lost permissive yard-reference fallback");
         FixedStart.CancelCustomStart();
@@ -841,7 +898,7 @@ static class Checks
         Check(threw && f.Menu.Native.Moves == 2 && f.Menu.Native.Disposed, "pre-purchase exception did not execute/dispose native boundary");
         f.StayedOutOfMenu();
         Check(f.Menu.Controller.GetComponent<CharacterController>().enabled && !f.Menu.logo.activeSelf, "native exception restored menu controls");
-        Check(f.Selected.Body.position.x == 1000 && ProbeVelocityGuard.Outstanding == 0 && Plugin.Instance.Warnings.Any(w => w.Contains("stopped before it finished")), "native exception rolled back the boat, kept a hold or was not logged");
+        Check(f.Selected.Body.position.x == 1000 && Plugin.Instance.Warnings.Any(w => w.Contains("stopped before it finished")), "native exception rolled back the boat, kept a hold or was not logged");
     }
 
     static void PurchaseUiLostWarnsAndContinues()
@@ -947,7 +1004,7 @@ static class Checks
         f.Menu.Observer.position = new(555, 0, 0);
         f.Finish();
         Check(GameState.lastOwnedBoat == saved && GameState.lastBoat == saved && PlayerGold.currency[0] == 777 && f.Menu.Observer.position.x == 555, "foreign load received old snapshot");
-        Check(!f.Selected.Boat.purchased && f.Menu.Native.Disposed && ProbeVelocityGuard.Outstanding == 0, "foreign load lifecycle did not release ownership");
+        Check(!f.Selected.Boat.purchased && f.Menu.Native.Disposed, "foreign load lifecycle did not release ownership");
         GameState.currentlyLoading = false;
     }
 
@@ -960,21 +1017,13 @@ static class Checks
         Check(Plugin.Instance.Errors.Any(e => e.Contains("Injected resolve failure")), "planning failure reason was not logged");
     }
 
-    static void FinalBerthWarningStillPlaces()
-    {
-        var f = new Fixture(beforeBegin: x => x.Selected.Berth.Valid = false);
-        f.Finish();
-        f.GrantedAtBerth("Injected invalid berth");
-        Check(f.Menu.NativeTarget.position.Equals(f.Selected.Berth.ShorePosition), "warning replaced the selected landing");
-    }
-
     static void NoFactoryKeepsPlacement()
     {
         var f = new Fixture();
         f.Menu.NullFactory = true;
         f.Finish();
         f.StayedOutOfMenu();
-        Check(Plugin.Instance.Errors.Any(e => e.Contains("native start sequence is unavailable")) && f.Selected.Body.position.x == 1000 && ProbeVelocityGuard.Outstanding == 0, "missing native factory was not logged or unwound the placement");
+        Check(Plugin.Instance.Errors.Any(e => e.Contains("native start sequence is unavailable")) && f.Selected.Body.position.x == 1000, "missing native factory was not logged or unwound the placement");
     }
 
     static void SuccessfulNativeGrantOwnsBoat()
@@ -984,7 +1033,7 @@ static class Checks
         f.Finish();
         Check(f.Selected.Boat.purchased && f.Menu.Native.Disposed, "native grant did not complete");
         Check(GameState.lastOwnedBoat == f.Selected.Saveable.transform && GameState.lastVisitedPort == null, "Pirate identity/ownership wrong");
-        Check(!f.Selected.Body.isKinematic && ProbeVelocityGuard.Outstanding == 0, "native handoff retained guard or frozen hull");
+        Check(!f.Selected.Body.isKinematic, "native handoff left a frozen hull");
         Check(ReferenceEquals(Recovery.ports, registry) && Recovery.ports.Count == 1, "custom start changed native recovery registry");
         Check(Plugin.Instance.Warnings.Count == 0 && Plugin.Instance.Errors.Count == 0, "clean start logged a problem");
         var position = f.Selected.Body.position;
@@ -1062,16 +1111,5 @@ static class Checks
         Check(ScrambledBoundary.FactoryCalls == 0, "cancelled preparation resumed Scrambled purchase");
         Check(!FixedStart.CustomStartInFlight && !FixedStart.TryGetStartBlock(out _), "cancelled Scrambled start left a start block");
         f.Restored();
-    }
-
-    static void ScrambledOrdinaryPassthrough()
-    {
-        ScrambledBoundary.Reset();
-        var menu = On<StartMenu>(At(0));
-        var target = At(51);
-        FixedStart.OrdinaryApplies = 0;
-        FixedStart.SeedOrdinaryFixture(menu);
-        var sequence = ScrambledBoundary.Invoke(menu, target, At(52), At(53).gameObject);
-        Check(sequence is NativeIterator && ScrambledBoundary.FactoryCalls == 1 && ScrambledBoundary.Target == target && FixedStart.OrdinaryApplies == 1, "ordinary Scrambled dispatch changed");
     }
 }
