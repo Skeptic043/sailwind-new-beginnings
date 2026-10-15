@@ -168,7 +168,6 @@ namespace NewBeginnings
         static bool IsNativeOar(ShipItem i) => i.IsOar;
         static bool IsNativeCup(ShipItem i) => false;
         static float LooseFootprintRadius(ShipItem i) => i.IsOar ? .4f : FootprintRadius(i);
-        static bool HasSupportFootprint(ShipItem i, Vector3 p) => HasSupportFootprintCore(i, p);
         static void PreparePackedItem(ShipItem i)
         {
         }

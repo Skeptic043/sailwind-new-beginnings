@@ -35,7 +35,7 @@ markers = [
     'private static Vector3[] GroundDirections(',
     'private static IEnumerable<Vector3> CompactGroundSamples(',
     'private static bool NearerToFood(',
-    'private static bool HasSupportFootprintCore(',
+    'private static bool HasSupportFootprint(',
     'private static IEnumerator PlaceCapturedCore(',
     'private sealed class GroundSlot',
     'private static Vector3 PutBottomOnSurface(',

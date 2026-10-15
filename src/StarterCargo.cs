@@ -346,7 +346,7 @@ namespace NewBeginnings
                 try
                 {
                     moved = original.MoveNext();
-                    if (IsCurrentCapture(armed, selected, rosterFinalized))
+                    if (armed != null && ReferenceEquals(armed, selected) && !rosterFinalized)
                         foreach (var item in CollectItems(set.transform)) Capture(item);
                 }
                 catch (Exception exception)
@@ -462,8 +462,7 @@ namespace NewBeginnings
                     ReleaseForCupPickup();
                     return true;
                 }
-                return !ShouldProtectCupLiquid(true, true, GameState.currentlyLoading,
-                    false, Time.realtimeSinceStartup, cupProtectionEndsAt);
+                return GameState.currentlyLoading || Time.realtimeSinceStartup >= cupProtectionEndsAt;
             }
         }
 
@@ -513,10 +512,6 @@ namespace NewBeginnings
                 Disarm();
             }
         }
-
-        private static bool ShouldProtectCupLiquid(bool active, bool captured,
-            bool loading, bool held, float now, float expiresAt) =>
-            active && captured && !loading && !held && now < expiresAt;
 
         private static bool IsNativeCup(ShipItem item) =>
             item is ShipItemBottle && item.GetComponent<Mug>() != null;
@@ -685,8 +680,8 @@ namespace NewBeginnings
                 reason = "waiting for the exact Difficulty-requested native item removals to finish";
                 return false;
             }
-            if (Captured.Count == 0 && IsIntentionalEmptyRoster(nativeStarterCompleted,
-                difficultyAdjustmentCompleted, difficultyRemovalsApplied, standardSuppliesSuppressed))
+            if (Captured.Count == 0 && nativeStarterCompleted && (standardSuppliesSuppressed ||
+                difficultyAdjustmentCompleted && difficultyRemovalsApplied > 0))
                 return true;
             if (Captured.Count == 0 || RegisteredField == null)
             {
@@ -717,9 +712,8 @@ namespace NewBeginnings
 
         private static void ReconcileDifficultyRemovals()
         {
-            var removed = ConfirmedIntentionalRemovals(Captured, DifficultyRemovalRequests,
-                item => item == null, difficultyAdjustmentCompleted && !difficultyAdjustmentFailed,
-                rosterFinalized);
+            if (!difficultyAdjustmentCompleted || difficultyAdjustmentFailed || rosterFinalized) return;
+            var removed = Captured.Where(item => DifficultyRemovalRequests.Contains(item) && item == null).ToArray();
             if (removed.Length == 0) return;
             foreach (var item in removed)
             {
@@ -732,18 +726,6 @@ namespace NewBeginnings
             }
             Plugin.Instance?.DebugLog($"Sailwind Difficulty intentionally removed {removed.Length} native items; remaining starter roster {Captured.Count} native items.");
         }
-
-        private static T[] ConfirmedIntentionalRemovals<T>(IEnumerable<T> captured,
-            ISet<T> requested, Func<T, bool> destroyed, bool adjustmentCompleted, bool finalized) =>
-            !adjustmentCompleted || finalized ? new T[0] :
-                captured.Where(item => requested.Contains(item) && destroyed(item)).ToArray();
-
-        private static bool IsIntentionalEmptyRoster(bool starterCompleted,
-            bool adjustmentCompleted, int observedRemovals, bool suppliesSuppressed = false) =>
-            starterCompleted && (suppliesSuppressed || adjustmentCompleted && observedRemovals > 0);
-
-        private static bool IsCurrentCapture(object currentSelection, object ownerSelection, bool finalized) =>
-            currentSelection != null && ReferenceEquals(currentSelection, ownerSelection) && !finalized;
 
         private static void RemoveIntentionalScrambledSeasMap()
         {
@@ -1443,9 +1425,6 @@ namespace NewBeginnings
                 (source.center - itemPosition), source.size);
 
         private static bool HasSupportFootprint(ShipItem support, Vector3 center)
-            => HasSupportFootprintCore(support, center);
-
-        private static bool HasSupportFootprintCore(ShipItem support, Vector3 center)
         {
             // Test under the base's four edges, not just its pivot. Clamp
             // unusually large modded collider bounds to a local footprint so

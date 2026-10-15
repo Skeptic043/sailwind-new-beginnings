@@ -562,10 +562,8 @@ namespace NewBeginnings
                 }
                 // Stay inside the existing five-second player hold. A distant
                 // fallback is re-probed each scan, never held as a stale hit.
-                if (ShouldWaitForNearbySurface(horizontalDistanceToBest,
-                    Time.realtimeSinceStartup - distantSurfaceSeenAt,
-                    unresolvedPlayingAt < 0f ? -1f : Time.realtimeSinceStartup - unresolvedPlayingAt,
-                    sceneryReady))
+                if ((!sceneryReady || Time.realtimeSinceStartup - distantSurfaceSeenAt < 1f) &&
+                    (unresolvedPlayingAt < 0f || Time.realtimeSinceStartup - unresolvedPlayingAt < 4.5f))
                 {
                     docksideSurfaceCollider = null;
                     temporaryStart.position = dockMarker.position + Vector3.up * 1.05f;
@@ -736,11 +734,6 @@ namespace NewBeginnings
             return ready;
         }
 
-        private static bool ShouldWaitForNearbySurface(float distance, float distantAge, float unresolvedAge,
-            bool sceneryReady) =>
-            distance > 8f && (!sceneryReady || distantAge < 1f) &&
-                (unresolvedAge < 0f || unresolvedAge < 4.5f);
-
         private static List<Vector3> NearbySurfaceSamples(Vector3 center, float maximumRadius)
         {
             var samples = new List<Vector3> { center };
@@ -781,23 +774,9 @@ namespace NewBeginnings
             return true;
         }
 
-        internal bool TryProbeDocksideSurface(Vector3 horizontalSample, out Vector3 surface,
-            out Collider collider)
-            => ProbeDocksideSurface(horizontalSample, out surface, out collider, null);
-
         internal bool TryProbeDocksideCargoSurface(Vector3 horizontalSample,
             out Vector3 surface, out Collider collider)
             => ProbeDocksideSurface(horizontalSample, out surface, out collider, null, false);
-
-        internal bool TryProbeDocksideCargoSurface(Vector3 horizontalSample,
-            out Vector3 surface, out Collider collider, out string failureReason)
-        {
-            var summary = new SurfaceProbeSummary { Samples = 1 };
-            var found = ProbeDocksideSurface(horizontalSample, out surface,
-                out collider, summary, false);
-            failureReason = found ? null : summary.ToString();
-            return found;
-        }
 
         private bool ProbeDocksideSurface(Vector3 horizontalSample, out Vector3 surface,
             out Collider collider, SurfaceProbeSummary summary, bool requirePlayerClearance = true)
@@ -1193,8 +1172,6 @@ namespace NewBeginnings
             }
         }
 
-        internal bool TryStartSeaHeight(Vector3 point, out float height) => TrySeaHeight(point, out height);
-
         // Dock continuity classifies static structure, not wave clearance, so
         // it uses mean sea level. A deck may sit up to a metre below its cleats,
         // as the dock-landing rule allows. Player and cargo surfaces keep their
@@ -1209,10 +1186,6 @@ namespace NewBeginnings
 
         // Reuse the dry-ground/player-clearance validator before any boat or
         // ownership change. This private probe frame is discarded on failure.
-        internal bool TryFindStartShore(PortChoice destination, Vector3 seed, Vector3 berth,
-            out Vector3 ground, out Collider support) =>
-            TryFindStartShore(destination, seed, berth, out ground, out support, out _);
-
         internal bool TryFindStartShore(PortChoice destination, Vector3 seed, Vector3 berth,
             out Vector3 ground, out Collider support, out string failureReason,
             Transform frontMooring = null, Transform backMooring = null)
