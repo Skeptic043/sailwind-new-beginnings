@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.11
+
+### Changed
+
+- Spawn options use larger button labels and a centered layout.
+
 ## Version 1.3.10
 
 ### Fixed

@@ -14,6 +14,7 @@ namespace NewBeginnings
         private static readonly FieldInfo OutlineField = AccessTools.Field(typeof(GoPointerButton), "outline");
         internal Action Clicked;
         internal Action<RaycastHit> Hit;
+        internal int FullSizeTextLength;
 
         public override void Start()
         {
@@ -481,20 +482,20 @@ namespace NewBeginnings
 
         internal void BuildSpawnOptions(Transform page)
         {
-            portExclusions = MakeButton(page, "Island exclusions", -1.05f, .20f,
-                1.55f, .44f, () => OpenEditor(false));
-            boatExclusions = MakeButton(page, "Boat exclusions", 1.05f, .20f,
-                1.55f, .44f, () => OpenEditor(true));
+            portExclusions = MakeButton(page, "Island exclusions", -.90f, -.05f,
+                1.55f, .44f, () => OpenEditor(false), fullSizeTextLength: 24);
+            boatExclusions = MakeButton(page, "Boat exclusions", .90f, -.05f,
+                1.55f, .44f, () => OpenEditor(true), fullSizeTextLength: 24);
             portExclusions.description = "Choose which islands can be selected by Random Port.";
             boatExclusions.description = "Choose which boats can be selected by Random Boat.";
-            shipyardPortsOnly = MakeButton(page, "Shipyard ports only", -1.05f, -.06f, 1.55f, .44f,
-                ToggleShipyardPortsOnly);
+            shipyardPortsOnly = MakeButton(page, "Shipyard ports only", -.90f, -.31f, 1.55f, .44f,
+                ToggleShipyardPortsOnly, fullSizeTextLength: 24);
             shipyardPortsOnly.description = "Detected shipyards in the enabled starting pools. Ignores individual island exclusions without changing them. Secret island settings still apply.";
-            useShipyardBerth = MakeButton(page, "Use shipyard berth", 1.05f, -.06f, 1.55f, .44f,
-                () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); });
+            useShipyardBerth = MakeButton(page, "Use shipyard berth", .90f, -.31f, 1.55f, .44f,
+                () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); }, fullSizeTextLength: 24);
             useShipyardBerth.description = "Start at the selected shipyard's berth when one is available.";
-            secretIslands = MakeButton(page, "Secret islands", 0f, -.32f, 1.55f, .44f,
-                ToggleSecretIslands);
+            secretIslands = MakeButton(page, "Secret islands", 0f, -.57f, 1.55f, .44f,
+                ToggleSecretIslands, fullSizeTextLength: 24);
             secretIslands.description = "Include secret islands in manual and random starting locations.";
         }
 
@@ -685,11 +686,12 @@ namespace NewBeginnings
         }
 
         internal MenuUiButton MakeButton(Transform root, string name, float x, float y,
-            float width, float height, Action onClick)
+            float width, float height, Action onClick, int fullSizeTextLength = 12)
         {
             var visual = MakeButtonVisual(root, name, x, y, width, height, out var surface);
             var target = surface.gameObject.AddComponent<MenuUiButton>();
             target.Clicked = onClick;
+            target.FullSizeTextLength = fullSizeTextLength;
             target.lookText = name;
             target.description = "New Beginnings";
             target.gameObject.name = "New Beginnings trigger " + name;
@@ -781,10 +783,11 @@ namespace NewBeginnings
             var text = ButtonText(button);
             if (text == null) return;
             text.text = value;
-            // The port/size buttons are narrow. Keep the font proportions and
-            // reduce long labels evenly instead of stretching or clipping them.
+            // Keep glyph proportions and the button's label capacity on every
+            // refresh. Wide Spawn controls allow longer labels at full size.
             var width = button.transform.localScale.x;
-            var shrink = Mathf.Min(1f, 12f / Math.Max(12, value.Length));
+            var capacity = button.FullSizeTextLength;
+            var shrink = Mathf.Min(1f, (float)capacity / Math.Max(capacity, value.Length));
             var size = .014f * shrink * Mathf.Min(1f, width / .72f);
             text.transform.localScale = Vector3.one * size;
         }
