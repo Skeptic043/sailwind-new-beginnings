@@ -472,24 +472,6 @@ namespace NewBeginnings
             }
         }
 
-        internal static bool TryConfirmPacked(ShipItem item, out string reason)
-        {
-            reason = null;
-            if (!Packed.TryGetValue(item, out var crate)) return true;
-            var inventory = crate == null ? null : crate.GetComponent(CrateType);
-            var saveable = item == null ? null : item.GetComponent<SaveablePrefab>();
-            var contents = inventory == null ? null : Contents.GetValue(inventory) as IList;
-            if (item == null || crate == null || saveable == null || contents == null ||
-                contents.Cast<object>().Count(entry => ReferenceEquals(entry, item)) != 1 ||
-                (int)CrateId.GetValue(saveable) != crate.GetComponent<SaveablePrefab>().instanceId ||
-                contents.Count > CarrierCapacity(crate.gameObject) || !item.sold)
-            {
-                reason = "a starter item lost its native crate relationship";
-                return false;
-            }
-            return true;
-        }
-
         internal static void MovePacked(Action<ShipItem> resetDistance)
         {
             foreach (var pair in Packed)

@@ -27,8 +27,6 @@ namespace NewBeginnings
             public ItemRigidbody Body;
             public Vector3 Position;
             public Quaternion Rotation;
-            public Vector3 OriginalPosition;
-            public Quaternion OriginalRotation;
         }
 
         private sealed class GroundSlot
@@ -56,7 +54,6 @@ namespace NewBeginnings
         private const int MaxColumnItems = 3;
         private const float MaxColumnHeight = 2.1f;
         private static Dictionary<ShipItem, CargoShape> planningShapes;
-        private static readonly HashSet<ShipItem> StackedItems = new HashSet<ShipItem>();
 
         private static readonly ShipItemReferenceComparer ReferenceComparer =
             new ShipItemReferenceComparer();
@@ -92,8 +89,6 @@ namespace NewBeginnings
             new Dictionary<ShipItem, string>(ReferenceComparer);
         private static readonly List<Transform> BoatWalkRoots =
             new List<Transform>();
-        private static readonly Dictionary<ShipItem, Vector3> PlannedGround =
-            new Dictionary<ShipItem, Vector3>(ReferenceComparer);
 
         private static ResolvedStart armed;
         private static float readyAt = -1f;
@@ -144,8 +139,6 @@ namespace NewBeginnings
             AuthoredRotations.Clear();
             AuthoredNames.Clear();
             BoatWalkRoots.Clear();
-            PlannedGround.Clear();
-            StackedItems.Clear();
             Plugin.Instance?.ClearDocksideCargoSurface();
         }
 
@@ -158,11 +151,8 @@ namespace NewBeginnings
             var oar = Captured.FirstOrDefault(IsNativeOar);
             if (oar != null)
             {
-                var planned = PlannedGround.TryGetValue(oar, out var point) ?
-                    GroundToWorld(armed, point).ToString() : "<not placed>";
                 Plugin.Instance?.Warn("Native starter oar last observed at " +
-                    oar.transform.position + ", planned dockside ground " +
-                    planned + ", active " + oar.gameObject.activeInHierarchy +
+                    oar.transform.position + ", active " + oar.gameObject.activeInHierarchy +
                     ".");
             }
             Disarm();
@@ -435,58 +425,9 @@ namespace NewBeginnings
                     placementStage = "planning a complete dockside layout";
                     if (TryPlaceAll(selected, ground, groundCollider, out lastReason))
                     {
-                        var localGround = selected.ShoreFrame.InverseTransformPoint(ground);
-                        placementStage = "waiting for native physics to settle the first layout";
-                        // Allow the native physics body to take over before
-                        // checking that every item is still at the wharf.
-                        for (var frame = 0; frame < 50; frame++)
-                            yield return new WaitForFixedUpdate();
-                        if (!IsCurrent(selected)) yield break;
-                        ground = GroundToWorld(selected, localGround);
-                        if (TryConfirmAll(ground, out var failedItem,
-                            out lastReason))
-                        {
-                            Plugin.Instance?.Report($"Dockside starter supplies initialized: {Captured.Count}/{Captured.Count} native items near the player. Sailwind now owns their physics and saves.");
-                            placementStage = "completed";
-                            Disarm();
-                            yield break;
-                        }
-                        // Native settling can rearrange a stack. Never move
-                        // every crate again around boxes that have settled.
-                        if (StackedItems.Count != 0)
-                        {
-                            FailAndDisarm("items did not remain at their dockside columns: " + lastReason);
-                            yield break;
-                        }
-                        Plugin.Instance?.Warn("Dockside supplies shifted during startup (" + lastReason + "); making one placement retry.");
-                        Vector3? avoidGround = null;
-                        if (failedItem != null &&
-                            PlannedGround.TryGetValue(failedItem, out var priorGround))
-                            avoidGround = GroundToWorld(selected, priorGround);
-                        if (avoidGround.HasValue)
-                            Plugin.Instance?.DebugLog("Trying alternate dockside ground for " +
-                                AuthoredName(failedItem) + " away from " +
-                                avoidGround.Value + ".");
-                        var retryPlaced = TryPlaceAll(selected, ground,
-                            groundCollider, out lastReason, failedItem,
-                            avoidGround);
-                        if (retryPlaced)
-                        {
-                            placementStage = "waiting for native physics to settle the retry";
-                            for (var frame = 0; frame < 50; frame++)
-                                yield return new WaitForFixedUpdate();
-                            if (!IsCurrent(selected)) yield break;
-                            ground = GroundToWorld(selected, localGround);
-                            if (TryConfirmAll(ground, out _, out lastReason))
-                            {
-                                Plugin.Instance?.Report($"Dockside starter supplies initialized after retry: {Captured.Count}/{Captured.Count} native items near the player. Sailwind now owns their physics and saves.");
-                                placementStage = "completed after retry";
-                                Disarm();
-                                yield break;
-                            }
-                        }
-                        FailAndDisarm("items did not remain grouped after the final initialization attempt: " +
-                            lastReason);
+                        Plugin.Instance?.Report($"Dockside starter supplies initialized: {Captured.Count}/{Captured.Count} native items near the player. Sailwind now owns their physics and saves.");
+                        placementStage = "completed";
+                        Disarm();
                         yield break;
                     }
                     FailAndDisarm("the dockside layout could not be placed: " + lastReason);
@@ -546,7 +487,7 @@ namespace NewBeginnings
 
         private static void ReleaseForCupPickup()
         {
-            // Cancel the whole pending layout/retry so it cannot move the cup
+            // Cancel the pending layout so it cannot move the cup
             // after the player has claimed it, even if it is dropped again.
             placementStage = "player picked up a starter cup; native item control restored";
             Disarm();
@@ -567,7 +508,7 @@ namespace NewBeginnings
                 if (armed == null || __instance == null ||
                     !AdditionalEquipment.IsCarrier(__instance.GetComponent<ShipItem>())) return;
                 // Native inventory UI takes over the item transforms while open.
-                // A pending startup retry must not move that carrier or its gear.
+                // Pending startup placement must not move that carrier or its gear.
                 placementStage = "player opened additional equipment crate; native item control restored";
                 Disarm();
             }
@@ -579,8 +520,6 @@ namespace NewBeginnings
 
         private static bool IsNativeCup(ShipItem item) =>
             item is ShipItemBottle && item.GetComponent<Mug>() != null;
-
-        private static bool IsCupUpright(float upY) => upY >= 0.98f;
 
         private static Quaternion CupUprightRotation(Quaternion authored)
         {
@@ -838,20 +777,18 @@ namespace NewBeginnings
         }
 
         private static bool TryPlaceAll(ResolvedStart selected, Vector3 ground,
-            Collider groundCollider, out string reason,
-            ShipItem avoidItem = null, Vector3? avoidGround = null)
+            Collider groundCollider, out string reason)
         {
             planningShapes = new Dictionary<ShipItem, CargoShape>(ReferenceComparer);
             try
             {
-                return PlanAndPlaceAll(selected, ground, groundCollider, out reason, avoidItem, avoidGround);
+                return PlanAndPlaceAll(selected, ground, groundCollider, out reason);
             }
             finally { planningShapes = null; }
         }
 
         private static bool PlanAndPlaceAll(ResolvedStart selected, Vector3 ground,
-            Collider groundCollider, out string reason,
-            ShipItem avoidItem, Vector3? avoidGround)
+            Collider groundCollider, out string reason)
         {
             reason = null;
             if (!NativeItemsReady(out reason)) return false;
@@ -863,16 +800,22 @@ namespace NewBeginnings
                 return false;
             }
             Physics.SyncTransforms();
-            if (!Plugin.Instance.TryProbeDocksideCargoSurface(ground,
-                    out var liveGround, out var liveCollider) ||
-                liveCollider != groundCollider ||
-                !IsVerifiedLandCollider(liveCollider) ||
-                Vector3.Distance(liveGround, ground) > 0.3f)
+            // Adjacent dock planks can win a later raycast. Refresh a usable
+            // hit, but keep the already resolved landing when this probe misses.
+            if (Plugin.Instance.TryProbeDocksideCargoSurface(ground,
+                    out var liveGround, out var liveCollider) &&
+                IsVerifiedLandCollider(liveCollider))
             {
-                reason = "the player's resolved dockside surface changed before starter items moved";
-                return false;
+                ground = liveGround;
+                groundCollider = liveCollider;
             }
             var items = Captured.Where(item => !AdditionalEquipment.IsPacked(item)).ToArray();
+            foreach (var item in items)
+                if (item.GetItemRigidbody()?.GetBody() == null)
+                {
+                    reason = "the native physics body is unavailable for " + AuthoredName(item);
+                    return false;
+                }
             var barrel = items.FirstOrDefault(item => AuthoredNameContains(item, "barrel"));
             // Another mod can replace the region's starter set. Use its first
             // native item as the layout anchor when there is no water barrel.
@@ -888,8 +831,8 @@ namespace NewBeginnings
             var anchorGround = Vector3.zero;
             var foodGround = Vector3.zero;
             List<CargoMove> moves = null;
-            Dictionary<ShipItem, Vector3> planned = null;
             List<CrateColumn> columns = null;
+            var bestMoves = new List<CargoMove>();
             var completeLayout = false;
             // A clear nearest anchor can strand the table or later supplies.
             // Try a few complete layouts before moving anything, in this call
@@ -897,14 +840,12 @@ namespace NewBeginnings
             for (var attempt = 0; attempt < 3; attempt++)
             {
                 if (!TryChooseGround(ground, groundCollider, anchor, null,
-                    anchor == avoidItem ? avoidGround : null,
                     out anchorGround,
-                    out reason, rejectedAnchors)) return false;
+                    out reason, rejectedAnchors)) break;
                 rejectedAnchors.Add(anchorGround);
                 if (foodSupport != null &&
                     !TryChooseGround(ground, groundCollider, foodSupport,
                         anchorGround,
-                        foodSupport == avoidItem ? avoidGround : null,
                         out foodGround,
                         out reason, otherRadius: FootprintRadius(anchor)))
                     continue;
@@ -927,23 +868,15 @@ namespace NewBeginnings
                         LargeSupport = true
                     });
                 moves = new List<CargoMove>(items.Length);
-                planned = new Dictionary<ShipItem, Vector3>(ReferenceComparer);
                 columns = new List<CrateColumn>();
                 // Reserve space for the native oar before the small loose items.
-                // At Dead Cove a full retry could otherwise run out of dock before
-                // reaching the oar, leaving the first, already shifted layout in
-                // place. The barrel mesh is not a reliable physics shelf.
+                // The barrel mesh is not a reliable physics shelf.
                 foreach (var item in items.OrderBy(AdditionalEquipment.IsAdditional)
                     .ThenBy(item => item == anchor ? 0 :
                     item == foodSupport ? 1 : IsNativeOar(item) ? 2 : 3)
                     .ThenByDescending(item => StackBaseArea(item)))
                 {
                     var body = item.GetItemRigidbody();
-                    if (body == null || body.GetBody() == null)
-                    {
-                        reason = "the native physics body is unavailable for " + AuthoredName(item);
-                        return false;
-                    }
                     var itemGround = anchorGround;
                     // The native oar is authored standing nearly upright. Place
                     // it in that original pose so its physics can settle on the
@@ -963,13 +896,12 @@ namespace NewBeginnings
                             out itemGround, out itemRotation);
                         if (!foundGround)
                             foundGround = TryChooseLooseGround(item, groupGround, ground,
-                                reserved, item == avoidItem ? avoidGround : null,
+                                reserved,
                                 out itemGround, out itemRotation);
                         if (!foundGround && IsNativeOar(item) && foodSupport != null)
                             foundGround = TryChooseLooseGround(item,
                                 groupGround == foodGround ? anchorGround : foodGround,
                                 ground, reserved,
-                                item == avoidItem ? avoidGround : null,
                                 out itemGround, out itemRotation);
                         if (!foundGround)
                         {
@@ -1003,22 +935,40 @@ namespace NewBeginnings
                         column.Depth = bounds.size.z;
                         column.Items.Add(item);
                     }
-                    planned[item] = column == null ? itemGround : column.Ground;
                     var destination = PutBottomOnSurface(item, itemGround,
                         itemRotation);
                     moves.Add(new CargoMove
                     {
                         Item = item, Body = body, Position = destination,
-                        Rotation = itemRotation,
-                        OriginalPosition = item.transform.position,
-                        OriginalRotation = item.transform.rotation
+                        Rotation = itemRotation
                     });
                 }
+                if (moves.Count > bestMoves.Count) bestMoves = moves;
                 if (moves.Count != items.Length) continue;
                 completeLayout = true;
                 break;
             }
-            if (!completeLayout) return false;
+            if (!completeLayout)
+            {
+                // A crowded dock must not leave every sold item at its distant
+                // native start, where Sailwind's distance cleanup can delete it.
+                // Keep the useful part of the compact plan and put the rest in
+                // separate nearby spaces. Ground and clearance are preferences
+                // here; native physics owns imperfect dock edges afterward.
+                Plugin.Instance?.DebugLog("Completing dockside supplies with best-effort positions: " + reason);
+                moves = bestMoves;
+                foreach (var item in items.Where(item => !moves.Any(move => ReferenceEquals(move.Item, item))))
+                {
+                    var rotation = PlacementRotation(item);
+                    var surface = BestEffortGround(item, rotation, ground, moves);
+                    moves.Add(new CargoMove
+                    {
+                        Item = item, Body = item.GetItemRigidbody(),
+                        Position = PutBottomOnSurface(item, surface, rotation),
+                        Rotation = rotation
+                    });
+                }
+            }
             reason = null;
             try
             {
@@ -1068,12 +1018,6 @@ namespace NewBeginnings
                 }
                 Physics.SyncTransforms();
                 AdditionalEquipment.MovePacked(ResetPackedDistance);
-                StackedItems.Clear();
-                foreach (var column in columns.Where(value => value.Items.Count > 1))
-                    StackedItems.UnionWith(column.Items);
-                PlannedGround.Clear();
-                foreach (var plannedItem in planned)
-                    PlannedGround[plannedItem.Key] = selected.ShoreFrame.InverseTransformPoint(plannedItem.Value);
                 Plugin.Instance?.DebugLog($"Dockside supply layout: {AuthoredName(anchor)} at {anchorGround}, " +
                     (foodSupport == null ? "no food support" :
                         $"food support {AuthoredName(foodSupport)} at {foodGround}") +
@@ -1087,6 +1031,73 @@ namespace NewBeginnings
                 return false;
             }
         }
+
+        private static Vector3 BestEffortGround(ShipItem item, Quaternion rotation,
+            Vector3 playerGround, List<CargoMove> moves)
+        {
+            var source = PlanningBounds(item, rotation);
+            var offset = source.center - item.transform.position;
+            var occupied = moves.Select(move =>
+            {
+                var bounds = PlanningBounds(move.Item, move.Rotation);
+                bounds.center += move.Position - move.Item.transform.position;
+                return bounds;
+            }).ToList();
+            // Leave the player's landing spot usable as well as the supplies.
+            occupied.Add(new Bounds(playerGround, new Vector3(.8f, 0f, .8f)));
+            var candidates = new List<Vector3>();
+            foreach (var box in occupied)
+            {
+                foreach (var z in new[] { playerGround.z, box.center.z })
+                {
+                    candidates.Add(new Vector3(box.min.x - source.extents.x - .08f,
+                        playerGround.y, z));
+                    candidates.Add(new Vector3(box.max.x + source.extents.x + .08f,
+                        playerGround.y, z));
+                }
+                foreach (var x in new[] { playerGround.x, box.center.x })
+                {
+                    candidates.Add(new Vector3(x, playerGround.y,
+                        box.min.z - source.extents.z - .08f));
+                    candidates.Add(new Vector3(x, playerGround.y,
+                        box.max.z + source.extents.z + .08f));
+                }
+            }
+            var selected = playerGround;
+            var bestScore = float.PositiveInfinity;
+            // This finite edge list always includes space beyond the outermost
+            // planned bounds. No radius, footprint or fixture veto can withhold
+            // an item from the player when a perfect arrangement does not fit.
+            foreach (var center in candidates)
+            {
+                var bounds = new Bounds(center, source.size);
+                if (occupied.Any(other =>
+                    bounds.min.x < other.max.x + .04f &&
+                    bounds.max.x > other.min.x - .04f &&
+                    bounds.min.z < other.max.z + .04f &&
+                    bounds.max.z > other.min.z - .04f)) continue;
+                var surface = new Vector3(center.x - offset.x,
+                    playerGround.y, center.z - offset.z);
+                var supported = Plugin.Instance.TryProbeDocksideCargoSurface(center,
+                    out var hit, out var collider) && IsVerifiedLandCollider(collider) &&
+                    Mathf.Abs(hit.y - playerGround.y) <= .45f;
+                if (supported) surface.y = hit.y;
+                var distance = new Vector2(center.x - playerGround.x,
+                    center.z - playerGround.z).magnitude;
+                var score = distance + Mathf.Max(0f, distance - 4.25f) * 2f +
+                    (supported ? 0f : 2f) +
+                    (HasCargoClearance(item, surface, rotation, supported ? collider : null) ? 0f : 1f) +
+                    (IsInsideEmbarkVolume(item, surface, rotation) ? 2f : 0f);
+                if (score >= bestScore) continue;
+                bestScore = score;
+                selected = surface;
+            }
+            return selected;
+        }
+
+        private static Bounds PlanningBounds(ShipItem item, Quaternion rotation) =>
+            TryCargoBounds(item, rotation, out var bounds) ? bounds :
+                new Bounds(item.transform.position, Vector3.one * .7f);
 
         private static bool NearerToFood(ShipItem item, Vector3 barrel,
             Vector3 food, ShipItem foodSupport)
@@ -1211,7 +1222,7 @@ namespace NewBeginnings
 
         private static bool TryChooseLooseGround(ShipItem item, Vector3 groupGround,
             Vector3 playerGround, List<GroundSlot> reserved,
-            Vector3? avoidGround, out Vector3 selected,
+            out Vector3 selected,
             out Quaternion selectedRotation)
         {
             selected = Vector3.zero;
@@ -1236,9 +1247,6 @@ namespace NewBeginnings
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(point.y - groupGround.y) > 0.45f ||
                     Vector3.Distance(point, playerGround) > 4.25f ||
-                    avoidGround.HasValue &&
-                    new Vector2(point.x - avoidGround.Value.x,
-                        point.z - avoidGround.Value.z).magnitude < 1.1f ||
                     IsInsideEmbarkVolume(item, point, selectedRotation))
                     continue;
                 var distance = Vector3.Distance(point, playerGround);
@@ -1352,7 +1360,6 @@ namespace NewBeginnings
 
         private static bool TryChooseGround(Vector3 playerGround,
             Collider playerCollider, ShipItem support, Vector3? otherGroup,
-            Vector3? avoidGround,
             out Vector3 selected, out string reason,
             List<Vector3> rejectedGrounds = null, float otherRadius = 0f)
         {
@@ -1383,10 +1390,7 @@ namespace NewBeginnings
                 if (Mathf.Abs(surface.y - playerGround.y) > 0.45f ||
                     otherGroup.HasValue &&
                     Vector3.Distance(surface, otherGroup.Value) <
-                        Mathf.Max(1.35f, (FootprintRadius(support) + otherRadius) * 1.15f) ||
-                    avoidGround.HasValue &&
-                    new Vector2(surface.x - avoidGround.Value.x,
-                        surface.z - avoidGround.Value.z).magnitude < 0.9f)
+                        Mathf.Max(1.35f, (FootprintRadius(support) + otherRadius) * 1.15f))
                     continue;
                 if (IsInsideEmbarkVolume(support, surface, PlacementRotation(support))) continue;
                 var score = radius + Mathf.Abs(surface.y - playerGround.y) * 3f +
@@ -1471,153 +1475,6 @@ namespace NewBeginnings
             return true;
         }
 
-        private static bool TryConfirmAll(Vector3 ground,
-            out ShipItem failedItem, out string reason)
-        {
-            failedItem = null;
-            reason = null;
-            foreach (var item in Captured.OrderBy(item =>
-                IsNativeOar(item) ? 0 : 1))
-            {
-                if (item == null || !item.gameObject.activeInHierarchy)
-                {
-                    failedItem = item;
-                    reason = "a starter item disappeared after placement";
-                    return false;
-                }
-                if (AdditionalEquipment.IsPacked(item))
-                {
-                    if (!AdditionalEquipment.TryConfirmPacked(item, out reason))
-                    {
-                        failedItem = item;
-                        return false;
-                    }
-                    continue;
-                }
-                if (IsNativeCup(item) && !IsCupUpright(item.transform.up.y))
-                {
-                    failedItem = item;
-                    reason = "the native starter cup did not settle upright: " +
-                        AuthoredName(item) + $" (up {item.transform.up.y:F3}, remaining liquid level {item.health})";
-                    return false;
-                }
-                var body = item.GetItemRigidbody();
-                if (body == null || body.GetBody() == null)
-                {
-                    failedItem = item;
-                    reason = "a starter item lost its native physics body: " + AuthoredName(item);
-                    return false;
-                }
-                if ((bool)BodyOutOfRangeField.GetValue(body) ||
-                    (int)BodyDestroyFramesField.GetValue(body) != 0)
-                {
-                    failedItem = item;
-                    reason = "a starter item retained a distant native physics state: " +
-                        AuthoredName(item);
-                    return false;
-                }
-                var saveable = item.GetComponent<SaveablePrefab>();
-                if (saveable == null || saveable.GetParentObject() != -1)
-                {
-                    failedItem = item;
-                    reason = "a starter item is still parented away from land: " +
-                        AuthoredName(item);
-                    return false;
-                }
-                var point = item.transform.position;
-                if (StackedItems.Contains(item) && PlannedGround.TryGetValue(item, out var localColumn))
-                {
-                    var column = GroundToWorld(armed, localColumn);
-                    if (!TryConfirmStackedItem(item, column))
-                    {
-                        failedItem = item;
-                        reason = "a stacked starter crate left its shore column or entered a boat: " + AuthoredName(item);
-                        return false;
-                    }
-                    continue;
-                }
-                var horizontal = new Vector2(point.x - ground.x, point.z - ground.z);
-                // Candidate centers stay within 4.25m; allow some native
-                // physics settling while still requiring local land support.
-                if (horizontal.magnitude > 5.5f ||
-                    point.y > ground.y + 3.5f || item.currentActualBoat != null)
-                {
-                    failedItem = item;
-                    reason = "a starter item is outside the dockside group: " + AuthoredName(item) +
-                        " at " + point;
-                    return false;
-                }
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(point,
-                        out var itemGround, out var support, out var probeReason))
-                {
-                    failedItem = item;
-                    reason = "a starter item lost verified dockside support (surface probe failed): " +
-                        AuthoredName(item) + " at " + point + "; " + probeReason;
-                    return false;
-                }
-                if (!IsVerifiedLandCollider(support))
-                {
-                    failedItem = item;
-                    reason = "a starter item lost verified dockside support (land collider rejected): " +
-                        AuthoredName(item) + " at " + point + ", surface " + itemGround +
-                        " on " + (support == null ? "<missing collider>" : support.name);
-                    return false;
-                }
-                if (IsInsideEmbarkVolume(item, itemGround) ||
-                    Mathf.Abs(itemGround.y - ground.y) > 0.5f ||
-                    point.y < itemGround.y - 0.1f ||
-                    point.y > itemGround.y + 2f)
-                {
-                    failedItem = item;
-                    reason = "a starter item settled away from its dockside surface: " +
-                        AuthoredName(item) + " at " + point +
-                        ", surface " + itemGround + " on " + support.name;
-                    return false;
-                }
-                if (IsNativeOar(item))
-                {
-                    // Let the oar fall however native physics chooses, then
-                    // verify that its body still rests on reachable land.
-                    // A midpoint probe is enough here; demanding support
-                    // under both ends would reject useful narrow-dock falls.
-                    var oarCollider = item.GetComponent<Collider>();
-                    var bodyCenter = oarCollider == null ? point :
-                        oarCollider.bounds.center;
-                    if (oarCollider == null ||
-                        oarCollider.bounds.min.y < itemGround.y - 0.25f ||
-                        oarCollider.bounds.min.y > itemGround.y + 0.5f ||
-                        !Plugin.Instance.TryProbeDocksideCargoSurface(bodyCenter,
-                            out var bodyGround, out var bodySupport) ||
-                        !IsVerifiedLandCollider(bodySupport) ||
-                        Mathf.Abs(bodyGround.y - itemGround.y) > 0.5f)
-                    {
-                        failedItem = item;
-                        reason = "the native oar did not settle on reachable " +
-                            "dockside ground at " + point +
-                            ", collider center " + bodyCenter;
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        private static bool TryConfirmStackedItem(ShipItem item, Vector3 column)
-        {
-            if (item.currentActualBoat != null ||
-                !TryCargoBounds(item, item.transform.rotation, out var bounds)) return false;
-            var horizontal = new Vector2(bounds.center.x - column.x, bounds.center.z - column.z);
-            // Boxes may tilt or slide as the small initial gaps close. Check
-            // their actual occupied space and the verified shore column, not
-            // whether an upper box's pivot is resting directly on the dock.
-            if (horizontal.magnitude > 2f || bounds.min.y < column.y - .2f ||
-                bounds.max.y > column.y + MaxColumnHeight + .75f ||
-                !Plugin.Instance.TryProbeDocksideCargoSurface(column, out var ground, out var support) ||
-                !IsVerifiedLandCollider(support) || Mathf.Abs(ground.y - column.y) > .5f)
-                return false;
-            return !OverlapsEmbarkVolume(bounds);
-        }
-
         private static void RefreshBoatWalkRoots()
         {
             BoatWalkRoots.Clear();
@@ -1669,12 +1526,6 @@ namespace NewBeginnings
                     return true;
             return false;
         }
-
-        // Both the recovery marker and native loose items follow world shifts.
-        // Store evidence/retry points relative to that marker across physics yields.
-        private static Vector3 GroundToWorld(ResolvedStart selected, Vector3 localGround) =>
-            selected?.ShoreFrame == null ? localGround :
-                selected.ShoreFrame.TransformPoint(localGround);
 
         private static int CountLive() => Captured.Count(item => item != null);
     }

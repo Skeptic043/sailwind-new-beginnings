@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.3.8")]
+    [BepInPlugin(Id, "New Beginnings", "1.3.9")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin

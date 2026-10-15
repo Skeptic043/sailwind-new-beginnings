@@ -1,5 +1,12 @@
 # Release notes
 
+## Version 1.3.9
+
+### Changed
+
+- Starting supplies use a nearby fallback layout when the compact dock layout cannot fit the whole load.
+- Supplies are handed over to normal physics after placement without moving the whole group again when items tip or shift.
+
 ## Version 1.3.8
 
 ### Changed
