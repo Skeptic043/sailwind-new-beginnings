@@ -9,19 +9,18 @@ namespace NewBeginnings
 {
     // A scene-bound preflight, held in a live frame through origin/scenery movement.
     // It does not own or mutate boats, native recovery registrations or providers.
-    internal enum StartBerthMode { Moored, Anchored, OffshoreHeld, ShipyardHeld }
+    internal enum StartBerthMode { Moored, OffshoreHeld, ShipyardHeld }
 
     internal sealed class StartBerthPlan
     {
         internal PortChoice Destination;
         internal Transform Frame;
-        internal Vector3 LocalPosition, LocalShorePosition, LocalAnchorPosition;
+        internal Vector3 LocalPosition, LocalShorePosition;
         internal Quaternion LocalRotation;
         internal GPButtonDockMooring Front, Back;
         internal PickupableBoatMooringRope FrontRope, BackRope;
         internal SpringJoint FrontSpring, BackSpring;
         internal StartBerthMode Mode;
-        internal bool Anchored { get => Mode == StartBerthMode.Anchored; set => Mode = value ? StartBerthMode.Anchored : StartBerthMode.Moored; }
         internal bool OffshoreHeld => Mode == StartBerthMode.OffshoreHeld || Mode == StartBerthMode.ShipyardHeld;
         internal string OffshoreDiagnostics;
         // A best-effort plan records the checks it did not pass. Revalidation
@@ -29,12 +28,9 @@ namespace NewBeginnings
         internal bool ClearanceVerified = true, DepartureVerified = true, LandingVerified = true;
         // Pirate's offshore plan keeps its dock cleats as landing references only.
         internal bool RetainedDockLanding;
-        internal float AnchorLength;
-        internal StartAnchorModel AnchorModel;
         internal Vector3 Position => Frame.TransformPoint(LocalPosition);
         internal Quaternion Rotation => Frame.rotation * LocalRotation;
         internal Vector3 ShorePosition => Frame.TransformPoint(LocalShorePosition);
-        internal Vector3 AnchorPosition => Frame.TransformPoint(LocalAnchorPosition);
         internal bool Revalidate(Rigidbody body, BoatMooringRopes ropes, out string reason) =>
             StartBerthPlanner.Revalidate(this, body, ropes, out reason);
     }
@@ -46,7 +42,6 @@ namespace NewBeginnings
         private static readonly FieldInfo RopeMaximum = AccessTools.Field(typeof(PickupableBoatMooringRope), "maxLength");
         private const float HullMargin = .75f;
         private const float DepthMargin = 1f;
-        private const float MaximumSearchRadius = 60f;
 
         private sealed class Survey
         {
@@ -63,28 +58,6 @@ namespace NewBeginnings
         }
 
         private enum DockRejection { DockSupport, RopeReach, HullClearance, Departure, DryShore }
-        private enum AnchorRejection { HullClearance, AnchorContact, SwingClearance, Departure, DryShore }
-
-        private sealed class AnchorReport
-        {
-            internal int Poses;
-            private readonly int[] rejected = new int[5];
-            private string last;
-            internal void Reject(AnchorRejection stage, string reason)
-            {
-                ++rejected[(int)stage];
-                last = stage + ": " + reason;
-            }
-            internal string Describe(bool exhausted)
-            {
-                var stages = string.Join(", ", Enum.GetValues(typeof(AnchorRejection)).Cast<AnchorRejection>()
-                    .Select(stage => stage + "=" + rejected[(int)stage]));
-                return "No safe anchorage and nearby dry landing fit this boat at this location. " +
-                    $"Survey: poses={Poses}, rejected {stages}, budgetExhausted={exhausted}. " +
-                    (last == null ? "No offshore pose was surveyed." : "Last rejection: " + last);
-            }
-        }
-
         // Keep the failed stage when the survey moves on to another candidate.
         // This is bounded per attempt and does not change candidate acceptance.
         private sealed class DockReport
@@ -447,7 +420,7 @@ namespace NewBeginnings
                 {
                     if (best.FirstPair == null) best.FirstPair = candidate.Pair;
                     if (destination.HiddenKey == "pirate" && !shoreFailures.CanTry(candidate.Pair)) continue;
-                    if (survey.Exhausted) return TryDockFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
+                    if (survey.Exhausted) return TryDockFallback(destination, body, ropes, hull, height, cleats,
                         report.Describe(true), best, pairs, out plan, out reason);
                     var a = candidate.Pair.A; var b = candidate.Pair.B;
                     var delta = Vector3.ProjectOnPlane(a.transform.position - b.transform.position, Vector3.up);
@@ -469,13 +442,13 @@ namespace NewBeginnings
                     }
                     position.y = height;
                     if (destination.HiddenKey == "pirate" && report.Poses >= 24)
-                        return TryDockFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
+                        return TryDockFallback(destination, body, ropes, hull, height, cleats,
                             report.Describe(true), best, pairs, out plan, out reason);
                     ++report.Poses;
                     if (!RopePair(hull, position, candidateRotation, a, b, out var frontRope, out var backRope))
                     { report.Reject(DockRejection.RopeReach, "No opposite-end rope pair reaches these cleats with native slack."); continue; }
                     best.Offer(1, candidate.Pair, position, candidateRotation, midpoint, frontRope, backRope);
-                    if (!survey.Candidate()) return TryDockFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
+                    if (!survey.Candidate()) return TryDockFallback(destination, body, ropes, hull, height, cleats,
                         report.Describe(true), best, pairs, out plan, out reason);
                     if (!Clear(body, hull, position, candidateRotation, survey, out reason))
                     { report.Reject(DockRejection.HullClearance, reason); continue; }
@@ -492,7 +465,7 @@ namespace NewBeginnings
                         {
                             shoreFailures.Reject(candidate.Pair);
                             if (shoreFailures.Exhausted)
-                                return TryDockFallback(destination, body, ropes, hull, height, cleats, survey, true,
+                                return TryDockFallback(destination, body, ropes, hull, height, cleats,
                                     report.Describe(false), best, pairs, out plan, out reason);
                         }
                         continue;
@@ -504,7 +477,7 @@ namespace NewBeginnings
                     reason = null;
                     return true;
                 }
-            return TryDockFallback(destination, body, ropes, hull, height, cleats, survey, shoreFailures.Any,
+            return TryDockFallback(destination, body, ropes, hull, height, cleats,
                 report.Describe(survey.Exhausted), best, pairs, out plan, out reason);
         }
 
@@ -526,14 +499,19 @@ namespace NewBeginnings
             }
         }
 
+        // Pirate keeps a moored pose that failed only its dry-shore check.
+        // Otherwise a Pirate boat uses the fixed Pirate offshore hold.
         private static bool TryDockFallback(PortChoice destination, Rigidbody body, BoatMooringRopes ropes, Hull hull, float height,
-            GPButtonDockMooring[] cleats, Survey survey, bool mooredShoreFailed, string dockReason, BestDock best,
+            GPButtonDockMooring[] cleats, string dockReason, BestDock best,
             IEnumerable<DockPair> pairs, out StartBerthPlan plan, out string reason)
         {
-            if (TryPirateFallback(destination, body, ropes, hull, height, cleats, survey, mooredShoreFailed, dockReason,
-                out plan, out reason)) return true;
-            return TryBestEffort(destination, hull, height, best, best.FirstPair ?? pairs.FirstOrDefault(), cleats,
-                reason, out plan, out reason);
+            if (destination.HiddenKey != "pirate" || best.Stage >= 3)
+                return TryBestEffort(destination, hull, height, best, best.FirstPair ?? pairs.FirstOrDefault(), cleats,
+                    dockReason, out plan, out reason);
+            // Same budget as a Medium or Large Pirate start, not what the dock survey left.
+            if (!TryPirateOffshore(destination, body, ropes, hull, height, cleats, new Survey(true), out plan, out reason)) return false;
+            Note(plan, dockReason);
+            return true;
         }
 
         // No surveyed pose passed every check. Keep the start going with the
@@ -791,7 +769,6 @@ namespace NewBeginnings
             // Try a few different dock/heading references, but do not repeat
             // the same shore search for each small offset of a failed pair.
             private readonly HashSet<DockPair> pairs = new HashSet<DockPair>();
-            internal bool Any => pairs.Count != 0;
             internal bool Exhausted => pairs.Count >= 3;
             internal bool CanTry(DockPair pair) => !Exhausted && !pairs.Contains(pair);
             internal void Reject(DockPair pair) => pairs.Add(pair);
@@ -854,27 +831,6 @@ namespace NewBeginnings
                             (pirate ? minor : major) == 0 ? 1f : -1f, shift);
         }
 
-        private static bool TryPirateFallback(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
-            Hull hull, float height, GPButtonDockMooring[] cleats, Survey survey, bool mooredShoreFailed, string dockReason,
-            out StartBerthPlan plan, out string reason)
-        {
-            plan = null;
-            if (destination.HiddenKey != "pirate") return Fail(dockReason, out reason);
-            if (mooredShoreFailed)
-                return Fail(dockReason + " Anchorage not attempted: a moored berth fits, but its dry-shore validation failed.", out reason);
-            if (survey.Exhausted)
-                return Fail(dockReason + " Anchorage not attempted: the shared geometry survey budget is exhausted.", out reason);
-            if (!TryLocalCleatCenter(cleats.Select(item => item.transform.position).ToArray(), out var origin))
-                return Fail(dockReason + " Anchorage: no bounded local cleat group supplies a shore reference.", out reason);
-            // Pirate's two authored dock groups are about seventy metres apart.
-            // Search around one local group, never their cross-dock midpoint.
-            // This is a coordinate only: no marker, cleat or recovery is created.
-            if (TryAnchored(destination, body, ropes, hull, height, origin, origin,
-                survey, out plan, out var anchorReason))
-            { reason = null; return true; }
-            return Fail(dockReason + " Anchorage: " + anchorReason, out reason);
-        }
-
         private static bool TryLocalCleatCenter(Vector3[] points, out Vector3 center)
         {
             center = Vector3.zero;
@@ -902,51 +858,6 @@ namespace NewBeginnings
                 LocalShorePosition = frame.InverseTransformPoint(shore) };
         }
 
-        private static bool TryAnchored(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
-            Hull hull, float height, Vector3 origin, Vector3 seed, Survey survey, out StartBerthPlan plan, out string reason)
-        {
-            plan = null; reason = null;
-            if (!StartAnchorModel.TryCreate(ropes, body, out var model, out reason)) return false;
-            var report = new AnchorReport();
-            if (hull.Radius + 8f > MaximumSearchRadius)
-                return Fail("This hull exceeds the bounded offshore survey.", out reason);
-            var rings = destination.HiddenKey == "pirate" ? 3 : 8;
-            var bearings = destination.HiddenKey == "pirate" ? 8 : 12;
-            for (var ring = 0; ring < rings; ++ring)
-                for (var bearing = 0; bearing < bearings; ++bearing)
-                {
-                    // Spread the candidate budget over the whole radial range,
-                    // so a blocked inner ring cannot consume every outer sample.
-                    var radius = Mathf.Lerp(hull.Radius + 8f, MaximumSearchRadius, ring / (float)(rings - 1));
-                    var angle = bearing * Mathf.PI * 2f / bearings;
-                    var radial = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
-                    var rotation = Quaternion.LookRotation(Vector3.Cross(Vector3.up, radial), Vector3.up);
-                    var center = origin + radial * radius;
-                    var position = center - rotation * hull.Center;
-                    position.y = height;
-                    if (!survey.Candidate()) return Fail(report.Describe(true), out reason);
-                    ++report.Poses;
-                    if (!Clear(body, hull, position, rotation, survey, out reason))
-                    { report.Reject(AnchorRejection.HullClearance, reason); continue; }
-                    if (!TryAnchor(model, position, rotation, survey, out var anchor, out var length, out reason))
-                    { report.Reject(AnchorRejection.AnchorContact, reason); continue; }
-                    if (!AnchorSwingClear(body, model, hull, position, rotation, anchor, length, survey, out reason))
-                    { report.Reject(AnchorRejection.SwingClearance, reason); continue; }
-                    if (!DepartureClear(body, hull, position, rotation, survey, out reason))
-                    { report.Reject(AnchorRejection.Departure, reason); continue; }
-                    if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _, out var shoreReason))
-                    { report.Reject(AnchorRejection.DryShore, shoreReason); continue; }
-                    plan = Make(destination, position, rotation, shore);
-                    plan.Anchored = true;
-                    plan.AnchorModel = model;
-                    plan.LocalAnchorPosition = plan.Frame.InverseTransformPoint(anchor);
-                    plan.AnchorLength = length;
-                    reason = null;
-                    return true;
-                }
-            return Fail(report.Describe(survey.Exhausted), out reason);
-        }
-
         internal static bool Revalidate(StartBerthPlan plan, Rigidbody body, BoatMooringRopes ropes, out string reason)
         {
             reason = null;
@@ -966,17 +877,7 @@ namespace NewBeginnings
             // already reported failing.
             if (!plan.OffshoreHeld && (plan.ClearanceVerified && !Clear(body, hull, plan.Position, plan.Rotation, survey, out reason) ||
                 plan.DepartureVerified && !DepartureClear(body, hull, plan.Position, plan.Rotation, survey, out reason))) return false;
-            if (plan.Anchored)
-            {
-                if ((plan.Destination.HiddenKey != "saffron" && plan.Destination.HiddenKey != "pirate") ||
-                    plan.AnchorModel == null || !plan.AnchorModel.IsCurrent(ropes, body, out reason) ||
-                    !Finite(plan.AnchorPosition) || !Finite(plan.AnchorLength) || plan.AnchorLength <= 0f || plan.AnchorLength > 1f ||
-                    (!TryAnchor(plan.AnchorModel, plan.Position, plan.Rotation, survey, out var anchor, out var length, out reason) ||
-                    Vector3.Distance(anchor, plan.AnchorPosition) > .25f || Mathf.Abs(length - plan.AnchorLength) > .005f ||
-                    !AnchorSwingClear(body, plan.AnchorModel, hull, plan.Position, plan.Rotation, anchor, length, survey, out reason)))
-                    return Fail(reason ?? "The planned anchor support changed.", out reason);
-            }
-            else if (plan.Mode == StartBerthMode.Moored && (!ValidCleat(plan.Destination, plan.Front, body, ropes) ||
+            if (plan.Mode == StartBerthMode.Moored && (!ValidCleat(plan.Destination, plan.Front, body, ropes) ||
                 !ValidCleat(plan.Destination, plan.Back, body, ropes) || plan.Front == plan.Back ||
                 plan.Front.spring != plan.FrontSpring || plan.Back.spring != plan.BackSpring ||
                 plan.FrontSpring == plan.BackSpring ||
@@ -1176,45 +1077,6 @@ namespace NewBeginnings
             return true;
         }
 
-        private static bool AnchorSwingClear(Rigidbody own, StartAnchorModel model, Hull hull,
-            Vector3 position, Quaternion rotation, Vector3 anchor, float length, Survey survey, out string reason)
-        {
-            reason = null;
-            var maximum = model.Maximum;
-            var hook = model.HullPoint(position, rotation);
-            anchor = model.AnchorPoint(anchor);
-            var center = position + rotation * hull.Center;
-            var endOffset = rotation * Vector3.forward * hull.HalfSegment;
-            var reach = Mathf.Max(Vector3.ProjectOnPlane(center + endOffset - hook, Vector3.up).magnitude,
-                Vector3.ProjectOnPlane(center - endOffset - hook, Vector3.up).magnitude) + hull.Radius;
-            var radius = AnchorSwingRadius(maximum * length, hook.y - anchor.y, reach);
-            if (!Finite(radius) || radius <= 0f || radius > 45f)
-                return Fail("The anchor swing area exceeds the bounded shoreline survey.", out reason);
-            var swingCenter = new Vector3(anchor.x, center.y, anchor.z);
-            // This box encloses the swing circle at the hull's actual height.
-            // Conservative extra clearance at its corners is intentional.
-            if (!survey.Query()) return Fail("The bounded geometry survey is exhausted.", out reason);
-            foreach (var obstacle in Physics.OverlapBox(swingCenter,
-                new Vector3(radius + HullMargin, hull.Radius + HullMargin, radius + HullMargin),
-                Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
-                if (obstacle != null && obstacle.attachedRigidbody != own && !obstacle.transform.IsChildOf(own.transform))
-                    return Fail("The native anchor's swing area overlaps " + DescribeObstacle(obstacle) + ".", out reason);
-            var flat = new Vector2(anchor.x, anchor.z);
-            if (!ResidentsClear(own, new BerthClearance.Footprint { A = flat, B = flat, Radius = radius }, out reason)) return false;
-            foreach (var local in DepthSamples(0f, radius))
-            {
-                if (!Ground(swingCenter + local, center.y + hull.Radius + 20f, 300f, survey, out var ground) ||
-                    !HasDepth(center.y - hull.Radius, ground.point.y))
-                    return Fail("The anchor swing area lacks verified seabed clearance.", out reason);
-            }
-            return true;
-        }
-
-        internal static float AnchorSwingRadius(float lineLength, float verticalDrop, float hullReach) =>
-            !Finite(lineLength) || !Finite(verticalDrop) || !Finite(hullReach) || lineLength <= 0f || hullReach <= 0f ||
-            Mathf.Abs(verticalDrop) > lineLength ? float.NaN :
-            Mathf.Sqrt(Mathf.Max(0f, lineLength * lineLength - verticalDrop * verticalDrop)) + hullReach;
-
         private static bool NearbyBounds(Rigidbody body, Vector3 center, float reach)
         {
             foreach (var collider in body.GetComponentsInChildren<Collider>(true))
@@ -1281,34 +1143,6 @@ namespace NewBeginnings
                 if (!found || hit.point.y > ground.point.y) { found = true; ground = hit; }
             }
             return found;
-        }
-
-        private static bool TryAnchor(StartAnchorModel model, Vector3 position, Quaternion rotation,
-            Survey survey, out Vector3 anchorPosition, out float length, out string reason)
-        {
-            anchorPosition = Vector3.zero; length = 0f; reason = null;
-            var origin = model.HullPoint(position, rotation);
-            // Preserve the surveyed anchor rotation. Its physical pivot can be
-            // offset from the root, so put that pivot beneath the hull endpoint.
-            var pivotOffset = model.AnchorPoint(Vector3.zero);
-            var sample = origin - new Vector3(pivotOffset.x, 0f, pivotOffset.z);
-            if (!Finite(origin) || !Ground(sample, position.y + 20f, 300f, survey, out var ground) || ground.normal.y < .85f)
-                return Fail("The anchor has no verified, sufficiently level seabed contact.", out reason);
-            anchorPosition = ground.point + Vector3.up * (model.BottomOffset + .02f);
-            var distance = Vector3.Distance(origin, model.AnchorPoint(anchorPosition));
-            if (!TryAnchorLength(distance, model.Maximum, out length))
-                return Fail("The native anchor line cannot reach the seabed safely.", out reason);
-            return true;
-        }
-
-        internal static bool TryAnchorLength(float distance, float maximum, out float normalized)
-        {
-            normalized = 0f;
-            if (!Finite(distance) || !Finite(maximum) || distance < 0f || maximum <= 0f) return false;
-            var line = Mathf.Max(9f, distance + 2f);
-            if (line > maximum) return false;
-            normalized = line / maximum;
-            return Finite(normalized) && normalized > 0f && normalized <= 1f;
         }
 
         private static object Read(object owner, string field) => owner != null ? AccessTools.Field(owner.GetType(), field)?.GetValue(owner) : null;

@@ -32,7 +32,7 @@ static class Checks
         internal GPButtonDockMooring OldCleat;
         internal Rigidbody AnchorBody;
         internal Anchor Anchor;
-        internal Fixture(bool anchored = false, bool grounded = true, bool scrambled = false, bool pirateOffshore = false, Action<Fixture> beforeBegin = null)
+        internal Fixture(bool scrambled = false, bool pirateOffshore = false, Action<Fixture> beforeBegin = null)
         {
             FixedStart.CancelCustomStart();
             Plugin.Instance = new();
@@ -93,7 +93,6 @@ static class Checks
             AnchorBody.drag = .7f;
             AnchorBody.velocity = new(2, 3, 4);
             AnchorBody.angularVelocity = new(4, 3, 2);
-            Anchor.Grounded = grounded;
             Anchor.Length = .4f;
             ropes.anchor = Anchor;
             var joint = On<ConfigurableJoint>(anchorPoint);
@@ -118,12 +117,9 @@ static class Checks
             {
                 Destination = site,
                 RetainedDockLanding = pirateOffshore,
-                Anchored = anchored,
                 Position = new(1000, 1, 0),
                 ShorePosition = new(1002, 5, 0),
-                AnchorPosition = new(1003, -5, 0),
                 Rotation = Quaternion.identity,
-                AnchorLength = .8f,
                 FrontRope = front,
                 BackRope = back
             };
@@ -269,11 +265,8 @@ static class Checks
             PirateInitiallySetAnchorCancellationRestores,
             PirateTargetFailureRetainsSelection,
             OrdinaryInitiallySetAnchorGrants,
-            PirateHeldStartsWithoutAnchorWait,
             PirateHeldCancellationStillRestores,
             PirateDestroyedAnchorWarnsAndContinues,
-            AnchorDriftWarnsAndContinues,
-            AnchorLimitMustApplyBeforeSecure,
             StartGuardThroughGrant,
             NoRestartLatchAfterFailure,
             ScrambledWaitsThenContinuesOnce,
@@ -282,19 +275,16 @@ static class Checks
             ScrambledOrdinaryPassthrough,
             MenuHideOwnership,
             CancelBeforeOwnership,
-            AnchoredCancellationRestores,
             PurchaseUiLostWarnsAndContinues,
             OwnershipScope,
             RecoverableSetupFailuresKeepSelection,
             PreGrantNativeExceptionKeepsStart,
             LoadPrefixCancelsBeforeMutation,
             ForeignLoadDoesNotReceiveSnapshot,
-            AnchoredTargetFailureIsIncomplete,
             ResolveFailureIsIncomplete,
             FinalBerthWarningStillPlaces,
             NoFactoryKeepsPlacement,
             SuccessfulNativeGrantOwnsBoat,
-            DestroyedAnchorWarnsAndContinues,
             RollbackErrorStillRestoresPlayer,
             SceneryWaitGrantsNothing,
             SceneryDeadlineStillPrepares
@@ -744,17 +734,6 @@ static class Checks
         Check(f.Selected.Boat.purchased && f.Selected.Body.position.x == 1000 && !f.Anchor.IsSet(), "deployed anchor changed the selected starter instead of releasing for placement");
     }
 
-    static void PirateHeldStartsWithoutAnchorWait()
-    {
-        var f = new Fixture(grounded: false, pirateOffshore: true);
-        f.Anchor.ThrowSet = true;
-        f.Selected.Berth.AnchorModel.Ready = false;
-        f.Finish();
-        Check(f.Selected.Boat.purchased && !f.Selected.Body.isKinematic && !f.Anchor.IsSet(), "held offshore did not grant boat");
-        Check(f.Anchor.Length == 0 && f.AnchorBody.position.Equals(new Vector3(1003, 1, 0)) && !StarterMooring.Armed, "offshore did not stow anchor or incorrectly armed mooring");
-        Check(!f.Anchor.Calls.Contains("set") && f.Selected.Berth.AnchorModel.Checks == 0 && PirateStationKeeper.Active != null, "held offshore entered anchor path or lost hold on purchase");
-    }
-
     static void PirateHeldCancellationStillRestores()
     {
         var f = new Fixture(pirateOffshore: true);
@@ -775,30 +754,6 @@ static class Checks
         f.Finish();
         f.GrantedAtBerth("native anchor disappeared");
         Check(PirateStationKeeper.Active != null, "lost anchor removed the offshore hold");
-    }
-
-    static void AnchorDriftWarnsAndContinues()
-    {
-        foreach (var offset in new[] { 1f, float.NaN })
-        {
-            var f = new Fixture(true);
-            f.Until(() => f.Selected.Body.position.x == 1000);
-            f.AnchorBody.position = f.AnchorBody.position + new Vector3(offset, 0, 0);
-            f.Finish();
-            f.GrantedAtBerth("anchor could not be secured");
-            Check(!f.Anchor.Calls.Contains("set"), "drifted or NaN anchor contact was secured");
-        }
-    }
-
-    static void AnchorLimitMustApplyBeforeSecure()
-    {
-        var f = new Fixture(true);
-        f.Selected.Berth.AnchorModel.Ready = false;
-        f.Until(() => f.Selected.Body.position.x == 1000);
-        Check(f.Routine.Current == null && f.Selected.Berth.AnchorModel.Checks == 0 && !f.Anchor.IsSet(), "immediate contact skipped native Update opportunity");
-        f.Finish();
-        f.GrantedAtBerth("anchor could not be secured");
-        Check(f.Selected.Berth.AnchorModel.Checks == 1 && !f.Anchor.Calls.Contains("set"), "unapplied physical joint limit reached anchor secure");
     }
 
     static void StartGuardThroughGrant()
@@ -887,18 +842,6 @@ static class Checks
         f.StayedOutOfMenu();
         Check(f.Menu.Controller.GetComponent<CharacterController>().enabled && !f.Menu.logo.activeSelf, "native exception restored menu controls");
         Check(f.Selected.Body.position.x == 1000 && ProbeVelocityGuard.Outstanding == 0 && Plugin.Instance.Warnings.Any(w => w.Contains("stopped before it finished")), "native exception rolled back the boat, kept a hold or was not logged");
-    }
-
-    static void AnchoredCancellationRestores()
-    {
-        var f = new Fixture(true);
-        f.Until(() => f.Menu.Native != null);
-        Check(f.Anchor.IsSet(), "fixture did not secure the native anchor");
-        FixedStart.CancelCustomStart();
-        f.Finish();
-        f.Restored();
-        Check(!f.Anchor.IsSet() && f.Anchor.Length == .4f && f.AnchorBody.drag == .7f && !f.AnchorBody.isKinematic, "cancelled anchored start did not restore original unset anchor state");
-        Check(f.Anchor.Calls.IndexOf("release") > f.Anchor.Calls.IndexOf("set"), "cancelled anchored start did not explicitly release its newly set anchor");
     }
 
     static void PurchaseUiLostWarnsAndContinues()
@@ -1008,15 +951,6 @@ static class Checks
         GameState.currentlyLoading = false;
     }
 
-    static void AnchoredTargetFailureIsIncomplete()
-    {
-        var f = new Fixture(true);
-        Plugin.Instance.FailTarget = true;
-        f.Finish();
-        f.Incomplete();
-        Check(f.Selected.Body.position.x == 1000 && !f.Selected.Body.isKinematic, "hard target failure replaced selected boat or leaked hull hold");
-    }
-
     static void ResolveFailureIsIncomplete()
     {
         FixedStart.ResolveFails = true;
@@ -1045,27 +979,17 @@ static class Checks
 
     static void SuccessfulNativeGrantOwnsBoat()
     {
-        var f = new Fixture(true);
+        var f = new Fixture();
         var registry = Recovery.ports;
         f.Finish();
         Check(f.Selected.Boat.purchased && f.Menu.Native.Disposed, "native grant did not complete");
         Check(GameState.lastOwnedBoat == f.Selected.Saveable.transform && GameState.lastVisitedPort == null, "Pirate identity/ownership wrong");
-        Check(f.Anchor.IsSet() && !f.Selected.Body.isKinematic && ProbeVelocityGuard.Outstanding == 0, "native anchor handoff retained guard or frozen hull");
+        Check(!f.Selected.Body.isKinematic && ProbeVelocityGuard.Outstanding == 0, "native handoff retained guard or frozen hull");
         Check(ReferenceEquals(Recovery.ports, registry) && Recovery.ports.Count == 1, "custom start changed native recovery registry");
         Check(Plugin.Instance.Warnings.Count == 0 && Plugin.Instance.Errors.Count == 0, "clean start logged a problem");
         var position = f.Selected.Body.position;
         FixedStart.CancelCustomStart();
         Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(position) && f.Menu.Reopened == 0, "post-grant cancel rolled back owned boat");
-    }
-
-    static void DestroyedAnchorWarnsAndContinues()
-    {
-        var f = new Fixture(true, false);
-        f.Until(() => f.Selected.Body.position.x == 1000);
-        f.Anchor.Destroyed = true;
-        f.AnchorBody.Destroyed = true;
-        f.Finish();
-        f.GrantedAtBerth("did not report seabed contact");
     }
 
     static void RollbackErrorStillRestoresPlayer()

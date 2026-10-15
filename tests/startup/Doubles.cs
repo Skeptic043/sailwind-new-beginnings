@@ -434,18 +434,15 @@ public class PickupableBoatMooringRope : UnityEngine.Component
 
 public class Anchor : UnityEngine.Component
 {
-    public bool Set, Grounded, ThrowSet;
+    public bool Set;
     public float Length;
     public readonly List<string> Calls = new();
     public bool IsSet() => Set;
     public float GetRopeLength() => Length;
-    private bool IsTouchingGround() => Grounded;
     private void SetAnchor()
     {
         Calls.Add("set");
         Set = true;
-        if (ThrowSet)
-            throw new InvalidOperationException("Injected anchor set failure");
         GetComponent<UnityEngine.Rigidbody>().isKinematic = true;
         GetComponent<UnityEngine.Rigidbody>().drag = 50;
     }
@@ -693,28 +690,9 @@ namespace NewBeginnings
         }
     }
 
-    internal class StartAnchorModel
-    {
-        internal UnityEngine.Quaternion AnchorRotation = UnityEngine.Quaternion.identity;
-        internal bool Ready = true;
-        internal int Checks;
-        internal bool ReadyToSecure(BoatMooringRopes ropes, UnityEngine.Rigidbody body, float normalized, UnityEngine.Vector3 expected, out string reason)
-        {
-            ++Checks;
-            var actual = ropes.anchor.GetComponent<UnityEngine.Rigidbody>().position;
-            var dx = actual.x - expected.x;
-            var dy = actual.y - expected.y;
-            var dz = actual.z - expected.z;
-            var valid = Ready && float.IsFinite(dx) && float.IsFinite(dy) && float.IsFinite(dz) && dx * dx + dy * dy + dz * dz <= .0025f;
-            reason = valid ? null : "Injected unapplied joint limit or drifted contact";
-            return valid;
-        }
-    }
-
     internal enum StartBerthMode
     {
         Moored,
-        Anchored,
         OffshoreHeld,
         ShipyardHeld
     }
@@ -724,9 +702,7 @@ namespace NewBeginnings
         private UnityEngine.Transform frame;
         internal UnityEngine.Transform Frame { get => frame ?? Destination.Island.transform; set => frame = value; }
 
-        internal StartAnchorModel AnchorModel = new();
         internal StartBerthMode Mode;
-        internal bool Anchored { get => Mode == StartBerthMode.Anchored; set => Mode = value ? StartBerthMode.Anchored : StartBerthMode.Moored; }
 
         internal bool RetainedDockLanding;
         internal PortChoice Destination;
@@ -770,11 +746,9 @@ namespace NewBeginnings
         internal UnityEngine.Vector3 ShorePosition { get => localShorePose ? Frame.TransformPoint(localShore) : shorePosition; set => shorePosition = value; }
         internal UnityEngine.Quaternion Rotation { get => localRot ? Frame.rotation * localRotation : rotation; set => rotation = value; }
 
-        internal UnityEngine.Vector3 AnchorPosition;
         internal GPButtonDockMooring Front, Back;
         internal UnityEngine.SpringJoint FrontSpring, BackSpring;
         internal bool ClearanceVerified, DepartureVerified, LandingVerified;
-        internal float AnchorLength;
         internal PickupableBoatMooringRope FrontRope, BackRope;
         internal bool Revalidate(UnityEngine.Rigidbody body, BoatMooringRopes ropes, out string reason)
         {

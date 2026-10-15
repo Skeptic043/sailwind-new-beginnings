@@ -17,8 +17,6 @@ candidate_members = '\n'.join((method(marker) for marker in [
     'internal enum StartBerthMode',
     'private sealed class Survey',
     'private sealed class DockPair',
-    'private enum AnchorRejection',
-    'private sealed class AnchorReport',
     'private static StartBerthPlan Make(',
     'private static StartBerthPlan OffshorePlan(',
     'private static bool TryPirateOffshore(',
@@ -44,12 +42,10 @@ candidate_members = '\n'.join((method(marker) for marker in [
     'private sealed class ShoreFailures',
     'private static IEnumerable<DockPair> SupportedDockPairs(',
     'private static IEnumerable<DockCandidate> DockCandidates(',
-    'private static IEnumerable<Vector3> DockOffsets(',
-    'private static bool TryPirateFallback('
+    'private static IEnumerable<Vector3> DockOffsets('
 ]))
 candidate_members += '\n' + method('private static bool RopePair(').replace('RopePair(', 'NativeRopePair(')
 for marker in [
-    'private const float MaximumSearchRadius',
     'private const int MaximumCheckedPairs',
     'private static readonly Vector3 PirateOffshoreCenter',
     'private static readonly Vector3 SaffronOffshoreCenter',

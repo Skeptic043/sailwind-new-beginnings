@@ -119,30 +119,19 @@ static class PirateCandidateChecks
     {
         internal PortChoice Destination;
         internal Transform Frame;
-        internal Vector3 LocalPosition, LocalShorePosition, LocalAnchorPosition;
+        internal Vector3 LocalPosition, LocalShorePosition;
         internal Quaternion LocalRotation;
         internal StartBerthMode Mode;
-        internal bool Anchored { get => Mode == StartBerthMode.Anchored; set => Mode = value ? StartBerthMode.Anchored : StartBerthMode.Moored; }
 
         internal bool RetainedDockLanding;
         internal string OffshoreDiagnostics;
         internal GPButtonDockMooring Front, Back;
         internal object FrontSpring, BackSpring;
-        internal StartAnchorModel AnchorModel;
-        internal float AnchorLength;
         internal bool ClearanceVerified = true, DepartureVerified = true, LandingVerified = true;
         internal PickupableBoatMooringRope FrontRope, BackRope;
         internal Quaternion Rotation => Frame.rotation * LocalRotation;
         internal Vector3 Position => Frame.TransformPoint(LocalPosition);
         internal Vector3 ShorePosition => Frame.TransformPoint(LocalShorePosition);
-    }
-
-    class StartAnchorModel
-    {
-        internal static bool TryCreate(BoatMooringRopes ropes, Rigidbody body, out StartAnchorModel model, out string reason)
-        {
-            throw new Exception("Mandatory Pirate must not inspect anchor model");
-        }
     }
 
     static int checks, clearCalls, departureCalls;
@@ -154,16 +143,6 @@ static class PirateCandidateChecks
         positions.Add(p);
         reason = "hull boundary";
         return survey.Query() && clear(clearCalls);
-    }
-
-    static bool TryAnchor(StartAnchorModel model, Vector3 p, Quaternion q, Survey survey, out Vector3 at, out float length, out string reason)
-    {
-        throw new Exception("Mandatory Pirate must not deploy anchor");
-    }
-
-    static bool AnchorSwingClear(Rigidbody body, StartAnchorModel model, Hull hull, Vector3 p, Quaternion q, Vector3 at, float length, Survey survey, out string reason)
-    {
-        throw new Exception("Mandatory Pirate must not survey anchor swing");
     }
 
     static bool DepartureClear(Rigidbody body, Hull hull, Vector3 p, Quaternion q, Survey survey, out string reason)
@@ -183,7 +162,7 @@ static class PirateCandidateChecks
         return survey.Query() && dockSupported;
     }
 
-    // Boundaries for the physical rope, deck, water and anchorage queries.
+    // Boundaries for the physical rope, deck and water queries.
     static readonly PickupableBoatMooringRope FrontLine = new(), BackLine = new();
     static bool RopePair(Hull hull, Vector3 p, Quaternion q, GPButtonDockMooring front, GPButtonDockMooring back, out PickupableBoatMooringRope frontRope, out PickupableBoatMooringRope backRope)
     {
@@ -206,13 +185,6 @@ static class PirateCandidateChecks
     }
 
     static bool OpenWater(Vector3 point, float height, Hull hull, Survey survey) => water(++waterCalls);
-    static bool TryAnchored(PortChoice destination, Rigidbody body, BoatMooringRopes ropes, Hull hull, float height, Vector3 origin, Vector3 seed, Survey survey, out StartBerthPlan plan, out string reason)
-    {
-        plan = null;
-        reason = "injected anchorage rejection";
-        return false;
-    }
-
     static Hull measuredHull;
     static float measuredHeight;
     static bool TryHull(Rigidbody body, BoatMooringRopes ropes, out Hull hull, out string reason)
@@ -967,7 +939,7 @@ static class PirateCandidateChecks
         Reset();
         clear = _ => false;
         Check(TryFixedOffshoreHold(saffron, new Rigidbody(), new Hull(), 2, SaffronOffshoreCenter, Vector3.forward, new Survey(true), saffronLanding, out plan, out saffronReason) && plan.OffshoreDiagnostics.StartsWith("Saffron Island offshore hold") && plan.OffshoreDiagnostics.Contains("hull clearance unverified"), "Saffron hold cancelled or reported another location");
-        Check(PiratePlanMessage(StartBerthMode.OffshoreHeld, 12).Contains("OffshoreHeld") && PiratePlanMessage(StartBerthMode.Anchored, 12).Length < 100, "mode diagnostic ambiguous or excessive");
+        Check(PiratePlanMessage(StartBerthMode.OffshoreHeld, 12).Contains("OffshoreHeld") && PiratePlanMessage(StartBerthMode.Moored, 12).Length < 100, "mode diagnostic ambiguous or excessive");
         front.transform.position = new(0, 1, 0);
         back.transform.position = new(4, 1, 0);
         Reset();
@@ -978,7 +950,15 @@ static class PirateCandidateChecks
         Reset();
         Plugin.Instance.Fails = true;
         Check(TryPirateOffshore(site, new Rigidbody(), new BoatMooringRopes(), new Hull(), 2, new[] { front, back }, new Survey(true), out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose) && Near(plan.ShorePosition, new Vector3(2, 1.5f, 0)) && !plan.LandingVerified && plan.OffshoreDiagnostics.StartsWith("Best-effort landing") && plan.OffshoreDiagnostics.Contains("injected dry shore failure"), "Pirate offshore start without a verified landing failed or did not land on the dock deck");
-        Console.WriteLine("PASS " + (checks - fixedBefore) + " actual Pirate and Saffron fixed offshore hold pose/diagnostic/budget checks with controlled physics stages and managed math. No live clearance/stationkeeping proof.");
+        // A small boat surveys Pirate's dock first. Without a fully verified
+        // moored pose it uses the fixed hold, unless only the dry shore failed.
+        Reset();
+        departure = _ => false;
+        Check(RunSurvey(site, new[] { front, back }, out plan, out failure) && plan.Mode == StartBerthMode.OffshoreHeld && Near(plan.Position, fixedPose) && plan.RetainedDockLanding && plan.OffshoreDiagnostics.StartsWith("No clear, reachable moored berth") && plan.OffshoreDiagnostics.Contains("Departure=") && plan.OffshoreDiagnostics.Contains("offshore hold"), "Pirate dock survey without a verified berth did not use the fixed hold or lost its survey report: " + plan?.OffshoreDiagnostics);
+        Reset();
+        Plugin.Instance.Fails = true;
+        Check(RunSurvey(site, new[] { front, back }, out plan, out failure) && plan.Mode == StartBerthMode.Moored && plan.ClearanceVerified && plan.DepartureVerified && !plan.LandingVerified && plan.OffshoreDiagnostics.StartsWith("Best-effort moored"), "Pirate berth that failed only its dry shore did not keep the best-effort moored start");
+        Console.WriteLine("PASS " + (checks - fixedBefore) + " actual Pirate and Saffron fixed offshore hold pose/diagnostic/budget and Pirate dock-survey fallback checks with controlled physics stages and managed math. No live clearance/stationkeeping proof.");
         BestEffortChecks();
         return 0;
     }

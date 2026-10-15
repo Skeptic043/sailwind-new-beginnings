@@ -1579,8 +1579,8 @@ namespace NewBeginnings
                     selected.Body.velocity = Vector3.zero;
                     selected.Body.angularVelocity = Vector3.zero;
                     Physics.SyncTransforms();
-                    if (selected.Berth?.Anchored != true && (selected.FrontMooring.spring.connectedBody != selected.Body ||
-                        selected.BackMooring.spring.connectedBody != selected.Body))
+                    if (selected.FrontMooring.spring.connectedBody != selected.Body ||
+                        selected.BackMooring.spring.connectedBody != selected.Body)
                         Warn("Boat moved after placement, but one of its dock springs disconnected before ownership.");
                     placementCompleted = true;
                 }

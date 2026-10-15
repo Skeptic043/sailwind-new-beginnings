@@ -22,15 +22,11 @@ namespace NewBeginnings
         }
 
         private static readonly System.Reflection.MethodInfo MovePlayerFactory = AccessTools.Method(typeof(StartMenu), "MovePlayerToStartPos");
-        private static readonly System.Reflection.MethodInfo AnchorGroundedMethod = AccessTools.Method(typeof(Anchor), "IsTouchingGround");
-        private static readonly System.Reflection.MethodInfo SetAnchorMethod = AccessTools.Method(typeof(Anchor), "SetAnchor");
         private static readonly System.Reflection.MethodInfo ReleaseAnchorMethod = AccessTools.Method(typeof(Anchor), "ReleaseAnchor");
         private static readonly System.Reflection.FieldInfo IslandMenuField = AccessTools.Field(typeof(StartMenu), "chooseIslandUI");
         private static readonly System.Reflection.FieldInfo LogoField = AccessTools.Field(typeof(StartMenu), "logo");
         private static readonly System.Reflection.FieldInfo CursorEnabledField = AccessTools.Field(typeof(MouseLook), "cursorEnabled");
         private static readonly System.Reflection.FieldInfo ControllerPointerField = AccessTools.Field(typeof(MouseButtonPointer), "controllerPointer");
-        private static bool AnchorGrounded(Anchor anchor) => anchor != null && AnchorGroundedMethod != null &&
-            (bool)AnchorGroundedMethod.Invoke(anchor, null);
 
         // Startup timing spans every mod's work, not only New Beginnings.
         internal static void MarkStartSelected() => startSelectedAt = Time.realtimeSinceStartup;
@@ -293,29 +289,6 @@ namespace NewBeginnings
                     try { placement = TryPrepareCustom(menu, pair, options); }
                     finally { StartupProfiler.Exit(profiled); }
                     if (placement == null) yield break;
-                    if (placement != null && placement.Selected.Berth.Anchored)
-                    {
-                        var anchor = placement.Selected.Ropes.anchor;
-                        var anchorDeadline = Time.realtimeSinceStartup + 4f;
-                        // OnLoad stores the normalized length. Native Update applies
-                        // it to the physical joint, including when contact was immediate.
-                        yield return null;
-                        while (generation == customGeneration && anchor != null && !AnchorGrounded(anchor) &&
-                            Time.realtimeSinceStartup < anchorDeadline && !GameState.currentlyLoading)
-                            yield return new WaitForFixedUpdate();
-                        if (generation != customGeneration || GameState.currentlyLoading) yield break;
-                        if (anchor == null || !AnchorGrounded(anchor))
-                        {
-                            Plugin.Instance?.Warn("The anchor did not report seabed contact. The boat stays at its planned anchorage and the start continues.");
-                            placement.ReleaseHull();
-                        }
-                        else if (!placement.SecureAnchor(out var anchorProblem))
-                        {
-                            Plugin.Instance?.Warn("The anchor could not be secured (" + anchorProblem +
-                                "). The boat stays at its planned anchorage and the start continues.");
-                            placement.ReleaseHull();
-                        }
-                    }
                     if (placement != null)
                     {
                         profiled = StartupProfiler.Enter();
@@ -442,8 +415,6 @@ namespace NewBeginnings
                     Plugin.Instance?.Warn("The selected boat changed while scenery loaded. Using the boat now loaded for that selection.");
                 if (selected.Ropes == null || selected.Ropes.anchor == null || selected.Ropes.GetAnchorController() == null)
                     return NoPlacement("The selected boat lacks native shipwreck-recovery components.");
-                if (selected.Berth.Anchored && (AnchorGroundedMethod == null || SetAnchorMethod == null || ReleaseAnchorMethod == null))
-                    return NoPlacement("The native anchor lifecycle methods are unavailable in this game build.");
                 selected.Options = options; selected.Size = pair.Boat.Size; selected.Menu = menu;
                 placement = new CustomPlacement(selected, menu);
                 placement.Move();
@@ -556,17 +527,7 @@ namespace NewBeginnings
                 s.Body.transform.SetPositionAndRotation(s.Berth.Position, s.Berth.Rotation);
                 s.Body.position = s.Berth.Position; s.Body.rotation = s.Berth.Rotation;
                 s.Body.velocity = Vector3.zero; s.Body.angularVelocity = Vector3.zero;
-                if (s.Berth.Anchored)
-                {
-                    // Only the bounded contact wait holds the hull. Successful
-                    // completion releases it to normal native anchor physics.
-                    s.Body.isKinematic = true;
-                    anchorBody.rotation = s.Berth.AnchorModel.AnchorRotation;
-                    anchorBody.position = s.Berth.AnchorPosition;
-                    anchorBody.isKinematic = false;
-                    s.Ropes.anchor.OnLoad(false, s.Berth.AnchorLength);
-                }
-                else if (s.Berth.OffshoreHeld)
+                if (s.Berth.OffshoreHeld)
                 {
                     StowOffshoreAnchor();
                     if (s.Berth.Mode == StartBerthMode.ShipyardHeld &&
@@ -617,26 +578,6 @@ namespace NewBeginnings
                 anchorBody.isKinematic = false;
                 s.Body.isKinematic = false;
                 Physics.SyncTransforms();
-            }
-
-            internal bool SecureAnchor(out string reason)
-            {
-                reason = null;
-                var s = Selected;
-                if (!AnchorGrounded(s.Ropes.anchor) || !StartDestinations.IsCurrent(s.Destination))
-                { reason = "The anchorage changed before native anchor setup."; return false; }
-                if (s.Berth.AnchorModel == null ||
-                    !s.Berth.AnchorModel.ReadyToSecure(s.Ropes, s.Body, s.Berth.AnchorLength,
-                        s.Berth.AnchorPosition, out reason)) return false;
-                try { SetAnchorMethod.Invoke(s.Ropes.anchor, null); }
-                catch (Exception exception)
-                {
-                    reason = "native anchor setup failed: " + (exception.InnerException ?? exception).Message;
-                    return false;
-                }
-                s.Body.isKinematic = bodyKinematic;
-                if (!s.Ropes.anchor.IsSet()) { reason = "the native anchor did not report set"; return false; }
-                return true;
             }
 
             // Release temporary holds when setup cannot finish, so the hull
