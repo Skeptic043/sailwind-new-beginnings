@@ -25,7 +25,9 @@ namespace NewBeginnings
         internal int Region;
         internal bool IsModded, HasShipyard;
         internal string HiddenKey;
-        internal bool UsesCustomBerth => Recovery == null || SiteIdentity != null;
+        internal bool IsSirenSong => SiteIdentity == null && Index == 18 && Port.name == "port M 18 Siren Song" &&
+            Island != null && Island.islandIndex == 21 && Island.name == "island 21 M (Siren Song)";
+        internal bool UsesCustomBerth => Recovery == null || SiteIdentity != null || IsSirenSong;
         internal int Index => Port != null ? Port.portIndex : -1;
         internal string IdentityName => SiteIdentity ?? (Port != null ? Port.gameObject.name : Key);
     }

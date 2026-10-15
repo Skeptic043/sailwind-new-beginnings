@@ -692,9 +692,6 @@ namespace NewBeginnings
             if (selected.NativeBerth != null)
                 Plugin.Instance.Warn("Native berth changed after selection; checking the ordinary relocation berth again.");
             selected.NativeBerth = null;
-            // Free Siren Song's recovery berth before it is resolved and measured.
-            if (!SirenSongCog.VacateForStart(selected) && SirenSongCog.IsSirenSong(selected.Port))
-                Plugin.Instance.DebugLog("Siren Song Cog relocation did not move a boat. The selected starter and berth remain unchanged.");
             if (!TryResolveRelocation(selected, out var reason))
                 throw new InvalidOperationException(reason);
             ApplyRelocated(selected, menu, ref startPos);

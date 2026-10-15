@@ -149,6 +149,8 @@ namespace NewBeginnings
             if (!StartDestinations.IsCurrent(destination) || Plugin.Instance == null)
                 return Fail("The starting location is no longer loaded.", out reason);
             if (!TryHull(body, ropes, out var hull, out reason) || !TryHeight(body, out var height, out reason)) return false;
+            if (destination.IsSirenSong)
+                return TrySirenSong(destination, body, ropes, hull, height, out plan, out reason);
             if (destination.SiteIdentity == "site:oldchronian|fort-juniper" &&
                 TryFortOuter(destination, body, ropes, hull, height, out plan, out reason)) return true;
             var survey = new Survey(destination.HiddenKey == "pirate");
@@ -198,6 +200,79 @@ namespace NewBeginnings
         }
 
         private const int MaximumCleats = 128;
+
+        // Only the chosen starter moves. The resident Cog and the vanilla
+        // recovery berth keep their authored positions and load behavior.
+        private static bool TrySirenSong(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
+            Hull hull, float height, out StartBerthPlan plan, out string reason)
+        {
+            plan = null; reason = null;
+            var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
+                .Where(c => StartDestinations.Loaded(c) && c.transform.parent == destination.Island.transform).ToArray();
+            var a = cleats.Where(c => c.name == "dock_mooring M (5)").ToArray();
+            var b = cleats.Where(c => c.name == "dock_mooring M (4)").ToArray();
+            var water = destination.Recovery != null ? destination.Recovery.boatPos : null;
+            if (a.Length != 1 || b.Length != 1 || water == null)
+                return Fail("Siren Song's end-of-dock cleats or water reference are unavailable.", out reason);
+            var bestDistance = float.PositiveInfinity;
+            for (var reverse = 0; reverse < 2; ++reverse)
+            {
+                if (!TrySirenSongPose(hull.Center, hull.Radius, height, a[0].transform.position,
+                    b[0].transform.position, water.position, reverse != 0, out var position, out var rotation, out var seed))
+                    return Fail("Siren Song's end-of-dock berth geometry is invalid.", out reason);
+                var front = reverse == 0 ? a[0] : b[0];
+                var back = reverse == 0 ? b[0] : a[0];
+                PickupableBoatMooringRope frontRope = null, backRope = null;
+                var canMoor = ValidCleat(destination, front, body, ropes) && ValidCleat(destination, back, body, ropes) &&
+                    front.spring != back.spring && RopePair(hull, position, rotation, front, back, out frontRope, out backRope);
+                var distance = float.PositiveInfinity;
+                if (canMoor)
+                    distance = Vector3.Distance(position + rotation * hull.RopePositions[Array.IndexOf(hull.Ropes, frontRope)], front.transform.position) +
+                        Vector3.Distance(position + rotation * hull.RopePositions[Array.IndexOf(hull.Ropes, backRope)], back.transform.position);
+                if (plan != null && distance >= bestDistance) continue;
+                var verified = Plugin.Instance.TryFindStartShore(destination, seed, position,
+                    out var shore, out _, out _, front.transform, back.transform);
+                if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
+                plan = Make(destination, position, rotation, shore);
+                plan.Front = front; plan.Back = back;
+                plan.FrontSpring = front.spring; plan.BackSpring = back.spring;
+                plan.FrontRope = frontRope; plan.BackRope = backRope;
+                plan.ClearanceVerified = plan.DepartureVerified = false;
+                plan.LandingVerified = verified;
+                if (!canMoor)
+                {
+                    plan.Mode = StartBerthMode.OffshoreHeld;
+                    plan.OffshoreDiagnostics = "Siren Song's starter uses the end of the dock and is held until boarding because its mooring ropes could not be connected there.";
+                }
+                if (!verified) Note(plan, "Siren Song's dry landing was not verified; the player uses the end-of-dock reference.");
+                bestDistance = distance;
+            }
+            return true;
+        }
+
+        // Selected hull's measured side plus two metres from the live cleat
+        // line. The native recovery marker identifies the water side only.
+        internal static bool TrySirenSongPose(Vector3 hullCenter, float radius, float height, Vector3 a,
+            Vector3 b, Vector3 water, bool reverse, out Vector3 position, out Quaternion rotation, out Vector3 shore)
+        {
+            position = shore = Vector3.zero; rotation = Quaternion.identity;
+            var forward = Vector3.ProjectOnPlane(a - b, Vector3.up);
+            if (!Finite(hullCenter) || !Finite(radius) || radius <= 0f || !Finite(height) ||
+                !Finite(a) || !Finite(b) || !Finite(water) || forward.sqrMagnitude < 1f) return false;
+            forward = forward.normalized;
+            var outward = Vector3.Cross(Vector3.up, forward);
+            var side = Vector3.Dot(water - a, outward);
+            if (Mathf.Abs(side) < 1f) return false;
+            if (side < 0f) outward *= -1f;
+            if (reverse) forward *= -1f;
+            var yaw = (float)Math.Atan2(forward.x, forward.z) * .5f;
+            rotation = new Quaternion(0f, (float)Math.Sin(yaw), 0f, (float)Math.Cos(yaw));
+            var midpoint = (a + b) * .5f;
+            position = midpoint + outward * (radius + 2f) - rotation * hullCenter;
+            position.y = height;
+            shore = midpoint - outward * 2f;
+            return Finite(position) && Finite(shore);
+        }
 
         private static bool TryFortOuter(PortChoice destination, Rigidbody body, BoatMooringRopes ropes,
             Hull hull, float height, out StartBerthPlan plan, out string reason)

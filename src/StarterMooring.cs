@@ -18,6 +18,8 @@ namespace NewBeginnings
         private static readonly FieldInfo MaxLengthField = AccessTools.Field(typeof(PickupableBoatMooringRope), "maxLength");
         private static readonly MethodInfo DistanceMethod = AccessTools.Method(typeof(PickupableBoatMooringRope), "GetCurrentDistanceSquared");
         private static readonly FieldInfo DistanceTimerField = AccessTools.Field(typeof(RopeEffect), "distanceCheckTimer");
+        private static readonly FieldInfo OutOfRangeField = AccessTools.Field(typeof(RopeEffect), "outOfRange");
+        private static readonly FieldInfo ClothField = AccessTools.Field(typeof(RopeEffect), "clothRope");
         private static ResolvedStart selectedStart;
         private static Line[] lines;
         private static int generation;
@@ -123,9 +125,12 @@ namespace NewBeginnings
                         if (line.Finished) continue;
                         if (!StillConnected(line, selected.Body))
                         {
+                            var connected = line.Dock != null && line.Dock.spring != null ? line.Dock.spring.connectedBody : null;
+                            Plugin.Instance.DebugLog($"Starter mooring ended before settling: {(line.Rope != null ? line.Rope.name : "missing rope")} -> {(line.Dock != null ? line.Dock.name : "missing dock")}, connected hull {(connected != null ? connected.name : "none")}; no connection was restored.");
                             line.Finished = true;
                             continue;
                         }
+                        var lengthWasApplied = line.LengthApplied;
                         // RopeEffect otherwise retains an old >250 m culling result
                         // for 5-8 seconds after the boat/player/island teleport.
                         // Invalidate only this startup cache; native distance and
@@ -155,12 +160,24 @@ namespace NewBeginnings
                         // arrival. Keep invalidating this cache until the exact
                         // observer/distance used by native CheckDistance is near;
                         // never reapply the length while waiting for visibility.
-                        if (line.LengthApplied && effect != null && effect.isActiveAndEnabled &&
+                        // The length changes at end of frame. Observe the next
+                        // native LateUpdate before reporting the finished line.
+                        if (lengthWasApplied && effect != null && effect.isActiveAndEnabled &&
                             Refs.observerMirror != null &&
                             Vector3.Distance(effect.transform.position,
                                 Refs.observerMirror.transform.position) <= 250f)
+                        {
+                            ReportState(selected, line, effect);
                             line.Finished = true;
-                        if (!line.Finished) complete = false;
+                        }
+                        if (!line.Finished)
+                        {
+                            // Disabled/missing visuals cannot satisfy the normal
+                            // finish condition. Capture them at the existing deadline.
+                            if (lengthWasApplied && gameplayElapsed >= ReadyTimeout)
+                                ReportState(selected, line, effect);
+                            complete = false;
+                        }
                     }
                     if (!complete && gameplayElapsed >= ReadyTimeout)
                     {
@@ -186,6 +203,36 @@ namespace NewBeginnings
             line.Rope.GetBoatRigidbody() == body &&
             SpringField.GetValue(line.Rope) as SpringJoint == line.Dock.spring &&
             line.Dock.spring.connectedBody == body;
+
+        private static void ReportState(ResolvedStart selected, Line line, RopeEffect effect)
+        {
+            // Diagnostics never take ownership of a changed spring or affect
+            // completion if a native visual component is unavailable.
+            try
+            {
+                if (!StillConnected(line, selected.Body)) return;
+                var spring = line.Dock.spring;
+                var anchor = spring.transform.TransformPoint(spring.anchor);
+                var connectedAnchor = selected.Body.transform.TransformPoint(spring.connectedAnchor);
+                var distance = Math.Sqrt((float)DistanceMethod.Invoke(line.Rope, null));
+                var length = Math.Sqrt((float)LengthField.GetValue(line.Rope));
+                string force;
+                try { force = spring.currentForce.ToString(); }
+                catch (Exception exception) { force = "unavailable (" + exception.Message + ")"; }
+                Plugin.Instance.DebugLog($"Starter mooring state: boat {selected.Body.name}, {line.Rope.name} -> {line.Dock.name}, connected hull {spring.connectedBody.name}; anchors {anchor} / {connectedAnchor}, span {Vector3.Distance(anchor, connectedAnchor):F2} m; min/max {spring.minDistance:F2}/{spring.maxDistance:F2} m, spring/damper {spring.spring:F1}/{spring.damper:F1}, mass {selected.Body.mass:F1}, force {force}; native distance/length {distance:F2}/{length:F2} m, kinematic {selected.Body.isKinematic}.");
+                var renderer = line.Rope.GetComponent<LineRenderer>();
+                var cloth = effect != null ? ClothField?.GetValue(effect) as ClothRope : null;
+                var renderState = renderer == null ? "missing" :
+                    $"active {renderer.gameObject.activeInHierarchy}, enabled {renderer.enabled}, visible {renderer.isVisible}, points {renderer.positionCount}, bounds Y {renderer.bounds.min.y:F2}..{renderer.bounds.max.y:F2}";
+                var attachment = effect != null && effect.attachment != null ? $"{effect.attachment.name} at {effect.attachment.position}" : "none";
+                var outOfRange = effect != null ? OutOfRangeField?.GetValue(effect) : null;
+                Plugin.Instance.DebugLog($"Starter mooring visual: {line.Rope.name}, effect active {effect != null && effect.isActiveAndEnabled}, attachment {attachment}, outOfRange {outOfRange ?? "unknown"}; renderer {renderState}; cloth setting {Settings.clothRopes}, cloth active {(cloth != null ? cloth.gameObject.activeInHierarchy.ToString() : "missing")}; shipyardUpdatingOrder {GameState.shipyardUpdatingOrder}.");
+            }
+            catch (Exception exception)
+            {
+                Plugin.Instance.DebugLog("Starter mooring state could not be observed: " + exception.Message);
+            }
+        }
 
         internal static float SlackLengthSquared(float distanceSquared, float maximumSquared)
         {

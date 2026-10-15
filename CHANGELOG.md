@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.14
+
+### Changed
+
+- Siren Song starts now use the end of the dock. Other boats are no longer moved aside during startup or after loading a save.
+
 ## Version 1.3.13
 
 ### Fixed

@@ -24,6 +24,8 @@ When added ports are detected, Mod ports appears with the Random Port pool check
 
 Better Ports' Bottleneck Isle is discovered automatically. Added locations without a normal starting berth are checked for room for the selected boat, a dry landing and the supplies. If a check fails, the start carries on with the closest fit it found and writes a warning to the log.
 
+At Siren Song, your starting boat uses the cleats at the end of the dock. Other boats keep their normal positions. The game's recovery berth is unchanged.
+
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
 
 <details>
