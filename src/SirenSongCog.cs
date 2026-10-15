@@ -71,7 +71,7 @@ namespace NewBeginnings
                 foreach (var boat in Resources.FindObjectsOfTypeAll<PurchasableBoat>())
                 {
                     if (boat == null || boat == cog || !boat.gameObject.scene.IsValid() ||
-                        !boat.gameObject.scene.isLoaded || !boat.isPurchased()) continue;
+                        !boat.gameObject.scene.isLoaded || !IsPurchased(boat)) continue;
                     var body = boat.GetComponent<Rigidbody>();
                     if (body != null && TryReadHull(body, out var hull)) owned.Add(hull);
                     else Plugin.Instance?.DebugLog($"Siren Song Cog check after load: owned boat {boat.name} has no single hull capsule and is not counted for overlap.");
@@ -81,9 +81,9 @@ namespace NewBeginnings
                          AtCleat(rope.transform.position, recovery.mooringBack.position))))
                         atRecovery = true;
                 }
-                if (!ShouldVacateAfterLoad(cog.isPurchased(), cogHull, owned.ToArray(), atRecovery))
+                if (!ShouldVacateAfterLoad(IsPurchased(cog), cogHull, owned.ToArray(), atRecovery))
                 {
-                    Plugin.Instance?.DebugLog(cog.isPurchased()
+                    Plugin.Instance?.DebugLog(IsPurchased(cog)
                         ? "Siren Song Cog check after load: the Cog is owned, so it stays where it is."
                         : "Siren Song Cog check after load: no owned boat is in the Cog's berth, so it stays where it is.");
                     return;
@@ -92,7 +92,7 @@ namespace NewBeginnings
             }
             catch (Exception exception)
             {
-                Plugin.Instance?.Warn("Siren Song Cog check after load failed; the Cog was left where it was. " + exception.Message);
+                Plugin.Instance?.Warn("Siren Song Cog check after load failed; the Cog was left where it was. " + exception);
             }
         }
 
@@ -112,7 +112,7 @@ namespace NewBeginnings
             try
             {
                 if (cog == null) { Skip("the Cog for sale (scene boat 40) was not found."); return false; }
-                if (cog.isPurchased())
+                if (IsPurchased(cog))
                 {
                     Plugin.Instance?.Report($"Siren Song: the Cog is owned, so it stays where it is ({occasion}).");
                     return false;
@@ -244,6 +244,12 @@ namespace NewBeginnings
             .FirstOrDefault(boat => boat != null && boat.gameObject.scene.IsValid() && boat.gameObject.scene.isLoaded &&
                 boat.GetComponent<SaveableObject>() is SaveableObject saveable && saveable != null &&
                 saveable.sceneIndex == CogSceneIndex);
+
+        // Resource discovery includes inactive scene boats whose Awake has not
+        // populated PurchasableBoat's cache. Read the same native purchase flag
+        // directly so those objects cannot abort the rest of the loaded scan.
+        private static bool IsPurchased(PurchasableBoat boat) =>
+            boat.GetComponent<SaveableObject>() is SaveableObject saveable && saveable.extraSetting;
 
         // A hidden boat can have its root capsule disabled. Its authored
         // capsule still describes the space the hull occupies.

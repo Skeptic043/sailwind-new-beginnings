@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.13
+
+### Fixed
+
+- Fixed the Siren Song load check failing when an inactive boat had not initialized its purchase-state reference.
+
 ## Version 1.3.12
 
 ### Changed
