@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.3.15
+
+### Changed
+
+- Gold Rock City shipyard starts place the boat closer to the player's dock.
+
 ## Version 1.3.14
 
 ### Changed

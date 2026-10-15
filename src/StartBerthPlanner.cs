@@ -393,7 +393,10 @@ namespace NewBeginnings
             // Preserve the authored release channel and heading. Wide hulls
             // need their physical side, rather than their root, clear of the pier.
             var distance = Vector3.Dot(center - midpoint, outward);
-            center += outward * Mathf.Max(0f, hull.Radius + 2f - distance);
+            var offset = hull.Radius + 2f - distance;
+            // Gold Rock starts alongside the player's dock, including when
+            // the native release marker is farther into the yard channel.
+            center += outward * (destination.Index == 0 ? offset : Mathf.Max(0f, offset));
             var position = center - marker.rotation * hull.Center;
             position.y = height;
             // This point remains on the dock regardless of the chosen hull.
