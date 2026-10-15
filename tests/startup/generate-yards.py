@@ -17,6 +17,6 @@ s += block('src/FixedStart.cs', 'private static bool TryResolveRelocation(')
 s += 'internal static bool ResolveRelocationForCheck(ResolvedStart s,out string reason)=>TryResolveRelocation(s,out reason);}}'
 (here / 'NativeYards.generated.cs').write_text(s)
 s = (root / 'src/FixedStart.cs').read_text()
-assert 'var recovery = destination.UsesCustomBerth ? null : registered?.FirstOrDefault' in s
+assert 'var recovery = destination.NeedsPlannedBerth ? null : registered?.FirstOrDefault' in s
 assert 'Port = port, Recovery = relocation.Recovery, Destination = destination, Berth = relocation.Berth' in s
 assert 'Size = size, UseShipyardBerth = relocation.UseShipyardBerth' in s

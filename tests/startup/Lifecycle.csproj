@@ -5,13 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <NoWarn>CS0649;CS0414</NoWarn>
-    <ProductionCustomPath Condition="'$(ProductionCustomPath)' == ''">../../src/FixedStart.Custom.cs</ProductionCustomPath>
+    <ProductionPlacementPath Condition="'$(ProductionPlacementPath)' == ''">../../src/FixedStart.Placement.cs</ProductionPlacementPath>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Doubles.cs" />
     <Compile Include="NativeYards.generated.cs" />
     <Compile Include="Checks.cs" />
-    <Compile Include="$(ProductionCustomPath)" />
+    <Compile Include="$(ProductionPlacementPath)" />
     <Compile Include="../../src/ScrambledSeasIntegration.cs" />
     <Compile Include="../../src/StartupProfiler.cs" />
     <Compile Include="../../src/StarterOwnership.cs" />

@@ -708,7 +708,7 @@ namespace NewBeginnings
                 state = "island scenery identity unavailable";
                 return false;
             }
-            if (docksideDestination != null && docksideDestination.UsesCustomBerth)
+            if (docksideDestination != null && docksideDestination.NeedsPlannedBerth)
             {
                 if (!StartDestinations.SceneryReady(docksideDestination))
                 { sceneryLoadedFrame = -1; state = "waiting for selected island scenery"; return false; }
@@ -1505,7 +1505,7 @@ namespace NewBeginnings
         private void OnDestroy()
         {
             Config.SettingChanged -= OnConfigSettingChanged;
-            FixedStart.CancelCustomStart();
+            FixedStart.CancelStart();
             StartingValues.Cancel();
             StarterMooring.Cancel();
             StarterBoatRepair.Cancel();

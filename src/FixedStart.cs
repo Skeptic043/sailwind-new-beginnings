@@ -115,7 +115,7 @@ namespace NewBeginnings
                     // The menu lists every structurally usable pair. Check an
                     // ordinary port's recovery berth here, so a problem shows
                     // its reason before the start begins.
-                    if (!pair.Port.UsesCustomBerth && !pair.UseShipyardBerth &&
+                    if (!pair.Port.NeedsPlannedBerth && !pair.UseShipyardBerth &&
                         !TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out _, out reason))
                     {
                         activeUi.ShowBlockedStart(reason);
@@ -162,7 +162,7 @@ namespace NewBeginnings
                 pending = null;
                 pendingMenu = null;
                 pendingOptions = null;
-                CancelCustomStart();
+                CancelStart();
                 StartingValues.Cancel();
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
@@ -205,8 +205,8 @@ namespace NewBeginnings
                     pendingOptions = plugin.StartOptions.Copy();
                     if (!pendingOptions.TryValidate(out var optionsReason))
                         throw new InvalidOperationException(optionsReason);
-                    pendingCustomSnapshot = new CustomStartSnapshot(__instance, (int)previousRegion);
-                    customFlightGeneration = customGeneration;
+                    pendingSnapshot = new StartSnapshot(__instance, (int)previousRegion);
+                    flightGeneration = startGeneration;
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
                     MarkStartSelected();
                     StartupProfiler.Begin(Time.realtimeSinceStartup, Time.frameCount);
@@ -226,7 +226,7 @@ namespace NewBeginnings
                             plugin.Error("Native start region could not be restored after selection failed.", restoreException);
                         }
                     }
-                    CancelCustomStart();
+                    CancelStart();
                     if (buttonPair == null)
                     {
                         // As above, false could not stop this caller's start.
@@ -244,7 +244,7 @@ namespace NewBeginnings
             {
                 if (__exception != null)
                 {
-                    CancelCustomStart();
+                    CancelStart();
                     pending = null;
                     pendingMenu = null;
                     pendingOptions = null;
@@ -262,7 +262,7 @@ namespace NewBeginnings
                 // Scrambled Seas can abort an external scramble before it creates
                 // its player coroutine. A normal start consumes pending synchronously.
                 if (!ReferenceEquals(pendingMenu, __instance)) return;
-                CancelCustomStart();
+                CancelStart();
                 pending = null;
                 pendingMenu = null;
                 pendingOptions = null;
@@ -275,8 +275,8 @@ namespace NewBeginnings
         {
             private static bool Prefix(StartMenu __instance, ref IEnumerator __result)
             {
-                if (TryPreparePendingCustom(__instance, out var custom))
-                { __result = custom; return false; }
+                if (TryPreparePendingStart(__instance, out var sequence))
+                { __result = sequence; return false; }
                 return true;
             }
         }
@@ -434,7 +434,7 @@ namespace NewBeginnings
             var body = boat.Saveable.GetComponent<Rigidbody>();
             var ropes = boat.Saveable.GetComponent<BoatMooringRopes>();
             if (body == null || ropes == null) return false;
-            if (port != null && port.UsesCustomBerth)
+            if (port != null && port.NeedsPlannedBerth)
                 return StartDestinations.IsCurrent(port) && StartBerthPlanner.CanInspect(body, ropes, out _);
             return port?.Port != null && port.Port.gameObject.scene.isLoaded && port.Recovery != null &&
                 port.Recovery.parentPort == port.Port && port.Recovery.boatPos != null &&
@@ -458,7 +458,7 @@ namespace NewBeginnings
                 Plugin.Instance.Warn("The selected shipyard's release marker is unavailable; using this port's ordinary berth.");
                 selected.UseShipyardBerth = false;
             }
-            if (selected.Destination != null && selected.Destination.UsesCustomBerth)
+            if (selected.Destination != null && selected.Destination.NeedsPlannedBerth)
             {
                 if (!StartBerthPlanner.TryPlan(selected.Destination, selected.Body, selected.Ropes, selected.Size,
                     out var plan, out reason)) return false;
@@ -496,9 +496,9 @@ namespace NewBeginnings
             { reason = "The selected starting location is no longer loaded."; return false; }
             var portIndex = destination.Index;
             var yardStart = useShipyardBerth && ShipyardStart.Available(destination);
-            var custom = destination.UsesCustomBerth || yardStart;
+            var skipsNativeBerth = destination.NeedsPlannedBerth || yardStart;
             var ports = Port.ports;
-            if (!custom && (ports == null || portIndex < 0 || portIndex >= ports.Length || ports[portIndex] == null ||
+            if (!skipsNativeBerth && (ports == null || portIndex < 0 || portIndex >= ports.Length || ports[portIndex] == null ||
                 ports[portIndex].portIndex != portIndex))
             {
                 reason = $"Port {portIndex} is not registered.";
@@ -512,9 +512,9 @@ namespace NewBeginnings
                 return false;
             }
             var registered = RecoveryPortsField.GetValue(null) as List<RecoveryPort>;
-            var recovery = destination.UsesCustomBerth ? null : registered?.FirstOrDefault(item => item != null && item.parentPort == port &&
+            var recovery = destination.NeedsPlannedBerth ? null : registered?.FirstOrDefault(item => item != null && item.parentPort == port &&
                 item.boatPos != null && item.mooringFront != null && item.mooringBack != null);
-            if (!custom && recovery == null)
+            if (!skipsNativeBerth && recovery == null)
             {
                 reason = $"Port {portIndex} has no complete registered recovery berth.";
                 return false;
@@ -543,7 +543,7 @@ namespace NewBeginnings
             var body = saveable.GetComponent<Rigidbody>();
             var ropes = saveable.GetComponent<BoatMooringRopes>();
             NativeBerth.Plan nativeBerth = null;
-            if (!custom) NativeBerth.TryResolve(port, boat, saveable, body, ropes, out nativeBerth);
+            if (!skipsNativeBerth) NativeBerth.TryResolve(port, boat, saveable, body, ropes, out nativeBerth);
             var relocation = new ResolvedStart { Port = port, Recovery = recovery,
                 Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes, Size = size,
                 UseShipyardBerth = yardStart };

@@ -65,9 +65,9 @@ namespace NewBeginnings
             // iterator until the selected island has loaded and been prepared.
             // Pending selection is consumed once, so invoking the factory again
             // at handoff continues through its normal body without recursion.
-            if (FixedStart.TryPreparePendingCustom(__0, out var custom,
+            if (FixedStart.TryPreparePendingStart(__0, out var sequence,
                 target => playerStartFactory.Invoke(null, new object[] { __0, target, __2, __3 }) as IEnumerator))
-            { __result = custom; return false; }
+            { __result = sequence; return false; }
             return true;
         }
     }

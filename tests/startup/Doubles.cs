@@ -628,7 +628,7 @@ namespace NewBeginnings
         internal string HiddenKey, SiteIdentity, IdentityName;
         internal int Index;
         internal IslandHorizon Island;
-        internal bool Current = true, Scenery = true, UsesCustomBerth = true;
+        internal bool Current = true, Scenery = true, NeedsPlannedBerth = true;
     }
 
     internal enum BoatSize
@@ -976,8 +976,8 @@ namespace NewBeginnings
             if (TryGetStartBlock(out _))
                 return null;
             Fixture = s;
-            pendingCustomSnapshot = new CustomStartSnapshot(menu, menu.currentRegion);
-            customFlightGeneration = customGeneration;
+            pendingSnapshot = new StartSnapshot(menu, menu.currentRegion);
+            flightGeneration = startGeneration;
             menu.currentRegion = s.Region;
             menu.animsPlaying++;
             PlayerGold.currency[s.Region] = 999;
@@ -997,15 +997,15 @@ namespace NewBeginnings
             pendingOptions = new();
             if (scrambled)
                 return ScrambledBoundary.Invoke(menu, NativeStart, menu.Observer, menu.Controller);
-            TryPreparePendingCustom(menu, out var sequence);
+            TryPreparePendingStart(menu, out var sequence);
             return sequence;
         }
 
         // Each independent scenario models a fresh process. Never called between attempts.
         internal static void ResetStartGuardFixture()
         {
-            CancelCustomStart();
-            customFlightGeneration = -1;
+            CancelStart();
+            flightGeneration = -1;
             ResolveFails = false;
             ThrowLargeBoatBerth = false;
             BerthClearance.Throw = false;
@@ -1014,9 +1014,9 @@ namespace NewBeginnings
             pendingOptions = null;
         }
 
-        internal static bool PendingConsumedFixture() => pending == null && pendingMenu == null && pendingOptions == null && pendingCustomSnapshot == null;
+        internal static bool PendingConsumedFixture() => pending == null && pendingMenu == null && pendingOptions == null && pendingSnapshot == null;
         internal static void LoadPrefixFixture() => typeof(FixedStart).GetNestedType("CancelBeforeLoad", BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
-        internal static bool HidePrefixFixture(StartMenu menu) => (bool)typeof(FixedStart).GetNestedType("CustomMenuHide", BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { menu });
-        internal static void PendingSnapshotFixture(StartMenu menu) => pendingCustomSnapshot = new CustomStartSnapshot(menu, menu.currentRegion);
+        internal static bool HidePrefixFixture(StartMenu menu) => (bool)typeof(FixedStart).GetNestedType("StartMenuHide", BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { menu });
+        internal static void PendingSnapshotFixture(StartMenu menu) => pendingSnapshot = new StartSnapshot(menu, menu.currentRegion);
     }
 }

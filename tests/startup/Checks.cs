@@ -34,7 +34,7 @@ static class Checks
         internal Anchor Anchor;
         internal Fixture(bool scrambled = false, bool pirateOffshore = false, Action<Fixture> beforeBegin = null)
         {
-            FixedStart.CancelCustomStart();
+            FixedStart.CancelStart();
             Plugin.Instance = new();
             GameState.currentlyLoading = false;
             Time.frameCount = 0;
@@ -223,7 +223,7 @@ static class Checks
         internal void StayedOutOfMenu()
         {
             Check(Menu.currentRegion == 2 && PlayerGold.currency[2] == 999 && !Menu.chooseIslandUI.activeSelf && Menu.Reopened == 0, "placement problem returned the player to the menu");
-            Check(!FixedStart.CustomStartInFlight && !FixedStart.TryGetStartBlock(out _), "finished start retained a start block");
+            Check(!FixedStart.StartInFlight && !FixedStart.TryGetStartBlock(out _), "finished start retained a start block");
         }
 
         // A truly unavailable target cannot be claimed as a successful different start.
@@ -302,7 +302,7 @@ static class Checks
             }
         }
 
-        Console.WriteLine($"PASS {assertions} assertions against complete compiled production FixedStart.Custom.cs. Boundary doubles replace native factory, geometry, Unity objects and side systems. No Unity/physics/gameplay claim.");
+        Console.WriteLine($"PASS {assertions} assertions against complete compiled production FixedStart.Placement.cs. Boundary doubles replace native factory, geometry, Unity objects and side systems. No Unity/physics/gameplay claim.");
         return 0;
     }
 
@@ -355,7 +355,7 @@ static class Checks
         site.SiteIdentity = null;
         site.Recovery = null;
         Check(ShipyardStart.TryPlan(site, out plan) && Plugin.Instance.LastShoreSeed.Equals(documents.transform.position), "missing ordinary recovery vetoed yard fallback");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
     }
 
@@ -377,7 +377,7 @@ static class Checks
                 Index = row.Item1,
                 IdentityName = row.Item3,
                 Island = island,
-                UsesCustomBerth = false
+                NeedsPlannedBerth = false
             };
             Resources.Objects = Array.Empty<Component>();
             Check(ShipyardStart.HasNativeYard(site) && ShipyardStart.Available(site), "unloaded native scenery hid native shipyard capability");
@@ -415,10 +415,10 @@ static class Checks
     static void NativeYardMarkerFallsBack()
     {
         var f = new Fixture();
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         var s = f.Selected;
         s.UseShipyardBerth = true;
-        s.Destination.UsesCustomBerth = false;
+        s.Destination.NeedsPlannedBerth = false;
         s.Destination.Index = 9;
         s.Destination.IdentityName = "port E 9 (Dragon cliffs)";
         s.Port = On<Port>(At(1000));
@@ -453,7 +453,7 @@ static class Checks
     static void SetupShipyard(Fixture f)
     {
         var site = f.Selected.Destination;
-        site.UsesCustomBerth = false;
+        site.NeedsPlannedBerth = false;
         var root = At(1020, 6, 5);
         root.SetParent(site.Island.transform, true);
         var yard = On<Shipyard>(root);
@@ -489,7 +489,7 @@ static class Checks
         Check(f.Selected.Body.rotation.Equals(marker.rotation), "shipyard release rotation altered");
         Check(f.Menu.NativeTarget.position.Equals(f.Selected.Berth.ShorePosition) && f.Menu.NativeTarget.position.y == 6 && f.Menu.NativeTarget.position.x != target.x, "player was put aboard instead of on dry shore");
         Check(StarterCargo.Armed && PirateStationKeeper.Active != null && !StarterMooring.Armed && !f.Anchor.IsSet(), "shipyard start failed supply/hold setup or used mooring/anchor path");
-        Check(f.Selected.Destination.UsesCustomBerth == false, "shipyard start mutated catalog recovery identity");
+        Check(f.Selected.Destination.NeedsPlannedBerth == false, "shipyard start mutated catalog recovery identity");
     }
 
     static void ShipyardCancellationRestores()
@@ -497,7 +497,7 @@ static class Checks
         var f = new Fixture(beforeBegin: SetupShipyard);
         f.Until(() => f.Menu.Native != null);
         var held = PirateStationKeeper.Active;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
         f.Restored();
         Check(held.Removed, "cancelled shipyard start kept temporary hold");
@@ -507,7 +507,7 @@ static class Checks
     static void SetupOrdinaryPort(Fixture f)
     {
         var s = f.Selected;
-        s.Destination.UsesCustomBerth = false;
+        s.Destination.NeedsPlannedBerth = false;
         s.Berth = null;
         s.Port = On<Port>(At(1000));
         s.Recovery = new RecoveryPort
@@ -559,7 +559,7 @@ static class Checks
             if (cancel)
             {
                 f.Until(() => f.Menu.Native != null);
-                FixedStart.CancelCustomStart();
+                FixedStart.CancelStart();
                 f.Finish();
                 f.Restored();
             }
@@ -615,7 +615,7 @@ static class Checks
         Check(ShipyardStart.TryPlan(site, out var plan) && Plugin.Instance.Warnings.Any(w => w.Contains("Shipyard shore placement was not verified")) && plan.ShorePosition.Equals(counter.position), "shore probe warning vetoed shipyard start or changed documents reference");
         Resources.Objects = Array.Empty<Component>();
         Check(ShipyardStart.TryPlan(site, out plan) && plan.ShorePosition.Equals(yard.transform.position), "missing documents lost permissive yard-reference fallback");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
     }
 
@@ -652,7 +652,7 @@ static class Checks
         Check(ShipyardStart.Available(site) && ShipyardStart.TryPlan(site, out var other) && other.Mode == StartBerthMode.ShipyardHeld && other.Position.Equals(marker.position), "Fort exception affected a different provider's yard");
         site.SiteIdentity = null;
         Check(ShipyardStart.TryPlan(site, out var ordinary) && ordinary.Position.Equals(marker.position), "ordinary native yard release pose changed");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
     }
 
@@ -733,7 +733,7 @@ static class Checks
         site.IdentityName = "port M 15 Fort";
         site.SiteIdentity = "site:provider|custom";
         Check(ShipyardStart.PreferredYard(site, new[] { dock, normal }) == normal, "native Aestrin preference overrode registered API site's selected yard");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
     }
 
@@ -748,7 +748,7 @@ static class Checks
         Check(f.Anchor.Calls.Count(c => c == "set") == 1 && f.Anchor.Calls.Contains("release"), "Pirate attempted to secure anchor after releasing original");
         Check(!StarterMooring.Armed && PirateStationKeeper.Active != null && GameState.lastOwnedBoat == f.Selected.Saveable.transform, "offshore grant lost hold/ownership or armed dock ropes");
         var held = PirateStationKeeper.Active;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         Check(held.Removed && f.Selected.Boat.purchased, "postgrant cleanup lost owned boat or leaked hold");
     }
 
@@ -767,7 +767,7 @@ static class Checks
         f.Anchor.OnLoad(true, .4f);
         f.Until(() => f.Menu.Native != null);
         var held = PirateStationKeeper.Active;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
         f.Restored();
         Check(PirateStationKeeper.Active == null && held.Removed, "cancellation leaked offshore hold");
@@ -796,7 +796,7 @@ static class Checks
         var f = new Fixture(pirateOffshore: true);
         f.Until(() => f.Menu.Native != null);
         var held = PirateStationKeeper.Active;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
         f.Restored();
         Check(held.Removed && PirateStationKeeper.Active == null, "cancelled offshore hold survived");
@@ -816,13 +816,13 @@ static class Checks
     static void StartGuardThroughGrant()
     {
         var f = new Fixture();
-        Check(FixedStart.CustomStartInFlight && FixedStart.TryGetStartBlock(out _), "snapshot-to-first-tick gap allowed another start");
+        Check(FixedStart.StartInFlight && FixedStart.TryGetStartBlock(out _), "snapshot-to-first-tick gap allowed another start");
         f.Until(() => f.Menu.Native != null);
-        Check(!f.Selected.Boat.purchased && FixedStart.TryGetStartBlock(out _), "pregrant custom start was not blocked");
+        Check(!f.Selected.Boat.purchased && FixedStart.TryGetStartBlock(out _), "pregrant start was not blocked");
         f.Until(() => f.Selected.Boat.purchased);
-        Check(FixedStart.CustomStartInFlight && FixedStart.TryGetStartBlock(out _), "native ownership grant released the guard before iterator completion");
+        Check(FixedStart.StartInFlight && FixedStart.TryGetStartBlock(out _), "native ownership grant released the guard before iterator completion");
         f.Finish();
-        Check(!FixedStart.CustomStartInFlight && !FixedStart.TryGetStartBlock(out _), "completed custom start retained the guard");
+        Check(!FixedStart.StartInFlight && !FixedStart.TryGetStartBlock(out _), "completed start retained the guard");
     }
 
     static void NoRestartLatchAfterFailure()
@@ -834,22 +834,22 @@ static class Checks
             Plugin.Instance.FailTarget = true;
             f.Finish();
             Check(!FixedStart.TryGetStartBlock(out var reason), "failed start left a start block: " + reason);
-            FixedStart.CancelCustomStart();
+            FixedStart.CancelStart();
             Check(!FixedStart.TryGetStartBlock(out _), "cancellation after a failed start left a start block");
             Check(FixedStart.BeginFixture(f.Menu, f.Selected, scrambled) != null, "a later start was refused after a failed start");
-            FixedStart.CancelCustomStart();
+            FixedStart.CancelStart();
         }
     }
 
     static void MenuHideOwnership()
     {
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         var ordinary = On<StartMenu>(At(0));
         Check(FixedStart.HidePrefixFixture(ordinary), "ordinary menu hide intercepted");
         var f = new Fixture();
-        Check(!f.Menu.chooseIslandUI.activeSelf && !f.Menu.NativeHidePending && f.Menu.animsPlaying == 1, "custom menu scheduled a competing hide fade");
+        Check(!f.Menu.chooseIslandUI.activeSelf && !f.Menu.NativeHidePending && f.Menu.animsPlaying == 1, "start menu hide scheduled a competing hide fade");
         f.Tick();
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
         f.Restored();
         f.Menu.FinishNativeHide();
@@ -859,7 +859,7 @@ static class Checks
         PlayerGold.currency[2] = 999;
         f.Menu.animsPlaying = 1;
         Check(!FixedStart.HidePrefixFixture(f.Menu), "owned pending snapshot did not hide menu");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Restored();
     }
 
@@ -869,7 +869,7 @@ static class Checks
         f.Until(() => f.Menu.Native != null);
         Check(!f.Selected.Boat.purchased, "factory construction granted boat");
         Check(f.AnchorBody.position.Equals(new Vector3(1003, 1, 0)), "moored anchor did not follow hull displacement");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Restored();
         var foreign = At(9000);
         GameState.lastOwnedBoat = foreign;
@@ -927,7 +927,7 @@ static class Checks
         f = new Fixture();
         f.Until(() => f.Menu.Native != null);
         f.Selected.Boat.purchaseUI = null;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Selected.Boat.LoadAsPurchased();
         Check(!f.Selected.Boat.purchased, "cancelled start retained grant authority");
         f.Finish();
@@ -938,7 +938,7 @@ static class Checks
         f.Selected.Boat.LoadAsPurchased();
         Check(!f.Selected.Boat.purchased, "saved-game load received a new-game grant");
         GameState.currentlyLoading = false;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
         f = new Fixture();
         f.Until(() => f.Menu.Native != null);
@@ -946,7 +946,7 @@ static class Checks
         f.Menu.startingBoats = f.Starters;
         f.Selected.Boat.LoadAsPurchased();
         Check(!f.Selected.Boat.purchased, "superseded selection retained grant authority");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
     }
 
@@ -1034,10 +1034,10 @@ static class Checks
         Check(f.Selected.Boat.purchased && f.Menu.Native.Disposed, "native grant did not complete");
         Check(GameState.lastOwnedBoat == f.Selected.Saveable.transform && GameState.lastVisitedPort == null, "Pirate identity/ownership wrong");
         Check(!f.Selected.Body.isKinematic, "native handoff left a frozen hull");
-        Check(ReferenceEquals(Recovery.ports, registry) && Recovery.ports.Count == 1, "custom start changed native recovery registry");
+        Check(ReferenceEquals(Recovery.ports, registry) && Recovery.ports.Count == 1, "selected start changed native recovery registry");
         Check(Plugin.Instance.Warnings.Count == 0 && Plugin.Instance.Errors.Count == 0, "clean start logged a problem");
         var position = f.Selected.Body.position;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(position) && f.Menu.Reopened == 0, "post-grant cancel rolled back owned boat");
     }
 
@@ -1046,7 +1046,7 @@ static class Checks
         var f = new Fixture();
         f.Until(() => f.Menu.Native != null);
         f.Selected.Ropes.ThrowUnmoor = true;
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Restored(false);
         f.Finish();
         Check(Plugin.Instance.Errors.Count > 0 && f.Menu.Native.Disposed, "rollback error did not surface/cleanup");
@@ -1059,7 +1059,7 @@ static class Checks
         for (int n = 0; n < 10; n++)
             f.Tick();
         Check(f.Menu.Native == null && !f.Selected.Boat.purchased && f.Selected.Body.position.x == 10, "scenery wait mutated/granted boat");
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Restored();
         f.Finish();
     }
@@ -1077,7 +1077,7 @@ static class Checks
     {
         ScrambledBoundary.Reset();
         var f = new Fixture(scrambled: true);
-        Check(FixedStart.PendingConsumedFixture() && ScrambledBoundary.FactoryCalls == 0, "custom Scrambled dispatch did not transfer pending exactly once");
+        Check(FixedStart.PendingConsumedFixture() && ScrambledBoundary.FactoryCalls == 0, "Scrambled start dispatch did not transfer pending exactly once");
         f.Selected.Destination.Island.transform.position = new(4000, 0, 0);
         f.Selected.Destination.Scenery = false;
         for (int n = 0; n < 10; n++)
@@ -1106,10 +1106,10 @@ static class Checks
         var f = new Fixture(scrambled: true);
         f.Selected.Destination.Scenery = false;
         f.Tick();
-        FixedStart.CancelCustomStart();
+        FixedStart.CancelStart();
         f.Finish();
         Check(ScrambledBoundary.FactoryCalls == 0, "cancelled preparation resumed Scrambled purchase");
-        Check(!FixedStart.CustomStartInFlight && !FixedStart.TryGetStartBlock(out _), "cancelled Scrambled start left a start block");
+        Check(!FixedStart.StartInFlight && !FixedStart.TryGetStartBlock(out _), "cancelled Scrambled start left a start block");
         f.Restored();
     }
 }

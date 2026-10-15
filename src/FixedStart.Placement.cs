@@ -8,16 +8,16 @@ namespace NewBeginnings
 {
     internal static partial class FixedStart
     {
-        private static CustomStartSnapshot pendingCustomSnapshot;
-        private static Action customCleanup;
-        private static int customGeneration;
-        private static int customFlightGeneration = -1;
-        internal static bool CustomStartInFlight => customFlightGeneration == customGeneration;
+        private static StartSnapshot pendingSnapshot;
+        private static Action startCleanup;
+        private static int startGeneration;
+        private static int flightGeneration = -1;
+        internal static bool StartInFlight => flightGeneration == startGeneration;
         private static float startSelectedAt = -1f;
 
         internal static bool TryGetStartBlock(out string reason)
         {
-            reason = CustomStartInFlight ? "A starting location is already being prepared." : null;
+            reason = StartInFlight ? "A starting location is already being prepared." : null;
             return reason != null;
         }
 
@@ -41,7 +41,7 @@ namespace NewBeginnings
             startSelectedAt = -1f;
         }
 
-        private static void CleanupCustom(Action cleanup)
+        private static void CleanupStart(Action cleanup)
         {
             try { cleanup(); }
             catch (Exception exception) { Plugin.Instance?.Error("A disappeared object interrupted starting-location cleanup.", exception); }
@@ -73,22 +73,22 @@ namespace NewBeginnings
             }
         }
 
-        internal static void CancelCustomStart()
+        internal static void CancelStart()
         {
             StarterOwnership.Cancel();
             PirateStationKeeper.RemoveActive();
-            ++customGeneration;
-            var cleanup = customCleanup; customCleanup = null;
-            var snapshot = pendingCustomSnapshot;
-            pendingCustomSnapshot = null;
+            ++startGeneration;
+            var cleanup = startCleanup; startCleanup = null;
+            var snapshot = pendingSnapshot;
+            pendingSnapshot = null;
             cleanup?.Invoke();
-            CleanupCustom(() => snapshot?.Restore("Starting-location preparation was cancelled."));
+            CleanupStart(() => snapshot?.Restore("Starting-location preparation was cancelled."));
         }
 
         [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
         private static class CancelBeforeLoad
         {
-            private static void Prefix() => CancelCustomStart();
+            private static void Prefix() => CancelStart();
         }
 
         // Native FadeIslandMenu owns a separate Juicebox tween and a delayed
@@ -96,17 +96,17 @@ namespace NewBeginnings
         // Hide this one menu immediately so that restore has no foreign
         // animation to race.
         [HarmonyPatch(typeof(StartMenu), "DisableIslandMenu")]
-        private static class CustomMenuHide
+        private static class StartMenuHide
         {
             private static bool Prefix(StartMenu __instance)
             {
-                return pendingCustomSnapshot == null || !pendingCustomSnapshot.Hide(__instance);
+                return pendingSnapshot == null || !pendingSnapshot.Hide(__instance);
             }
         }
 
         // Captured before StartNewGame's currency/region/menu writes. There are
         // no ownership writes in that method after its coroutine factory call.
-        private sealed class CustomStartSnapshot
+        private sealed class StartSnapshot
         {
             private readonly StartMenu menu;
             private readonly Transform observer, controller, observerParent, controllerParent;
@@ -128,7 +128,7 @@ namespace NewBeginnings
             private readonly Transform pointer;
             private bool restored;
 
-            internal CustomStartSnapshot(StartMenu menu, int originalRegion)
+            internal StartSnapshot(StartMenu menu, int originalRegion)
             {
                 this.menu = menu;
                 if (!TryGetNativeStartActors(menu, out observer, out var actor))
@@ -211,14 +211,14 @@ namespace NewBeginnings
 
         // Keep the original factory signature, but never replace an accepted
         // selection with the regional starter when its setup cannot complete.
-        internal static bool TryPreparePendingCustom(StartMenu menu, out IEnumerator sequence,
+        internal static bool TryPreparePendingStart(StartMenu menu, out IEnumerator sequence,
             Func<Transform, IEnumerator> continuation = null)
         {
             sequence = null;
             if (pending == null || !ReferenceEquals(menu, pendingMenu)) return false;
-            var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
-            pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
-            sequence = PrepareCustomStart(menu, pair, options, snapshot, continuation);
+            var pair = pending; var options = pendingOptions; var snapshot = pendingSnapshot;
+            pending = null; pendingMenu = null; pendingOptions = null; pendingSnapshot = null;
+            sequence = PrepareStart(menu, pair, options, snapshot, continuation);
             return true;
         }
 
@@ -228,14 +228,14 @@ namespace NewBeginnings
         // reported as an incomplete start, never a different starter. Only a real
         // cancellation (a saved-game load, another new game or plugin
         // teardown) unwinds the selected start.
-        private static IEnumerator PrepareCustomStart(StartMenu menu, StartPair pair,
-            StartingOptionsSettings options, CustomStartSnapshot snapshot,
+        private static IEnumerator PrepareStart(StartMenu menu, StartPair pair,
+            StartingOptionsSettings options, StartSnapshot snapshot,
             Func<Transform, IEnumerator> continuation)
         {
-            var generation = customGeneration;
-            customFlightGeneration = generation;
+            var generation = startGeneration;
+            flightGeneration = generation;
             const string cancelled = "Starting-location preparation was cancelled.";
-            CustomPlacement placement = null;
+            StartPlacement placement = null;
             IEnumerator native = null;
             var committed = false;
             var cleaned = false;
@@ -249,13 +249,13 @@ namespace NewBeginnings
                 finally
                 {
                     StartupProfiler.Cancel();
-                    DisarmCustomStart();
-                    CleanupCustom(() => snapshot?.Restore(cancelled));
+                    DisarmStart();
+                    CleanupStart(() => snapshot?.Restore(cancelled));
                     ClearStartTiming();
                     Plugin.Instance?.Warn(cancelled);
                 }
             };
-            customCleanup = cleanup;
+            startCleanup = cleanup;
             try
             {
                 Transform target = null;
@@ -269,7 +269,7 @@ namespace NewBeginnings
                     snapshot.Approach(pair.Port);
                     var deadline = Time.realtimeSinceStartup + 30f;
                     var readyFrame = -1;
-                    while (generation == customGeneration && menu != null && !GameState.currentlyLoading &&
+                    while (generation == startGeneration && menu != null && !GameState.currentlyLoading &&
                         StartDestinations.IsCurrent(pair.Port) && Time.realtimeSinceStartup < deadline)
                     {
                         if (StartDestinations.SceneryReady(pair.Port))
@@ -280,13 +280,13 @@ namespace NewBeginnings
                         else readyFrame = -1;
                         yield return null;
                     }
-                    if (generation != customGeneration || menu == null || GameState.currentlyLoading) yield break;
+                    if (generation != startGeneration || menu == null || GameState.currentlyLoading) yield break;
                     if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
                         Plugin.Instance?.Warn("The selected island scenery did not report ready" + SinceSelection() +
                             ". Preparing the start anyway.");
                     else Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
                     var profiled = StartupProfiler.Enter();
-                    try { placement = TryPrepareCustom(menu, pair, options); }
+                    try { placement = TryPrepareStart(menu, pair, options); }
                     finally { StartupProfiler.Exit(profiled); }
                     if (placement == null) yield break;
                     if (placement != null)
@@ -322,7 +322,7 @@ namespace NewBeginnings
                 var warnedBoat = false;
                 // Keep cancellation available until the native iterator actually
                 // grants the boat, rather than only until its IEnumerator exists.
-                while (generation == customGeneration && menu != null && !GameState.currentlyLoading)
+                while (generation == startGeneration && menu != null && !GameState.currentlyLoading)
                 {
                     if (placement != null && !warnedOffshore && placement.Selected.Berth.OffshoreHeld &&
                         (!StartDestinations.IsCurrent(placement.Selected.Destination) || placement.Selected.Body == null ||
@@ -341,29 +341,29 @@ namespace NewBeginnings
                     if (!native.MoveNext()) { finished = true; break; }
                     if (!committed && Granted(placement))
                     {
-                        committed = true; customCleanup = null;
+                        committed = true; startCleanup = null;
                         Plugin.Instance?.Report("Starting boat granted" + SinceSelection() + ".");
                     }
                     yield return native.Current;
                 }
-                if (Granted(placement)) { committed = true; customCleanup = null; }
+                if (Granted(placement)) { committed = true; startCleanup = null; }
                 else if (finished)
                     Plugin.Instance?.Error("The native start sequence ended without granting the selected boat. This start is incomplete.", null);
             }
             finally
             {
                 if (Granted(placement)) committed = true;
-                if (ReferenceEquals(customCleanup, cleanup)) customCleanup = null;
+                if (ReferenceEquals(startCleanup, cleanup)) startCleanup = null;
                 try { (native as IDisposable)?.Dispose(); }
                 catch (Exception exception) { Plugin.Instance?.Error("Native start iterator cleanup failed.", exception); }
                 try
                 {
-                    if (generation != customGeneration || menu == null || GameState.currentlyLoading) cleanup();
+                    if (generation != startGeneration || menu == null || GameState.currentlyLoading) cleanup();
                     else if (!finished && !committed)
                     {
                         // An exception or an external stop ended the sequence.
                         // Leave the start as placed, without temporary holds.
-                        CleanupCustom(() => placement?.ReleaseHull());
+                        CleanupStart(() => placement?.ReleaseHull());
                         Plugin.Instance?.Warn("The start sequence stopped before it finished" + SinceSelection() +
                             ". The selected start was left as placed.");
                     }
@@ -371,34 +371,34 @@ namespace NewBeginnings
                 finally
                 {
                     StarterOwnership.Cancel(placement?.Selected);
-                    if (customFlightGeneration == generation) customFlightGeneration = -1;
+                    if (flightGeneration == generation) flightGeneration = -1;
                 }
             }
         }
 
-        private static bool Granted(CustomPlacement placement)
+        private static bool Granted(StartPlacement placement)
         {
             if (placement != null) return placement.Selected.Boat != null && placement.Selected.Boat.isPurchased();
             return false;
         }
 
-        private static void DisarmCustomStart()
+        private static void DisarmStart()
         {
-            CleanupCustom(StarterMooring.Cancel);
-            CleanupCustom(StarterBoatRepair.Cancel);
-            CleanupCustom(() => Plugin.Instance?.CancelPlayerStartTracking());
-            CleanupCustom(() => Plugin.Instance?.ClearDocksideSurface());
-            CleanupCustom(StarterCargo.Disarm);
-            CleanupCustom(StartingValues.Cancel);
+            CleanupStart(StarterMooring.Cancel);
+            CleanupStart(StarterBoatRepair.Cancel);
+            CleanupStart(() => Plugin.Instance?.CancelPlayerStartTracking());
+            CleanupStart(() => Plugin.Instance?.ClearDocksideSurface());
+            CleanupStart(StarterCargo.Disarm);
+            CleanupStart(StartingValues.Cancel);
             StarterOwnership.Cancel();
-            CleanupCustom(LeopardStarterRig.Cancel);
+            CleanupStart(LeopardStarterRig.Cancel);
         }
 
         // Returns null only when no placement could be produced. A problem that
         // still leaves a usable placement is logged and placement continues.
-        private static CustomPlacement TryPrepareCustom(StartMenu menu, StartPair pair, StartingOptionsSettings options)
+        private static StartPlacement TryPrepareStart(StartMenu menu, StartPair pair, StartingOptionsSettings options)
         {
-            CustomPlacement placement = null;
+            StartPlacement placement = null;
             try
             {
                 if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason, pair.UseShipyardBerth))
@@ -418,20 +418,20 @@ namespace NewBeginnings
                 if (selected.Ropes == null || selected.Ropes.anchor == null || selected.Ropes.GetAnchorController() == null)
                     return NoPlacement("The selected boat lacks native shipwreck-recovery components.");
                 selected.Options = options; selected.Size = pair.Boat.Size; selected.Menu = menu;
-                placement = new CustomPlacement(selected, menu);
+                placement = new StartPlacement(selected, menu);
                 placement.Move();
                 return placement;
             }
             catch (Exception exception)
             {
                 var failedPlacement = placement;
-                CleanupCustom(() => failedPlacement?.Rollback());
+                CleanupStart(() => failedPlacement?.Rollback());
                 Plugin.Instance?.Error("The selected boat could not be placed. This start is incomplete and no regional start was substituted.", exception);
                 return null;
             }
         }
 
-        private static CustomPlacement NoPlacement(string reason)
+        private static StartPlacement NoPlacement(string reason)
         {
             Plugin.Instance?.Error(reason + " This start is incomplete and no regional start was substituted.", null);
             return null;
@@ -473,7 +473,7 @@ namespace NewBeginnings
             return ready;
         }
 
-        private sealed class CustomPlacement
+        private sealed class StartPlacement
         {
             internal readonly ResolvedStart Selected;
             private readonly StartMenu menu;
@@ -497,7 +497,7 @@ namespace NewBeginnings
             private PickupableBoatMooringRope frontRope, backRope;
             private bool moved, rolledBack, changedNative;
 
-            internal CustomPlacement(ResolvedStart selected, StartMenu menu)
+            internal StartPlacement(ResolvedStart selected, StartMenu menu)
             {
                 Selected = selected; this.menu = menu;
                 var body = selected.Body; parent = body.transform.parent;

@@ -60,13 +60,13 @@ for marker in [
 candidate_members = candidate_members.replace('internal static bool TryNativeShipyard(', 'private static bool TryNativeShipyard(').replace('internal static bool TryFortShipyardShore(', 'private static bool TryFortShipyardShore(').replace('internal static void PrepareShipyardMoorings(', 'private static void PrepareShipyardMoorings(')
 catalog = (root / 'src/SelectionCatalog.cs').read_text(encoding='utf-8')
 route_members = ''
-for marker in ['internal bool IsSirenSong =>', 'internal bool UsesCustomBerth =>', 'internal int Index =>']:
+for marker in ['internal bool IsSirenSong =>', 'internal bool NeedsPlannedBerth =>', 'internal int Index =>']:
     start = catalog.index(marker)
     route_members += catalog[start:catalog.index(';', start) + 1] + '\n'
 candidate_members += '\nclass SirenRoute { internal RoutePort Port; internal RouteIsland Island; internal object Recovery; internal string SiteIdentity; ' + route_members + '}\n'
 assert 'if (destination.IsSirenSong)' in core and core.index('return TrySirenSong(') < core.index('var cleats ='), 'Siren override fell through generic survey'
 assert not (root / 'src/SirenSongCog.cs').exists(), 'Obsolete Cog load hook still compiled'
 assert 'SirenSongCog' not in fixed, 'New-start Cog mutation still called'
-assert 'if (!custom) NativeBerth.TryResolve(' in fixed, 'Native preservation bypass lost custom routing'
+assert 'if (!skipsNativeBerth) NativeBerth.TryResolve(' in fixed, 'Native preservation bypass lost planned-berth routing'
 print('PASS exact Siren override routing and removed Cog startup/load path checks (structural only)')
 (here / 'PirateCandidates.generated.cs').write_text((here / 'PirateCandidates.template.cs').read_text().replace('// CANDIDATE_PRODUCTION', candidate_members), encoding='utf-8')

@@ -726,11 +726,11 @@ static class PirateCandidateChecks
             },
             Recovery = new object ()
         };
-        Check(route.UsesCustomBerth && route.IsSirenSong, "native Siren recovery bypassed custom route");
+        Check(route.NeedsPlannedBerth && route.IsSirenSong, "native Siren recovery bypassed planned-berth route");
         // Boat identity is deliberately absent from the classification: selected Cog
         // and every other starter use the same override, including native-berth candidates.
         route.SiteIdentity = "site:author|siren";
-        Check(!route.IsSirenSong && route.UsesCustomBerth, "native Siren override hijacked author-registered berth");
+        Check(!route.IsSirenSong && route.NeedsPlannedBerth, "native Siren override hijacked author-registered berth");
         route.SiteIdentity = null;
         foreach (var changed in new[] { 0, 1, 2, 3 })
         {
@@ -746,7 +746,7 @@ static class PirateCandidateChecks
                 islandIndex = changed == 2 ? 20 : 21,
                 name = changed == 3 ? "Other Siren Song" : "island 21 M (Siren Song)"
             };
-            Check(!route.IsSirenSong && !route.UsesCustomBerth, "index/name alias triggered Siren override");
+            Check(!route.IsSirenSong && !route.NeedsPlannedBerth, "index/name alias triggered Siren override");
             route.Port = oldPort;
             route.Island = oldIsland;
         }
