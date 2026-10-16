@@ -6,7 +6,7 @@ New Beginnings adds port and boat selection or randomization to Sailwind's new-g
 
 ### Mod managers
 
-Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch Sailwind through your manager. Dependencies are installed automatically.
+Install New Beginnings through [Sailwind Mod Synchronizer](https://github.com/foxyv/SailwindModSynchronizer/releases/latest), r2modman or Thunderstore Mod Manager, then launch Sailwind through your manager. Dependencies are installed automatically.
 
 ### Manual installation
 
