@@ -36,6 +36,7 @@ def replace_once(text, old, new):
 
 
 catalog = read('src/SelectionCatalog.cs')
+assert 'DisplayName = BoatNames.DisplayName(boat, metadata.DisplayName)' in catalog
 known = read('src/KnownSites.cs')
 plugin = read('src/Plugin.cs')
 menu = read('src/MenuUi.cs')
@@ -78,7 +79,11 @@ internal static class KnownSites {
 ''' + statement(known, 'internal const int GoldRockPort') + '\n' + statement(known, 'internal static bool IsChronos(') + '\n' + \
     block(known, 'internal static string NativeYardName(') + '''
 }
-internal sealed class PortChoice { internal string IdentityName, Key, DisplayName, SiteIdentity; internal HiddenSite Hidden; internal int Index; internal PortPool? Pool; internal bool IsModded, HasShipyard; }
+internal sealed class PortChoice {
+internal string IdentityName, Key, DisplayName, SiteIdentity, LegacySiteKey; internal HiddenSite Hidden; internal int Index; internal PortPool? Pool; internal bool IsModded, HasShipyard, HasAuthoredYardScope;
+internal bool MatchesKey(string saved) => !string.IsNullOrEmpty(saved) && (string.Equals(Key, saved, StringComparison.Ordinal) || string.Equals(LegacySiteKey, saved, StringComparison.Ordinal));
+internal bool MatchesIdentity(string saved) => !string.IsNullOrEmpty(saved) && (string.Equals(IdentityName, saved, StringComparison.OrdinalIgnoreCase) || string.Equals(LegacySiteKey, saved, StringComparison.OrdinalIgnoreCase));
+}
 internal sealed class BoatChoice { internal string IdentityName, DisplayName, OriginGroup; internal int Index; internal BoatSize? Size; }
 internal sealed class StartPair { internal PortChoice Port; internal BoatChoice Boat; internal bool UseShipyardBerth; }
 // Native berth discovery is tested by the placement harness, not this selection boundary.
@@ -125,7 +130,7 @@ generated += catalog[catalog.index('private static bool IsShipyardPort'):catalog
 generated += block(catalog, 'internal bool TryChoose') + '\n} }'
 yard = read('src/ShipyardStart.cs')
 generated = generated.replace('internal static class ShipyardStart {', 'internal static class ShipyardStart {' + statement(yard, 'internal static bool HasNativeYard('))
-assert 'choice.HasShipyard = choice.Yard != null || ShipyardStart.HasNativeYard(choice);' in read('src/StartDestinations.cs')
+assert 'choice.HasShipyard = choice.Yard != null || !choice.HasAuthoredYardScope && ShipyardStart.HasNativeYard(choice);' in read('src/StartDestinations.cs')
 (here / 'Production.generated.cs').write_text(generated, encoding='utf-8')
 
 # Pure selection and menu behavior is extracted unchanged. Unity objects and

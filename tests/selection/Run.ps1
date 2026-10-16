@@ -15,3 +15,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Menu refresh extraction failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Selection checks failed to build.' }
 & (Join-Path $PSScriptRoot 'bin/Release/net471/Reload.exe')
 if ($LASTEXITCODE -ne 0) { throw 'Selection checks failed.' }
+& $PythonPath (Join-Path $PSScriptRoot 'generate-port-overlay.py')
+if ($LASTEXITCODE -ne 0) { throw 'Port overlay production extraction failed.' }
+& dotnet build (Join-Path $PSScriptRoot 'PortOverlay.csproj') -c Release -v q -nologo
+if ($LASTEXITCODE -ne 0) { throw 'Port overlay checks failed to build.' }
+& (Join-Path $PSScriptRoot 'bin/Release/net10.0/PortOverlay.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Port overlay checks failed.' }

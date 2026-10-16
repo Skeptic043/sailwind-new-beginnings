@@ -19,7 +19,9 @@
     <Compile Include="DestinationChecks.cs" />
     <Compile Include="SpoilerDrawerChecks.cs" />
     <Compile Include="SecretIslandChecks.cs" />
+    <Compile Include="BoatNamesChecks.cs" />
     <Compile Include="LifetimeDoubles.cs" Link="LifetimeBoundary.cs" />
+    <Compile Include="../../src/BoatNames.cs" />
     <Compile Include="../../src/SelectionConfig.cs" />
     <Compile Include="../../src/SpoilerSettingsMenu.cs" />
     <Compile Include="../../src/ConfigurationManagerAttributes.cs" />

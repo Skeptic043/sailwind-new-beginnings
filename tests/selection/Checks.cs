@@ -75,6 +75,7 @@ internal static class Checks
                 StartingOptionsPanelReload,
                 DestinationAndModPoolReload,
                 DestinationSelection,
+                RegistrationAliasContinuity,
                 ShipyardBerthSetting,
                 NativeYardPoolEligibility,
                 ChronosPoolReload,
@@ -94,6 +95,8 @@ internal static class Checks
                 AvailabilityChecks.Run(Check);
             if (only == null)
                 Lifetime.DestinationChecks.Run(Check);
+            if (only == null)
+                BoatNamesChecks.Run(Check);
             if (checks == 0)
                 throw new Exception("FAIL no checks ran");
             Console.WriteLine("PASS " + checks + " config-reload checks with BepInEx 5.4.23.5 ConfigFile. " + "Menu panels are doubles around reload members extracted from production. No Unity, " + "Configuration Manager UI or in-game acceptance.");
@@ -123,19 +126,20 @@ internal static class Checks
         var p = Plugin.Start(path);
         Check(!p.Settings.EnableChronos && p.Settings.PortPools.SetEquals(new[] { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin }), "Chronos unexpectedly changed default regions");
         Cm(p, "Random Port Pools", "Chronos", true);
-        Check(p.Settings.EnableChronos && !p.Settings.PortPools.Contains(PortPool.Chronos), "live Chronos config change not applied");
+        Check(p.Settings.EnableChronos && !p.Settings.PortPools.Contains(PortPool.SmallIslands), "live Chronos config change altered geographic pools");
         foreach (var key in new[] { "AlAnkh", "EmeraldArchipelago", "Aestrin", "FireFishLagoon", "SmallIslands" })
             Cm(p, "Random Port Pools", key, false);
         p.MenuSave();
         p = Plugin.Start(path);
-        Check(p.Settings.PortPools.Count == 0 && p.Settings.EnableChronos, "Chronos-only pool lost on restart");
+        Check(p.Settings.PortPools.SetEquals(new[] { PortPool.AlAnkh }) && p.Settings.EnableChronos,
+            "Chronos-only configuration did not restore a geographic pool");
         var catalog = new SelectionCatalog();
         var ordinary = new PortChoice
         {
             Index = 21,
             Key = "port:chronos",
             IdentityName = "port 21 M chronos",
-            Pool = PortPool.Chronos
+            Pool = PortPool.SmallIslands
         };
         var fort = new PortChoice
         {
@@ -148,9 +152,13 @@ internal static class Checks
         catalog.Ports.AddRange(new[] { ordinary, fort });
         catalog.Boats.Add(new BoatChoice { Index = p.Settings.BoatSceneIndex, Size = BoatSize.Small });
         p.Settings.RandomPort = true;
-        Check(catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out var selected, out _) && selected.Port == ordinary, "Chronos pool selected Fort with mod ports disabled");
-        p.Settings.IncludeModPorts = true;
         p.Settings.PortPools.Clear();
+        p.Settings.PortPools.Add(PortPool.SmallIslands);
+        Check(catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out var selected, out _) && selected.Port == ordinary, "Chronos pool selected Fort with mod ports disabled");
+        p.Settings.PortPools.Clear();
+        Check(!catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out selected, out _),
+            "Chronos bypassed the Small Islands requirement");
+        p.Settings.IncludeModPorts = true;
         p.Settings.EnableChronos = false;
         Check(catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out selected, out _) && selected.Port == fort, "mod-only pool admitted ordinary Chronos");
         p.Settings.RandomPort = false;
@@ -420,7 +428,8 @@ internal static class Checks
         Check(p.Settings.DestinationKey == "provider:absent:fort" && p.Settings.PortIndex == 21, "restart changed missing provider selection");
         Check(p.Settings.EnablePirateIsland && p.Settings.EnableSaffronIsland, "spoiler gates did not persist");
         Cm(p, "Random Port Pools", "IncludeModPorts", false);
-        Check(p.Settings.PortPools.Count == 0 && p.Settings.AnySecretIslandsEnabled, "secret-only config restored geography");
+        Check(p.Settings.PortPools.SetEquals(new[] { PortPool.AlAnkh }) && p.Settings.AnySecretIslandsEnabled,
+            "secret-only config did not restore geography");
         var ordinary = Port("Chronos");
         var site = Port("site:provider:fort");
         p.Exclusions.SetPortExcluded(site, true);
@@ -536,7 +545,11 @@ internal static class Checks
             geographicAndSecret.Add(chosen.Port);
         }
 
-        Check(geographicAndSecret.SetEquals(new[] { neverdin, saffron }), "secret opt-in did not independently join geographic pool");
+        Check(geographicAndSecret.SetEquals(new[] { neverdin }), "Saffron bypassed Small Islands after opt-in");
+        s.PortPools.Clear();
+        s.PortPools.Add(PortPool.SmallIslands);
+        Check(c.TryChoose(s, e, new Random(1), out chosen, out reason) && chosen.Port == saffron,
+            "Saffron was not eligible when Small Islands was checked");
         s.EnableSaffronIsland = false;
         s.IncludeModPorts = true;
         s.PortPools.Clear();
@@ -547,6 +560,65 @@ internal static class Checks
         FixedStart.Viable = (port, boat) => true;
         c.Ports.RemoveAll(port => port.IsModded);
         Check(!c.TryChoose(s, e, new Random(1), out chosen, out reason) && s.PortPools.Count == 0, "missing mod pool silently restored geography");
+    }
+
+    private static void RegistrationAliasContinuity()
+    {
+        var port = new PortChoice
+        {
+            Index = 21,
+            Key = "port:port 21 M chronos",
+            IdentityName = "port 21 M chronos",
+            LegacySiteKey = "site:author|chronos",
+            DisplayName = "Author's Chronos"
+        };
+        var catalog = new SelectionCatalog();
+        catalog.Ports.Add(port);
+        catalog.Boats.Add(new BoatChoice { Index = 10, IdentityName = "boat", Size = BoatSize.Small });
+        var settings = new SelectionSettings
+        {
+            DestinationKey = port.LegacySiteKey,
+            PortIndex = 21,
+            BoatSceneIndex = 10,
+            EnableChronos = true
+        };
+        Check(catalog.TryChoose(settings, new IndividualExclusions(), new Random(1), out var chosen, out _) &&
+            ReferenceEquals(chosen.Port, port), "legacy provider key did not resolve to canonical native destination");
+        Check(settings.DestinationKey == port.Key, "resolved legacy provider key was not normalized for later saves");
+
+        var exclusions = IndividualExclusions.Load(port.LegacySiteKey, "");
+        Check(exclusions.IsPortExcluded(port), "legacy provider exclusion did not resolve to canonical native destination");
+        Check(exclusions.SetPortExcluded(port, false) && !exclusions.IsPortExcluded(port) && exclusions.SavePorts() == "",
+            "clearing a legacy provider exclusion did not remove its saved alias");
+        Check(exclusions.SetPortExcluded(port, true) && exclusions.SavePorts() == Uri.EscapeDataString(port.IdentityName),
+            "new exclusion persisted the provider alias instead of canonical native identity");
+
+        const string formerFortKey = "site:oldchronian|fort-juniper";
+        var ordinaryChronos = new PortChoice
+        {
+            Index = 21,
+            Key = "port:port 21 M chronos",
+            IdentityName = "port 21 M chronos",
+            DisplayName = "Chronos"
+        };
+        var fort = new PortChoice
+        {
+            Index = 21,
+            Key = formerFortKey,
+            IdentityName = formerFortKey,
+            SiteIdentity = formerFortKey,
+            DisplayName = "Fort Juniper",
+            IsModded = true
+        };
+        catalog = new SelectionCatalog();
+        catalog.Ports.AddRange(new[] { ordinaryChronos, fort });
+        catalog.Boats.Add(new BoatChoice { Index = 10, IdentityName = "boat", Size = BoatSize.Small });
+        settings = new SelectionSettings { DestinationKey = formerFortKey, PortIndex = 21, BoatSceneIndex = 10 };
+        Check(catalog.TryChoose(settings, new IndividualExclusions(), new Random(1), out chosen, out _) &&
+            ReferenceEquals(chosen.Port, fort), "former Fort registration key selected ordinary Chronos");
+        exclusions = IndividualExclusions.Load(formerFortKey, "");
+        Check(exclusions.IsPortExcluded(fort) && !exclusions.IsPortExcluded(ordinaryChronos),
+            "former Fort registration exclusion migrated to ordinary Chronos");
     }
 
     private static void ConfigurationManagerChangeApplies()

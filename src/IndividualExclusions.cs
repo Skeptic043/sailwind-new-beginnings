@@ -15,13 +15,26 @@ namespace NewBeginnings
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         internal bool IsPortExcluded(PortChoice port) =>
-            port != null && excludedPorts.Contains(port.IdentityName);
+            port != null && excludedPorts.Any(port.MatchesIdentity);
 
         internal bool IsBoatExcluded(BoatChoice boat) =>
             boat != null && excludedBoats.Contains(boat.IdentityName);
 
-        internal bool SetPortExcluded(PortChoice port, bool excluded) =>
-            port != null && Set(excludedPorts, port.IdentityName, excluded);
+        internal bool SetPortExcluded(PortChoice port, bool excluded)
+        {
+            if (port == null) return false;
+            if (excluded)
+            {
+                var added = Set(excludedPorts, port.IdentityName, true);
+                if (!string.IsNullOrWhiteSpace(port.LegacySiteKey))
+                    added = Set(excludedPorts, port.LegacySiteKey, false) || added;
+                return added;
+            }
+            var changed = Set(excludedPorts, port.IdentityName, false);
+            if (!string.IsNullOrWhiteSpace(port.LegacySiteKey))
+                changed = Set(excludedPorts, port.LegacySiteKey, false) || changed;
+            return changed;
+        }
 
         internal bool SetBoatExcluded(BoatChoice boat, bool excluded) =>
             boat != null && Set(excludedBoats, boat.IdentityName, excluded);

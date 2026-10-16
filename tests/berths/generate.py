@@ -63,7 +63,7 @@ route_members = ''
 for marker in ['internal bool NeedsPlannedBerth =>', 'internal int Index =>']:
     start = catalog.index(marker)
     route_members += catalog[start:catalog.index(';', start) + 1] + '\n'
-candidate_members += '\nclass SirenRoute { internal RoutePort Port; internal RouteIsland Island; internal object Recovery; internal string SiteIdentity; ' + route_members + '}\n'
+candidate_members += '\nclass SirenRoute { internal RoutePort Port; internal RouteIsland Island; internal object Recovery; internal string SiteIdentity; internal bool HasAuthoredBerth; ' + route_members + '}\n'
 # Identity is extracted from KnownSites; the Siren predicate runs on the route double.
 def known_statement(marker):
     start = known.index(marker)

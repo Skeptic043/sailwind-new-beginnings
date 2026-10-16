@@ -51,6 +51,7 @@ namespace NewBeginnings
         internal static void Complete(SelectionCatalog catalog)
         {
             var yards = Resources.FindObjectsOfTypeAll<Shipyard>().Where(item => Loaded(item) && item.enabled).ToArray();
+            var registrations = StartPorts.Snapshot();
             foreach (var choice in catalog.Ports)
             {
                 choice.Island = choice.Port.GetComponentInParent<IslandHorizon>();
@@ -60,11 +61,6 @@ namespace NewBeginnings
                 choice.IsModded = !SelectionCatalog.IsKnownPort(choice.Port);
                 if (choice.IsModded && !choice.Pool.HasValue)
                     choice.Pool = choice.Region == 0 ? PortPool.AlAnkh : choice.Region == 1 ? PortPool.Emerald : PortPool.Aestrin;
-                choice.Yard = yards.FirstOrDefault(yard => BelongsToIsland(yard, choice.Island) &&
-                    KnownSites.FortJuniperRoot(yard) == null &&
-                    Port.ports.Count(port => port != null && port.GetComponentInParent<IslandHorizon>() == choice.Island) == 1);
-                choice.Yard = ShipyardStart.PreferredYard(choice, yards);
-                choice.HasShipyard = choice.Yard != null || ShipyardStart.HasNativeYard(choice);
                 if (KnownSites.IsSaffronPort(choice.Port))
                 {
                     choice.Hidden = HiddenSite.Saffron;
@@ -75,6 +71,36 @@ namespace NewBeginnings
                     choice.Marker = markers.Length == 1 ? markers[0] : null;
                     choice.DisplayName = "Saffron Island";
                 }
+                var registration = registrations.FirstOrDefault(item => ReferenceEquals(item.Port, choice.Port));
+                var options = registration?.Options;
+                if (registration != null)
+                {
+                    choice.LegacySiteKey = registration.Key;
+                    if (!string.IsNullOrWhiteSpace(options.DisplayName)) choice.DisplayName = options.DisplayName;
+                    if (options.DockRoot != null) choice.DockRoot = options.DockRoot;
+                    if (options.BerthMarker != null) choice.Marker = options.BerthMarker;
+                    if (options.ShoreMarker != null) choice.ShoreMarker = options.ShoreMarker;
+                    if (options.SceneryRoot != null) choice.SceneryRoot = options.SceneryRoot;
+                    if (options.FrontMooring != null)
+                    {
+                        choice.PreferredFront = options.FrontMooring;
+                        choice.PreferredBack = options.BackMooring;
+                    }
+                    choice.HasAuthoredBerth = options.DockRoot != null || options.BerthMarker != null ||
+                        options.ShoreMarker != null || options.FrontMooring != null;
+                    choice.HasAuthoredYardScope = options.DockRoot != null || options.Shipyard != null;
+                }
+                var yard = options?.Shipyard;
+                if (yard == null)
+                    yard = yards.FirstOrDefault(item => BelongsToIsland(item, choice.Island) &&
+                        (options?.DockRoot == null
+                            ? KnownSites.FortJuniperRoot(item) == null &&
+                              Port.ports.Count(port => port != null && port.GetComponentInParent<IslandHorizon>() == choice.Island) == 1
+                            : item.transform.IsChildOf(options.DockRoot)));
+                choice.Yard = yard;
+                if (!choice.HasAuthoredYardScope)
+                    choice.Yard = ShipyardStart.PreferredYard(choice, yards);
+                choice.HasShipyard = choice.Yard != null || !choice.HasAuthoredYardScope && ShipyardStart.HasNativeYard(choice);
             }
             foreach (var island in Resources.FindObjectsOfTypeAll<IslandHorizon>().Where(item => Loaded(item) &&
                 KnownSites.IsPirateHideout(item)))
@@ -95,24 +121,17 @@ namespace NewBeginnings
                         Key = KnownSites.FortJuniperKey, SiteIdentity = KnownSites.FortJuniperKey,
                         DisplayName = "Fort Juniper" });
             }
-            foreach (var registration in StartPorts.Snapshot())
-            {
-                var options = registration.Options;
-                var island = registration.Port.GetComponentInParent<IslandHorizon>();
-                var saffron = KnownSites.IsSaffronPort(registration.Port);
-                var yard = options.Shipyard != null ? options.Shipyard : yards.FirstOrDefault(item => BelongsToIsland(item, island) &&
-                        (options.DockRoot == null || item.transform.IsChildOf(options.DockRoot)));
-                catalog.Ports.Add(new PortChoice { Port = registration.Port, Island = island,
-                    DockRoot = options.DockRoot != null ? options.DockRoot : island.transform,
-                    Marker = options.BerthMarker, ShoreMarker = options.ShoreMarker, SceneryRoot = options.SceneryRoot,
-                    PreferredFront = options.FrontMooring, PreferredBack = options.BackMooring,
-                    Region = (int)registration.Port.region, IsModded = !saffron,
-                    Hidden = saffron ? HiddenSite.Saffron : HiddenSite.None, Pool = saffron ? (PortPool?)PortPool.SmallIslands : null,
-                    HasShipyard = yard != null, Yard = yard,
-                    Key = registration.Key, SiteIdentity = registration.Key,
-                    DisplayName = string.IsNullOrWhiteSpace(options.DisplayName) ? registration.Port.GetPortName() : options.DisplayName });
-            }
-            // A conflicting built-in/API identity must not select whichever was enumerated first.
+            // An API alias which duplicates a canonical built-in site must
+            // select the built-in instead of also matching its Port.
+            foreach (var choice in catalog.Ports.Where(item => item.LegacySiteKey != null).ToArray())
+                if (catalog.Ports.Any(item => !ReferenceEquals(item, choice) &&
+                    string.Equals(item.Key, choice.LegacySiteKey, StringComparison.Ordinal)))
+                {
+                    catalog.Rejections.Add("A registered port's legacy site identity conflicts with a built-in location: " +
+                        choice.LegacySiteKey);
+                    choice.LegacySiteKey = null;
+                }
+            // A conflicting built-in identity must not select whichever was enumerated first.
             var duplicateKeys = new HashSet<string>(catalog.Ports.GroupBy(item => item.Key).Where(group => group.Count() != 1).Select(group => group.Key));
             catalog.Ports.RemoveAll(item => duplicateKeys.Contains(item.Key) || item.Island == null ||
                 item.Hidden == HiddenSite.Saffron && item.Marker == null);

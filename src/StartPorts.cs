@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    /// <summary>Optional scene-bound starting-site description. Registration does not guarantee boat fit.</summary>
+    /// <summary>Optional author details for an automatically discovered native Port.</summary>
     public sealed class StartPortOptions
     {
         public string DisplayName { get; set; }
@@ -18,7 +18,7 @@ namespace NewBeginnings
         public Shipyard Shipyard { get; set; }
     }
 
-    /// <summary>Register after the native Port and supplied scene objects have initialized, on Unity's main thread.</summary>
+    /// <summary>Enrich a native Port after it and any supplied scene objects have initialized, on Unity's main thread.</summary>
     public static class StartPorts
     {
         internal sealed class Registration
@@ -31,11 +31,12 @@ namespace NewBeginnings
         internal static int Revision { get; private set; }
 
         /// <summary>
-        /// Accepts a scene-bound description of an actual registered native Port.
+        /// Accepts author details for an actual registered native Port.
         /// Acceptance is not proof that a boat fits: live startup checks still apply.
-        /// Identical repeat calls succeed; conflicting identities or dock scopes fail.
+        /// One native Port may have one declaration. Identical repeat calls succeed;
+        /// conflicting site identities or declarations fail.
         /// Destroying, unloading or moving supplied objects invalidates the description.
-        /// Empty options use the port name and island dock scope without creating scene objects.
+        /// Omitted options leave automatically discovered values unchanged.
         /// </summary>
         public static bool Register(string providerId, string siteId, Port port, StartPortOptions options, out string reason)
         {
@@ -47,44 +48,47 @@ namespace NewBeginnings
             var island = port != null ? port.GetComponentInParent<IslandHorizon>() : null;
             if (!StartDestinations.ValidPort(port) || island == null)
             { reason = "The supplied native port is not uniquely registered on a loaded island."; return false; }
-            if (!Valid(new Registration { Port = port, Options = options }))
+            var accepted = Copy(options);
+            if (!Valid(new Registration { Port = port, Options = accepted }))
             { reason = "Every supplied scene reference must still be loaded on the port's island."; return false; }
-            foreach (var marker in new[] { options.BerthMarker, options.ShoreMarker, options.DockRoot, options.SceneryRoot })
+            foreach (var marker in new[] { accepted.BerthMarker, accepted.ShoreMarker, accepted.DockRoot, accepted.SceneryRoot })
                 if (marker != null && (!StartDestinations.Loaded(marker) || marker.GetComponentInParent<IslandHorizon>() != island))
                 { reason = "Every supplied scene marker/root must belong to the port's island."; return false; }
-            if ((options.FrontMooring == null) != (options.BackMooring == null) ||
-                options.FrontMooring != null && (options.FrontMooring == options.BackMooring ||
-                options.FrontMooring.GetComponentInParent<IslandHorizon>() != island ||
-                options.BackMooring.GetComponentInParent<IslandHorizon>() != island))
+            if ((accepted.FrontMooring == null) != (accepted.BackMooring == null) ||
+                accepted.FrontMooring != null && (accepted.FrontMooring == accepted.BackMooring ||
+                accepted.FrontMooring.GetComponentInParent<IslandHorizon>() != island ||
+                accepted.BackMooring.GetComponentInParent<IslandHorizon>() != island))
             { reason = "Supply two distinct real moorings on the port's island, or neither."; return false; }
-            if (options.Shipyard != null && (!StartDestinations.Loaded(options.Shipyard) ||
-                !options.Shipyard.enabled || options.Shipyard.GetComponentInParent<IslandHorizon>() != island))
+            if (accepted.Shipyard != null && (!StartDestinations.Loaded(accepted.Shipyard) ||
+                !accepted.Shipyard.enabled || accepted.Shipyard.GetComponentInParent<IslandHorizon>() != island))
             { reason = "The supplied shipyard must be a loaded enabled component on the port's island."; return false; }
             var key = "site:" + providerId.Trim() + "|" + siteId.Trim();
             if (Sites.TryGetValue(key, out var prior))
             {
-                if (prior.Port == port && Same(prior.Options, options)) return true;
+                if (ReferenceEquals(prior.Port, port) && Same(prior.Options, accepted)) return true;
                 reason = "This site identity is already registered with a different declaration.";
                 return false;
             }
-            if (Sites.Values.Any(item => item.Port == port &&
-                ((item.Options.DockRoot != null ? item.Options.DockRoot : island.transform) ==
-                    (options.DockRoot != null ? options.DockRoot : island.transform) ||
-                 options.BerthMarker != null && item.Options.BerthMarker == options.BerthMarker)))
-            { reason = "Another registration already describes this dock scope or berth marker."; return false; }
+            if (Sites.Values.Any(item => ReferenceEquals(item.Port, port)))
+            { reason = "This native port already has a different starting-location declaration."; return false; }
             // Copy data so callers cannot replace an accepted declaration through mutable options.
-            Sites.Add(key, new Registration { Key = key, Port = port, Options = new StartPortOptions {
-                DisplayName = options.DisplayName, BerthMarker = options.BerthMarker, ShoreMarker = options.ShoreMarker,
-                DockRoot = options.DockRoot, SceneryRoot = options.SceneryRoot, FrontMooring = options.FrontMooring,
-                BackMooring = options.BackMooring, Shipyard = options.Shipyard } });
+            Sites.Add(key, new Registration { Key = key, Port = port, Options = accepted });
             ++Revision;
             return true;
         }
 
-        private static bool Same(StartPortOptions a, StartPortOptions b) => a.DisplayName == b.DisplayName &&
-            a.BerthMarker == b.BerthMarker && a.ShoreMarker == b.ShoreMarker && a.DockRoot == b.DockRoot &&
-            a.SceneryRoot == b.SceneryRoot && a.FrontMooring == b.FrontMooring &&
-            a.BackMooring == b.BackMooring && a.Shipyard == b.Shipyard;
+        private static StartPortOptions Copy(StartPortOptions options) => new StartPortOptions {
+            DisplayName = string.IsNullOrWhiteSpace(options.DisplayName) ? null : options.DisplayName.Trim(),
+            BerthMarker = options.BerthMarker, ShoreMarker = options.ShoreMarker,
+            DockRoot = options.DockRoot, SceneryRoot = options.SceneryRoot, FrontMooring = options.FrontMooring,
+            BackMooring = options.BackMooring, Shipyard = options.Shipyard };
+
+        private static bool Same(StartPortOptions a, StartPortOptions b) =>
+            string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal) &&
+            ReferenceEquals(a.BerthMarker, b.BerthMarker) && ReferenceEquals(a.ShoreMarker, b.ShoreMarker) &&
+            ReferenceEquals(a.DockRoot, b.DockRoot) && ReferenceEquals(a.SceneryRoot, b.SceneryRoot) &&
+            ReferenceEquals(a.FrontMooring, b.FrontMooring) && ReferenceEquals(a.BackMooring, b.BackMooring) &&
+            ReferenceEquals(a.Shipyard, b.Shipyard);
 
         internal static Registration[] Snapshot() { Prune(); return Sites.Values.ToArray(); }
         private static bool Alive(Component value) => ReferenceEquals(value, null) || StartDestinations.Loaded(value);

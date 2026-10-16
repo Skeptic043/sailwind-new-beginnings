@@ -638,7 +638,7 @@ namespace NewBeginnings
         internal string SiteIdentity, IdentityName;
         internal int Index;
         internal IslandHorizon Island;
-        internal bool Current = true, Scenery = true, NeedsPlannedBerth = true;
+        internal bool Current = true, Scenery = true, NeedsPlannedBerth = true, HasAuthoredYardScope;
     }
 
     internal enum BoatSize

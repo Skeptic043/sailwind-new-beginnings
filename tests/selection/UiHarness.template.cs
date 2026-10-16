@@ -171,7 +171,7 @@ class UiHarness
         SubmenuNavigation(check);
         ConfigureBeforeRandom(check);
         var ordered = new UiHarness();
-        ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.Chronos }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
+        ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.SmallIslands }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
         ordered.catalog.SortPorts();
         ordered.settings.EnableChronos = true;
         var expected = new[]
@@ -197,7 +197,7 @@ class UiHarness
         check(ordered.settings.DestinationKey == "mod:site", "manual previous must wrap to last mod site");
         check(ordered.EditorPorts().Select(p => p.Key).SequenceEqual(expected.Where(k => k != "native:unclassified")), "exclusions must keep native then mod ordering and preserve manual-only filtering");
         ordered.settings.EnablePirateIsland = true;
-        check(ordered.EditorPorts().Select(p => p.Key).SequenceEqual(new[] { "native:alpha", "native:zulu", "native:emerald", "native:pirate", "native:chronos", "mod:region", "mod:second", "mod:site" }), "enabling a native spoiler must retain native geography before all mod sites");
+        check(ordered.EditorPorts().Select(p => p.Key).SequenceEqual(new[] { "native:alpha", "native:zulu", "native:emerald", "native:chronos", "native:pirate", "mod:region", "mod:second", "mod:site" }), "enabling a native spoiler must retain native geography before all mod sites");
         foreach (bool random in new[] { false, true })
             foreach (bool preset in new[] { false, true })
                 foreach (bool boat in new[] { false, true })
@@ -258,13 +258,20 @@ class UiHarness
         manual.CyclePort(-1);
         check(manual.settings.PortIndex == 2 && !manual.portPrevious.unclickable && !manual.portNext.unclickable && !manual.shipyardPortsOnly.unclickable, "manual mode not restored after random toggle");
         var sites = new UiHarness();
-        sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "native:21", IdentityName = "port 21 M chronos", DisplayName = "Chronos" });
+        sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "native:21", LegacySiteKey = "provider:old-chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos" });
         sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "provider:fort", SiteIdentity = "provider:fort", DisplayName = "Fort Juniper", IsModded = true });
         sites.catalog.Ports.Add(new PortChoice { Index = 33, Key = "native:saffron", DisplayName = "Saffron", Hidden = HiddenSite.Saffron });
         sites.settings.PortIndex = 21;
         sites.settings.EnableChronos = true;
         sites.RefreshDisplay();
         check(sites.portValue.text == "Chronos", "legacy port index did not retain ordinary Chronos");
+        sites.settings.DestinationKey = "provider:old-chronos";
+        sites.RefreshDisplay();
+        check(sites.portValue.text == "Chronos" && sites.settings.DestinationKey == "native:21",
+            "legacy provider key was unavailable or not normalized in the manual UI");
+        sites.CyclePort(1);
+        check(sites.settings.DestinationKey == "provider:fort", "manual cycling did not replace a legacy alias with a canonical key");
+        sites.settings.DestinationKey = "native:21";
         sites.CyclePort(1);
         check(sites.settings.DestinationKey == "provider:fort" && sites.settings.PortIndex == 21 && sites.portValue.text == "Fort Juniper", "same-port site lost distinct identity");
         sites.CyclePort(1);
@@ -306,13 +313,19 @@ class UiHarness
         secrets.settings.PortPools.Add(PortPool.AlAnkh);
         secrets.settings.EnableSaffronIsland = true;
         secrets.RefreshDisplay();
-        check(secrets.secretIslands.text.text == "[~] Secret islands" && !secrets.portPools[0].unclickable, "partial secret selection must be visible and permit deselecting the last geographic pool");
+        check(secrets.secretIslands.text.text == "[~] Secret islands" && secrets.portPools[0].unclickable,
+            "partial spoiler selection must remain visible without counting as a random source");
         secrets.TogglePortPool(PortPool.AlAnkh);
-        check(secrets.settings.PortPools.Count == 0 && secrets.settings.AnySecretIslandsEnabled, "main pool toggle must allow secret-only starts");
+        check(secrets.settings.PortPools.SetEquals(new[] { PortPool.AlAnkh }) && secrets.settings.AnySecretIslandsEnabled,
+            "main pool toggle allowed a spoiler-only random source");
         secrets.settings.IncludeModPorts = true;
         secrets.RefreshDisplay();
+        secrets.TogglePortPool(PortPool.AlAnkh);
+        check(secrets.settings.PortPools.Count == 0 && secrets.settings.IncludeModPorts,
+            "geographic pool could not be removed after enabling a mod-port source");
         secrets.ToggleModPorts();
-        check(!secrets.settings.IncludeModPorts, "mod checkbox must allow deselection while a secret start remains enabled");
+        check(secrets.settings.IncludeModPorts && secrets.includeModPorts.unclickable,
+            "spoiler filter incorrectly allowed removing the last mod-port source");
         secrets.ToggleSecretIslands();
         check(secrets.settings.SecretIslandsEnabled && secrets.secretIslands.text.text == "[x] Secret islands", "clicking a mixed secret group must enable all three");
         secrets.ToggleSecretIslands();

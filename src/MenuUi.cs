@@ -825,7 +825,7 @@ namespace NewBeginnings
         private bool IsSelectedPort(PortChoice port) =>
             string.IsNullOrEmpty(settings.DestinationKey)
                 ? port.SiteIdentity == null && port.Index == settings.PortIndex
-                : string.Equals(port.Key, settings.DestinationKey, StringComparison.Ordinal);
+                : port.MatchesKey(settings.DestinationKey);
 
         private void CycleBoat(int direction)
         {
@@ -880,6 +880,8 @@ namespace NewBeginnings
             var visiblePorts = catalog.VisiblePorts(settings).ToList();
             var port = visiblePorts.FirstOrDefault(IsSelectedPort);
             var boat = catalog.Boats.FirstOrDefault(item => item.Index == settings.BoatSceneIndex);
+            if (port != null && port.MatchesKey(settings.DestinationKey))
+                settings.DestinationKey = port.Key;
             portValue.text = port != null ? Trim(port.DisplayName, 19) : "Unavailable";
             boatValue.text = boat != null ? Trim(boat.DisplayName, 19) : "No boat";
             portValue.color = settings.RandomPort ? MutedInk : Ink;

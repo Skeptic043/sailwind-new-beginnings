@@ -31,7 +31,7 @@ namespace NewBeginnings
                     revealed = GUILayout.Button("Reveal spoiler locations");
                 }
                 if (!revealed) return;
-                GUILayout.Label("Secret islands include Chronos, Pirate Island and Saffron Island. Enabled locations are available for manual and random starts, independently of geographic pools.",
+                GUILayout.Label("Secret islands include Chronos, Pirate Island and Saffron Island. Enabled locations are available for manual starts. Random starts also require Small Islands.",
                     noteStyle, GUILayout.ExpandWidth(true));
                 var enabled = settings.SecretIslandsEnabled;
                 var next = GUILayout.Toggle(enabled, settings.AnySecretIslandsEnabled && !enabled

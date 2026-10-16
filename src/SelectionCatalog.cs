@@ -8,7 +8,7 @@ using UnityEngine;
 namespace NewBeginnings
 {
     internal enum BoatSize { Small = 1, Medium = 2, Large = 3 }
-    internal enum PortPool { AlAnkh, Emerald, Aestrin, FireFishLagoon, SmallIslands, Chronos }
+    internal enum PortPool { AlAnkh, Emerald, Aestrin, FireFishLagoon, SmallIslands }
 
     internal sealed class PortChoice
     {
@@ -18,17 +18,24 @@ namespace NewBeginnings
         internal string DisplayName;
         internal string Key;
         internal string SiteIdentity;
+        internal string LegacySiteKey;
         internal IslandHorizon Island;
         internal Transform DockRoot, Marker, ShoreMarker, SceneryRoot;
         internal GPButtonDockMooring PreferredFront, PreferredBack;
         internal Shipyard Yard;
         internal int Region;
-        internal bool IsModded, HasShipyard;
+        internal bool IsModded, HasShipyard, HasAuthoredBerth, HasAuthoredYardScope;
         internal HiddenSite Hidden;
         // True when the location has no ordinary native recovery berth, so the planner surveys one.
-        internal bool NeedsPlannedBerth => Recovery == null || SiteIdentity != null || KnownSites.IsSirenSong(this);
+        internal bool NeedsPlannedBerth => Recovery == null || SiteIdentity != null || HasAuthoredBerth || KnownSites.IsSirenSong(this);
         internal int Index => Port != null ? Port.portIndex : -1;
         internal string IdentityName => SiteIdentity ?? (Port != null ? Port.gameObject.name : Key);
+        internal bool MatchesKey(string saved) => !string.IsNullOrEmpty(saved) &&
+            (string.Equals(Key, saved, StringComparison.Ordinal) ||
+             string.Equals(LegacySiteKey, saved, StringComparison.Ordinal));
+        internal bool MatchesIdentity(string saved) => !string.IsNullOrEmpty(saved) &&
+            (string.Equals(IdentityName, saved, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(LegacySiteKey, saved, StringComparison.OrdinalIgnoreCase));
     }
 
     internal sealed class BoatChoice
@@ -151,7 +158,7 @@ namespace NewBeginnings
                 { 18, Tuple.Create<string, PortPool?>("port M 18 Siren Song", PortPool.Aestrin) },
                 { 19, Tuple.Create<string, PortPool?>("port M 19 (Eastwind)", PortPool.Aestrin) },
                 { 20, Tuple.Create<string, PortPool?>("port M/E 20 Happy Bay", PortPool.SmallIslands) },
-                { 21, Tuple.Create<string, PortPool?>("port 21 M chronos", PortPool.Chronos) },
+                { 21, Tuple.Create<string, PortPool?>("port 21 M chronos", PortPool.SmallIslands) },
                 { 22, Tuple.Create<string, PortPool?>("port L 22 Lagoon Bay", PortPool.FireFishLagoon) },
                 { 23, Tuple.Create<string, PortPool?>("port L 23 Lagoon Fire Fish Town", PortPool.FireFishLagoon) },
                 { 24, Tuple.Create<string, PortPool?>("port L 24 Lagoon Onna", PortPool.FireFishLagoon) },
@@ -277,7 +284,7 @@ namespace NewBeginnings
                     result.Boats.Add(new BoatChoice
                     {
                         Boat = boat, Saveable = saveable, Size = metadata.Size,
-                        DisplayName = metadata.DisplayName,
+                        DisplayName = BoatNames.DisplayName(boat, metadata.DisplayName),
                         OriginGroup = metadata.OriginGroup
                     });
                 }
@@ -387,8 +394,7 @@ namespace NewBeginnings
                 case PortPool.Aestrin: return 2;
                 case PortPool.FireFishLagoon: return 3;
                 case PortPool.SmallIslands: return 4;
-                case PortPool.Chronos: return 5;
-                default: return 6;
+                default: return 5;
             }
         }
 
@@ -472,12 +478,9 @@ namespace NewBeginnings
 
         private static bool IsShipyardPort(PortChoice port) => port.HasShipyard;
 
-        private static bool IsSecretPort(PortChoice port) => KnownSites.IsChronos(port) ||
-            port.Hidden != HiddenSite.None;
-
         private static bool InRandomPool(PortChoice port, SelectionSettings settings) =>
-            IsSecretPort(port) || (port.IsModded ? settings.IncludeModPorts :
-                port.Pool.HasValue && settings.IsPoolEnabled(port.Pool.Value));
+            port.IsModded ? settings.IncludeModPorts :
+                port.Pool.HasValue && settings.IsPoolEnabled(port.Pool.Value);
 
         internal IEnumerable<PortChoice> VisiblePorts(SelectionSettings settings) => Ports.Where(item =>
             item.Hidden != HiddenSite.Pirate || settings.EnablePirateIsland).Where(item =>
@@ -507,7 +510,7 @@ namespace NewBeginnings
                      individualExclusions == null || !individualExclusions.IsPortExcluded(item))).ToArray()
                 : VisiblePorts(settings).Where(item => string.IsNullOrEmpty(settings.DestinationKey)
                     ? item.SiteIdentity == null && item.Index == settings.PortIndex
-                    : item.Key == settings.DestinationKey).ToArray();
+                    : item.MatchesKey(settings.DestinationKey)).ToArray();
             var boats = settings.RandomBoat
                 ? Boats.Where(item => item.Size.HasValue && settings.BoatSizes.Contains(item.Size.Value) &&
                     (individualExclusions == null || !individualExclusions.IsBoatExcluded(item))).ToArray()
@@ -552,7 +555,12 @@ namespace NewBeginnings
                         chosen = new StartPair { Port = port, Boat = boat,
                             UseShipyardBerth = settings.UseShipyardBerth && ShipyardStart.Available(port) };
                 }
-            if (chosen != null) return true;
+            if (chosen != null)
+            {
+                if (!settings.RandomPort && chosen.Port.MatchesKey(settings.DestinationKey))
+                    settings.DestinationKey = chosen.Port.Key;
+                return true;
+            }
             reason = settings.RandomPort && settings.ShipyardPortsOnly
                 ? "No selected boat has a usable berth at the checked shipyard ports."
                 : "No selected boat and location pair has a usable starting berth.";
@@ -573,7 +581,7 @@ namespace NewBeginnings
         internal bool EnableSaffronIsland { get; set; }
         internal bool EnableChronos { get; set; }
         internal int BoatSceneIndex { get; set; }
-        // Geographic pools only. Chronos is a secret island, enabled separately.
+        // Geographic pools only. Spoiler settings filter individual locations.
         internal readonly HashSet<PortPool> PortPools = new HashSet<PortPool>
             { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin };
         internal readonly HashSet<BoatSize> BoatSizes = new HashSet<BoatSize>
@@ -582,19 +590,15 @@ namespace NewBeginnings
         internal bool SecretIslandsEnabled => EnablePirateIsland && EnableSaffronIsland && EnableChronos;
         internal bool AnySecretIslandsEnabled => EnablePirateIsland || EnableSaffronIsland || EnableChronos;
 
-        // A random start needs at least one port source: a geographic pool,
-        // mod ports or a secret island. Each checked source counts once.
-        private int RandomPortSourceCount => PortPools.Count + (IncludeModPorts ? 1 : 0) +
-            (EnablePirateIsland ? 1 : 0) + (EnableSaffronIsland ? 1 : 0) + (EnableChronos ? 1 : 0);
+        // A random start needs at least one geographic pool or mod-port source.
+        // Spoiler flags filter locations within those sources.
+        private int RandomPortSourceCount => PortPools.Count + (IncludeModPorts ? 1 : 0);
         internal bool HasRandomPortSource => RandomPortSourceCount > 0;
         // A checked source can be unchecked unless it is the last one.
         internal bool CanUncheckPortPool(PortPool pool) => !PortPools.Contains(pool) || RandomPortSourceCount > 1;
         internal bool CanUncheckModPorts => !IncludeModPorts || RandomPortSourceCount > 1;
 
-        // A port classified as Chronos (natively or by override) follows the
-        // secret-island setting; every other pool is geographic.
-        internal bool IsPoolEnabled(PortPool pool) =>
-            pool == PortPool.Chronos ? EnableChronos : PortPools.Contains(pool);
+        internal bool IsPoolEnabled(PortPool pool) => PortPools.Contains(pool);
 
         internal void SetSecretIslands(bool enabled)
         {
@@ -622,7 +626,8 @@ namespace NewBeginnings
         // Config strings use semicolon-separated records. Boat sizes:
         // sceneIndex|exactGameObjectName|Small (or Medium/Large).
         // Geographic pools: portIndex|exactGameObjectName|AlAnkh (or Emerald,
-        // Aestrin, FireFishLagoon, SmallIslands, Chronos).
+        // Aestrin, FireFishLagoon, SmallIslands). The former Chronos value is
+        // accepted only for the exact ordinary Chronos identity and normalized.
         // Exact names guard against future index reuse.
 
         private readonly Dictionary<int, Tuple<string, BoatSize>> boatSizes =
@@ -650,15 +655,21 @@ namespace NewBeginnings
             foreach (var record in SplitRecords(portPoolRecords))
             {
                 var parts = record.Split('|');
-                if (parts.Length != 3 || !int.TryParse(parts[0].Trim(), out var index) || index < 0 ||
-                    string.IsNullOrWhiteSpace(parts[1]) ||
-                    !Enum.TryParse(parts[2].Trim(), true, out PortPool pool) ||
-                    !Enum.IsDefined(typeof(PortPool), pool) || result.portPools.ContainsKey(index))
+                var index = -1;
+                var validIndex = parts.Length == 3 && int.TryParse(parts[0].Trim(), out index) && index >= 0;
+                var name = parts.Length == 3 ? parts[1].Trim() : "";
+                var poolName = parts.Length == 3 ? parts[2].Trim() : "";
+                var legacyChronos = string.Equals(poolName, "Chronos", StringComparison.OrdinalIgnoreCase);
+                var pool = default(PortPool);
+                var validPool = legacyChronos
+                    ? index == 21 && string.Equals(name, "port 21 M chronos", StringComparison.OrdinalIgnoreCase)
+                    : Enum.TryParse(poolName, true, out pool) && Enum.IsDefined(typeof(PortPool), pool);
+                if (!validIndex || string.IsNullOrWhiteSpace(name) || !validPool || result.portPools.ContainsKey(index))
                 {
                     result.Errors.Add("Invalid or duplicate port pool override: " + record);
                     continue;
                 }
-                result.portPools.Add(index, Tuple.Create(parts[1].Trim(), pool));
+                result.portPools.Add(index, Tuple.Create(name, legacyChronos ? PortPool.SmallIslands : pool));
             }
             return result;
         }

@@ -24,6 +24,7 @@ namespace NewBeginnings
 
         private static Shipyard ResolveYard(PortChoice destination)
         {
+            if (destination?.HasAuthoredYardScope == true) return destination.Yard;
             return HasNativeYard(destination)
                 ? PreferredYard(destination, Resources.FindObjectsOfTypeAll<Shipyard>()) : destination?.Yard;
         }
@@ -33,7 +34,9 @@ namespace NewBeginnings
 
         // Menu sampling must not depend on the island scenery already being
         // loaded. Resolve the actual yard when preparing the selected start.
-        internal static bool Available(PortChoice destination) => HasNativeYard(destination) || Usable(destination?.Yard);
+        internal static bool Available(PortChoice destination) => destination?.HasAuthoredYardScope == true
+            ? Usable(destination.Yard)
+            : HasNativeYard(destination) || Usable(destination?.Yard);
 
         internal static bool TryPlan(PortChoice destination, out StartBerthPlan plan,
             Rigidbody body = null, BoatMooringRopes ropes = null)
@@ -41,7 +44,8 @@ namespace NewBeginnings
             plan = null;
             var yard = ResolveYard(destination);
             if (!Usable(yard)) return false;
-            if (HasNativeYard(destination) && (destination.Index == KnownSites.GoldRockPort ||
+            var useNativeYardPolicy = !destination.HasAuthoredYardScope && HasNativeYard(destination);
+            if (useNativeYardPolicy && (destination.Index == KnownSites.GoldRockPort ||
                 destination.Index == KnownSites.DragonCliffsPort || destination.Index == KnownSites.KiciaBayPort))
             {
                 if (StartBerthPlanner.TryNativeShipyard(destination, yard, body, ropes, out plan, out var berthReason))
@@ -58,7 +62,7 @@ namespace NewBeginnings
             // hierarchy. Their owner reference identifies the shore counter.
             var documents = Resources.FindObjectsOfTypeAll<ShipyardDocuments>()
                 .FirstOrDefault(d => StartDestinations.Loaded(d) && d.shipyard == yard);
-            var seed = destination.Index == KnownSites.KiciaBayPort && HasNativeYard(destination) && StartDestinations.Loaded(destination.Recovery)
+            var seed = destination.Index == KnownSites.KiciaBayPort && useNativeYardPolicy && StartDestinations.Loaded(destination.Recovery)
                 ? destination.Recovery.transform.position
                 : documents != null ? documents.transform.position : yard.transform.position;
             if (KnownSites.IsFortJuniper(destination) &&

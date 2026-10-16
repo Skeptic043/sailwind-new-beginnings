@@ -1,6 +1,6 @@
 # Release notes
 
-## Version 1.4.0
+## Version 1.5.0
 
 ### Added
 
@@ -10,6 +10,8 @@
 - A `Spawn` tab in Starting options menu that contains boat/island exclusions, shipyard settings and a Secret islands toggle. Existing settings carry over.
 - Fort Juniper is an added starting location when [Old Chronian](https://github.com/Aquilarts/OldChronian) is installed. Fort Juniper also qualifies for Shipyard ports only spawning.
 - Bottleneck Isle is an added starting location when [Better Ports](https://github.com/winterspices/BetterPorts) is installed.
+- Boat authors can register the player-facing name used in the boat selector and exclusion list.
+- Port authors can supply optional dock, berth, shore, mooring and shipyard details for an automatically discovered native port.
 
 <details>
 <summary>Spoilers: additional starting locations</summary>

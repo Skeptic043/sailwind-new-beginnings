@@ -398,6 +398,26 @@ static class Checks
             };
             Check(yard.GetComponentInParent<IslandHorizon>() == null && StartDestinations.BelongsToIsland(yard, island), "native additive scenery ownership required IslandHorizon ancestry");
             Check(ShipyardStart.PreferredYard(site, new[] { yard }) == yard && ShipyardStart.TryPlan(site, out var plan) && plan.Position.Equals(yard.shipReleasePosition.position), "late-loaded yard not resolved through its native owner");
+            var authored = On<Shipyard>(At(1090, 4));
+            authored.name = "author-selected yard";
+            authored.transform.SetParent(island.transform, true);
+            authored.shipReleasePosition = At(1110, 2);
+            authored.shipReleasePosition.SetParent(authored.transform, true);
+            site.Yard = authored;
+            site.HasAuthoredYardScope = true;
+            if (row.Item1 == 22)
+                site.Recovery = On<RecoveryPort>(At(1400, 1));
+            Check(ShipyardStart.Available(site) && ShipyardStart.TryPlan(site, out plan) &&
+                plan.Position.Equals(authored.shipReleasePosition.position), "author-selected yard was replaced by native name discovery");
+            if (row.Item1 == 22)
+                Check(Plugin.Instance.LastShoreSeed.Equals(authored.transform.position),
+                    "author-selected Kicia yard reused the native recovery shore policy");
+            authored.enabled = false;
+            Check(!ShipyardStart.Available(site) && !ShipyardStart.TryPlan(site, out _),
+                "invalid author-scoped yard fell back outside the declared dock scope");
+            authored.enabled = true;
+            site.HasAuthoredYardScope = false;
+            site.Yard = null;
             Refs.islands[island.islandIndex] = At(9999);
             Check(!StartDestinations.BelongsToIsland(yard, island), "stale island with same index accepted scenery owner");
             Refs.islands[island.islandIndex] = island.transform;
