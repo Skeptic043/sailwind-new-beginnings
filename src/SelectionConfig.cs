@@ -107,6 +107,7 @@ namespace NewBeginnings
             Settings.IncludeModPorts = includeModPorts.Value;
             Settings.EnablePirateIsland = enablePirateIsland.Value;
             Settings.EnableSaffronIsland = enableSaffronIsland.Value;
+            Settings.EnableChronos = chronos.Value;
             Settings.BoatSceneIndex = lastBoat.Value;
             Settings.RandomBoat = randomBoat.Value;
             IndividualExclusions.ReplaceWith(NewBeginnings.IndividualExclusions.Load(
@@ -117,12 +118,11 @@ namespace NewBeginnings
             if (aestrin.Value) Settings.PortPools.Add(PortPool.Aestrin);
             if (fireFishLagoon.Value) Settings.PortPools.Add(PortPool.FireFishLagoon);
             if (smallIslands.Value) Settings.PortPools.Add(PortPool.SmallIslands);
-            if (chronos.Value) Settings.PortPools.Add(PortPool.Chronos);
             Settings.BoatSizes.Clear();
             if (smallBoats.Value) Settings.BoatSizes.Add(BoatSize.Small);
             if (mediumBoats.Value) Settings.BoatSizes.Add(BoatSize.Medium);
             if (largeBoats.Value) Settings.BoatSizes.Add(BoatSize.Large);
-            if (Settings.PortPools.Count == 0 && !Settings.IncludeModPorts && !Settings.AnySecretIslandsEnabled)
+            if (!Settings.HasRandomPortSource)
             {
                 Settings.PortPools.Add(PortPool.AlAnkh);
                 warnings.Warn("Every random port pool was disabled; Al'Ankh was restored.");
@@ -149,12 +149,12 @@ namespace NewBeginnings
             includeModPorts.Value = Settings.IncludeModPorts;
             enablePirateIsland.Value = Settings.EnablePirateIsland;
             enableSaffronIsland.Value = Settings.EnableSaffronIsland;
+            chronos.Value = Settings.EnableChronos;
             alAnkh.Value = Settings.PortPools.Contains(PortPool.AlAnkh);
             emerald.Value = Settings.PortPools.Contains(PortPool.Emerald);
             aestrin.Value = Settings.PortPools.Contains(PortPool.Aestrin);
             fireFishLagoon.Value = Settings.PortPools.Contains(PortPool.FireFishLagoon);
             smallIslands.Value = Settings.PortPools.Contains(PortPool.SmallIslands);
-            chronos.Value = Settings.PortPools.Contains(PortPool.Chronos);
             lastBoat.Value = Settings.BoatSceneIndex;
             randomBoat.Value = Settings.RandomBoat;
             smallBoats.Value = Settings.BoatSizes.Contains(BoatSize.Small);

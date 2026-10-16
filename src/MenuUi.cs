@@ -845,7 +845,7 @@ namespace NewBeginnings
         private void ToggleModPorts()
         {
             if (!settings.RandomPort || catalog == null || !catalog.Ports.Any(item => item.IsModded)) return;
-            if (settings.IncludeModPorts && settings.PortPools.Count == 0 && !settings.AnySecretIslandsEnabled) return;
+            if (!settings.CanUncheckModPorts) return;
             settings.IncludeModPorts = !settings.IncludeModPorts;
             Changed();
         }
@@ -899,8 +899,7 @@ namespace NewBeginnings
                 settings.AnySecretIslandsEnabled ? "[~] " : "[ ] ") + "Secret islands");
             var hasModPorts = catalog.Ports.Any(item => item.IsModded);
             SetButtonVisible(includeModPorts, !EditingAny && hasModPorts);
-            SetEnabled(includeModPorts, settings.RandomPort && hasModPorts &&
-                (!settings.IncludeModPorts || settings.PortPools.Count > 0 || settings.AnySecretIslandsEnabled));
+            SetEnabled(includeModPorts, settings.RandomPort && hasModPorts && settings.CanUncheckModPorts);
             SetButtonText(includeModPorts, (settings.IncludeModPorts ? "[x] " : "[ ] ") + "Mod ports");
             SetEnabled(portPrevious, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
             SetEnabled(portNext, !settings.RandomPort && (visiblePorts.Count > 1 || port == null && visiblePorts.Count > 0));
@@ -917,8 +916,7 @@ namespace NewBeginnings
             {
                 var checkedPool = settings.PortPools.Contains(PoolOrder[i]);
                 SetButtonText(portPools[i], (checkedPool ? "[x] " : "[ ] ") + PoolLabels[i]);
-                SetEnabled(portPools[i], settings.RandomPort &&
-                    (!checkedPool || settings.PortPools.Count > 1 || settings.IncludeModPorts || settings.AnySecretIslandsEnabled));
+                SetEnabled(portPools[i], settings.RandomPort && settings.CanUncheckPortPool(PoolOrder[i]));
             }
             for (var i = 0; i < boatSizes.Length; ++i)
             {

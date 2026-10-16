@@ -313,8 +313,7 @@ namespace NewBeginnings
             string outcome;
             try
             {
-                var hulls = body.GetComponents<CapsuleCollider>().Where(item => item != null &&
-                    !item.isTrigger && (item.attachedRigidbody == body || !item.enabled)).ToArray();
+                var hulls = BerthClearance.RootHulls(body, true);
                 var scale = body.transform.lossyScale;
                 if (hulls.Length != 1 || hulls[0].direction != 2)
                     outcome = $"it has {hulls.Length} root hull capsules; exactly one along Z is required";
@@ -323,11 +322,10 @@ namespace NewBeginnings
                     outcome = "its root hull capsule has invalid geometry";
                 else
                 {
-                    var radius = hulls[0].radius * Math.Max(Math.Abs(scale.x), Math.Abs(scale.y));
-                    var length = Math.Max(hulls[0].height * Math.Abs(scale.z), 2f * radius);
-                    size = BoatSizing.FromHull(length, radius);
+                    var hull = BerthClearance.Measure(hulls[0], scale);
+                    size = BoatSizing.FromHull(hull.Length, hull.Radius);
                     outcome = size.HasValue
-                        ? $"as {size.Value} from its hull ({length:0.0} m x {2f * radius:0.0} m)"
+                        ? $"as {size.Value} from its hull ({hull.Length:0.0} m x {2f * hull.Radius:0.0} m)"
                         : "its root hull capsule has invalid geometry";
                 }
             }
@@ -479,12 +477,12 @@ namespace NewBeginnings
 
         private static bool InRandomPool(PortChoice port, SelectionSettings settings) =>
             IsSecretPort(port) || (port.IsModded ? settings.IncludeModPorts :
-                port.Pool.HasValue && settings.PortPools.Contains(port.Pool.Value));
+                port.Pool.HasValue && settings.IsPoolEnabled(port.Pool.Value));
 
         internal IEnumerable<PortChoice> VisiblePorts(SelectionSettings settings) => Ports.Where(item =>
             item.Hidden != HiddenSite.Pirate || settings.EnablePirateIsland).Where(item =>
             item.Hidden != HiddenSite.Saffron || settings.EnableSaffronIsland).Where(item =>
-            !KnownSites.IsChronos(item) || settings.PortPools.Contains(PortPool.Chronos));
+            !KnownSites.IsChronos(item) || settings.EnableChronos);
 
         internal bool TryChoose(SelectionSettings settings,
             IndividualExclusions individualExclusions, System.Random random,
@@ -497,8 +495,7 @@ namespace NewBeginnings
                 reason = "Selection settings or random source are missing.";
                 return false;
             }
-            if (settings.RandomPort && settings.PortPools.Count == 0 && !settings.IncludeModPorts &&
-                !settings.AnySecretIslandsEnabled ||
+            if (settings.RandomPort && !settings.HasRandomPortSource ||
                 settings.RandomBoat && settings.BoatSizes.Count == 0)
             {
                 reason = "At least one random port pool and boat size pool must remain selected.";
@@ -574,28 +571,40 @@ namespace NewBeginnings
         internal bool IncludeModPorts { get; set; }
         internal bool EnablePirateIsland { get; set; }
         internal bool EnableSaffronIsland { get; set; }
+        internal bool EnableChronos { get; set; }
         internal int BoatSceneIndex { get; set; }
+        // Geographic pools only. Chronos is a secret island, enabled separately.
         internal readonly HashSet<PortPool> PortPools = new HashSet<PortPool>
             { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin };
         internal readonly HashSet<BoatSize> BoatSizes = new HashSet<BoatSize>
             { BoatSize.Small, BoatSize.Medium, BoatSize.Large };
 
-        internal bool SecretIslandsEnabled => EnablePirateIsland && EnableSaffronIsland &&
-            PortPools.Contains(PortPool.Chronos);
-        internal bool AnySecretIslandsEnabled => EnablePirateIsland || EnableSaffronIsland ||
-            PortPools.Contains(PortPool.Chronos);
+        internal bool SecretIslandsEnabled => EnablePirateIsland && EnableSaffronIsland && EnableChronos;
+        internal bool AnySecretIslandsEnabled => EnablePirateIsland || EnableSaffronIsland || EnableChronos;
+
+        // A random start needs at least one port source: a geographic pool,
+        // mod ports or a secret island. Each checked source counts once.
+        private int RandomPortSourceCount => PortPools.Count + (IncludeModPorts ? 1 : 0) +
+            (EnablePirateIsland ? 1 : 0) + (EnableSaffronIsland ? 1 : 0) + (EnableChronos ? 1 : 0);
+        internal bool HasRandomPortSource => RandomPortSourceCount > 0;
+        // A checked source can be unchecked unless it is the last one.
+        internal bool CanUncheckPortPool(PortPool pool) => !PortPools.Contains(pool) || RandomPortSourceCount > 1;
+        internal bool CanUncheckModPorts => !IncludeModPorts || RandomPortSourceCount > 1;
+
+        // A port classified as Chronos (natively or by override) follows the
+        // secret-island setting; every other pool is geographic.
+        internal bool IsPoolEnabled(PortPool pool) =>
+            pool == PortPool.Chronos ? EnableChronos : PortPools.Contains(pool);
 
         internal void SetSecretIslands(bool enabled)
         {
-            EnablePirateIsland = EnableSaffronIsland = enabled;
-            if (enabled) PortPools.Add(PortPool.Chronos); else PortPools.Remove(PortPool.Chronos);
-            if (PortPools.Count == 0 && !IncludeModPorts) PortPools.Add(PortPool.AlAnkh);
+            EnablePirateIsland = EnableSaffronIsland = EnableChronos = enabled;
+            if (!HasRandomPortSource) PortPools.Add(PortPool.AlAnkh);
         }
 
         internal bool SetPortPool(PortPool pool, bool enabled)
         {
-            if (!enabled && !IncludeModPorts && !EnablePirateIsland && !EnableSaffronIsland &&
-                PortPools.Count == 1 && PortPools.Contains(pool)) return false;
+            if (!enabled && !CanUncheckPortPool(pool)) return false;
             if (enabled) PortPools.Add(pool); else PortPools.Remove(pool);
             return true;
         }

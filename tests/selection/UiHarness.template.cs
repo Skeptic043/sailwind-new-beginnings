@@ -173,7 +173,7 @@ class UiHarness
         var ordered = new UiHarness();
         ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.Chronos }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
         ordered.catalog.SortPorts();
-        ordered.settings.PortPools.Add(PortPool.Chronos);
+        ordered.settings.EnableChronos = true;
         var expected = new[]
         {
             "native:alpha",
@@ -262,7 +262,7 @@ class UiHarness
         sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "provider:fort", SiteIdentity = "provider:fort", DisplayName = "Fort Juniper", IsModded = true });
         sites.catalog.Ports.Add(new PortChoice { Index = 33, Key = "native:saffron", DisplayName = "Saffron", Hidden = HiddenSite.Saffron });
         sites.settings.PortIndex = 21;
-        sites.settings.PortPools.Add(PortPool.Chronos);
+        sites.settings.EnableChronos = true;
         sites.RefreshDisplay();
         check(sites.portValue.text == "Chronos", "legacy port index did not retain ordinary Chronos");
         sites.CyclePort(1);
@@ -277,7 +277,7 @@ class UiHarness
         check(sites.settings.DestinationKey == "native:21", "could not explicitly replace unavailable provider with sole visible location");
         sites.catalog.Ports.Add(new PortChoice { Key = "mod:x", IsModded = true });
         sites.settings.RandomPort = true;
-        sites.settings.PortPools.Remove(PortPool.Chronos);
+        sites.settings.EnableChronos = false;
         sites.RefreshDisplay();
         check(sites.includeModPorts.transform.parent.gameObject.active && !sites.includeModPorts.unclickable, "mod checkbox absent with detected mod location");
         sites.ToggleModPorts();

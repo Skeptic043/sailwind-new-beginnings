@@ -166,10 +166,6 @@ namespace NewBeginnings
             return true;
         }
 
-        static void RefreshBoatWalkRoots()
-        {
-        }
-
         static bool IsVerifiedLandCollider(Collider c) => c != null && (c == Plugin.Instance.Ground || c == Plugin.Instance.ProbeCollider);
         static string AuthoredName(ShipItem i) => i.gameObject.name;
         static bool AuthoredNameContains(ShipItem i, string s) => AuthoredName(i).IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0;

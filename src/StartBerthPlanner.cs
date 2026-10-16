@@ -835,15 +835,15 @@ namespace NewBeginnings
             if (!StartDestinations.Loaded(body) || ropes == null || ropes.GetComponent<Rigidbody>() != body ||
                 ropes.ropes == null || ropes.ropes.Length < 2 || RopeParent == null || RopeRest == null)
                 return Fail("Boat hull or initialized mooring ropes are missing.", out reason);
-            var capsules = body.GetComponents<CapsuleCollider>().Where(item => !item.isTrigger).ToArray();
+            var capsules = BerthClearance.RootHulls(body, true);
             var scale = body.transform.lossyScale;
             if (capsules.Length != 1 || capsules[0].direction != 2 || !Finite(scale) ||
                 scale.x <= 0f || scale.y <= 0f || scale.z <= 0f)
                 return Fail("This boat needs one measurable forward hull capsule.", out reason);
-            var capsule = capsules[0];
-            var radius = capsule.radius * Mathf.Max(scale.x, scale.y);
-            var length = Mathf.Max(capsule.height * scale.z, radius * 2f);
-            var center = Vector3.Scale(capsule.center, scale);
+            var measured = BerthClearance.Measure(capsules[0], scale);
+            var radius = measured.Radius;
+            var length = measured.Length;
+            var center = measured.Center;
             if (!Finite(radius) || !Finite(length) || !Finite(center) || radius <= 0f || length <= 0f || length > 150f)
                 return Fail("Boat hull geometry is invalid or exceeds the bounded berth survey.", out reason);
             var positions = new Vector3[ropes.ropes.Length];
@@ -857,7 +857,7 @@ namespace NewBeginnings
                 positions[index] = Vector3.Scale(body.transform.InverseTransformPoint(parent.TransformPoint(rest)), scale);
                 if (!Finite(positions[index])) return Fail("A boat rope rest position is invalid.", out reason);
             }
-            hull = new Hull { Center = center, Radius = radius, HalfSegment = Mathf.Max(0f, length * .5f - radius),
+            hull = new Hull { Center = center, Radius = radius, HalfSegment = measured.HalfSegment,
                 Ropes = ropes.ropes.ToArray(), RopePositions = positions };
             return true;
         }
@@ -983,7 +983,7 @@ namespace NewBeginnings
                 if (other == null || !StartDestinations.Loaded(other)) continue;
                 var body = other.GetComponent<Rigidbody>();
                 if (body == null || body == own) continue;
-                var capsules = body.GetComponents<CapsuleCollider>().Where(item => !item.isTrigger).ToArray();
+                var capsules = BerthClearance.RootHulls(body, true);
                 if (capsules.Length != 1)
                 {
                     if (NearbyBounds(body, center, reach))

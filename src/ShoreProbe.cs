@@ -362,8 +362,7 @@ namespace NewBeginnings
                 {
                     summary.BoatOrItem++;
                     if (candidate != null && (summary.Example == null ||
-                        string.Equals(candidate.name, "hull player collider",
-                            StringComparison.OrdinalIgnoreCase)))
+                        IsHullPlayerCollider(candidate)))
                         summary.Example = $"{candidate.name} layer {candidate.gameObject.layer}, " +
                             $"tag {candidate.gameObject.tag} at {hit.point}";
                     continue;
@@ -561,17 +560,16 @@ namespace NewBeginnings
             if (collider == null) return true;
             if (IsRoofSurface(collider) || IsOutdoorMarketStall(collider)) return true;
             for (var current = collider.transform; current != null; current = current.parent)
-            {
-                var name = current.name;
-                // Native Aestrin buildings combine exterior walls and roof in
-                // one collider. Its roof is not a separate object named roof.
-                // Classify the shell too, so it also occludes ground beneath it.
-                if (name.StartsWith("ita_building_", StringComparison.OrdinalIgnoreCase) ||
-                    name.IndexOf("interior", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    IsFurnitureName(name)) return true;
-            }
+                if (IsBuildingShellName(current.name) || IsFurnitureName(current.name)) return true;
             return false;
         }
+
+        // Native Aestrin buildings combine exterior walls and roof in one
+        // collider. Its roof is not a separate object named roof. Classify the
+        // shell too, so it also occludes ground beneath it.
+        private static bool IsBuildingShellName(string name) =>
+            name.StartsWith("ita_building_", StringComparison.OrdinalIgnoreCase) ||
+            name.IndexOf("interior", StringComparison.OrdinalIgnoreCase) >= 0;
 
         private static bool IsOutdoorMarketStall(Collider collider)
         {
@@ -580,9 +578,7 @@ namespace NewBeginnings
             for (var current = collider.transform; current != null; current = current.parent)
             {
                 var name = current.name;
-                if (name.StartsWith("ita_building_", StringComparison.OrdinalIgnoreCase) ||
-                    name.IndexOf("interior", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return false;
+                if (IsBuildingShellName(name)) return false;
                 if (string.Equals(name, "market stall", StringComparison.OrdinalIgnoreCase) ||
                     name.StartsWith("market stall ", StringComparison.OrdinalIgnoreCase))
                     stall = true;
@@ -628,15 +624,17 @@ namespace NewBeginnings
             }
         }
 
-        private bool IsStaticDocksideCollider(Collider collider)
+        // Static dock or shore structure: never a trigger, mooring fixture,
+        // moving body, boat, item or player. Probes use it both for support
+        // and for clearance obstacles; cargo re-checks probed supports with it.
+        internal static bool IsStaticGround(Collider collider)
         {
-            if (collider.isTrigger ||
+            if (collider == null || collider.isTrigger ||
                 IsMooringFixture(collider) ||
                 collider.attachedRigidbody != null && !collider.attachedRigidbody.isKinematic ||
                 collider.CompareTag("Boat") || collider.CompareTag("Player") ||
                 collider.gameObject.layer == 8 ||
-                string.Equals(collider.name, "hull player collider",
-                    StringComparison.OrdinalIgnoreCase)) return false;
+                IsHullPlayerCollider(collider)) return false;
             var transform = collider.transform;
             for (var current = transform; current != null; current = current.parent)
                 if (current.gameObject.tag == "WalkColBoat") return false;
@@ -644,22 +642,31 @@ namespace NewBeginnings
             foreach (var walkRoot in BoatWalkRoots)
                 if (walkRoot != null && (transform == walkRoot || transform.IsChildOf(walkRoot)))
                     return false;
-            if (transform.GetComponentInParent<BoatMooringRopes>() != null ||
-                transform.GetComponentInParent<BoatRefs>() != null ||
-                transform.GetComponentInParent<ShipItem>() != null ||
-                transform.GetComponentInParent<ItemRigidbody>() != null) return false;
-            return !IsPlayerHierarchy(transform, playerController, playerObserver);
+            return transform.GetComponentInParent<BoatMooringRopes>() == null &&
+                transform.GetComponentInParent<BoatRefs>() == null &&
+                transform.GetComponentInParent<ShipItem>() == null &&
+                transform.GetComponentInParent<ItemRigidbody>() == null;
         }
+
+        private static bool IsHullPlayerCollider(Collider collider) =>
+            collider.name.IndexOf("hull player collider", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        // The live player is instance state: this context's actor roots.
+        private bool IsStaticDocksideCollider(Collider collider) =>
+            IsStaticGround(collider) &&
+            !IsPlayerHierarchy(collider.transform, playerController, playerObserver);
 
         private static bool IsPlayerHierarchy(Transform candidate, Transform controller,
             Transform observer) => candidate != null &&
             (controller != null && (candidate == controller || candidate.IsChildOf(controller)) ||
                 observer != null && (candidate == observer || candidate.IsChildOf(observer)));
 
-        internal bool IsLoadedCollider(Collider collider) =>
+        internal static bool IsLoaded(Collider collider) =>
             collider != null && collider.enabled && collider.gameObject.activeInHierarchy &&
-            collider.gameObject.scene.IsValid() && collider.gameObject.scene.isLoaded &&
-            IsStaticDocksideCollider(collider);
+            collider.gameObject.scene.IsValid() && collider.gameObject.scene.isLoaded;
+
+        internal bool IsLoadedCollider(Collider collider) =>
+            IsLoaded(collider) && IsStaticDocksideCollider(collider);
 
         private static void RefreshBoatWalkRoots()
         {

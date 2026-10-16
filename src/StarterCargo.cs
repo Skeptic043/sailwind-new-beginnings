@@ -87,8 +87,6 @@ namespace NewBeginnings
             new Dictionary<ShipItem, Quaternion>(ReferenceComparer);
         private static readonly Dictionary<ShipItem, string> AuthoredNames =
             new Dictionary<ShipItem, string>(ReferenceComparer);
-        private static readonly List<Transform> BoatWalkRoots =
-            new List<Transform>();
 
         private static ResolvedStart armed;
         private static float readyAt = -1f;
@@ -138,7 +136,6 @@ namespace NewBeginnings
             AuthoredPositions.Clear();
             AuthoredRotations.Clear();
             AuthoredNames.Clear();
-            BoatWalkRoots.Clear();
             StartArrival.ClearCargoSurface();
         }
 
@@ -774,7 +771,6 @@ namespace NewBeginnings
         {
             reason = null;
             if (!NativeItemsReady(out reason)) return false;
-            RefreshBoatWalkRoots();
             if (!IsVerifiedLandCollider(groundCollider))
             {
                 reason = "the player's resolved surface is not stationary dock or shore ground: " +
@@ -1454,36 +1450,14 @@ namespace NewBeginnings
             return true;
         }
 
-        private static void RefreshBoatWalkRoots()
-        {
-            BoatWalkRoots.Clear();
-            foreach (var boat in Resources.FindObjectsOfTypeAll<BoatRefs>())
-                if (boat != null && boat.walkCol != null)
-                    BoatWalkRoots.Add(boat.walkCol);
-        }
-
-        private static bool IsVerifiedLandCollider(Collider collider)
-        {
-            if (collider == null || !collider.gameObject.activeInHierarchy ||
-                !collider.gameObject.scene.isLoaded || collider.isTrigger ||
-                collider.attachedRigidbody != null ||
-                ShoreProbe.IsUnsuitableStartSurface(collider) ||
-                collider.CompareTag("Boat") || collider.CompareTag("Player"))
-                return false;
-            var transform = collider.transform;
-            if (transform.GetComponentInParent<BoatRefs>() != null ||
-                transform.GetComponentInParent<BoatMooringRopes>() != null ||
-                transform.GetComponentInParent<PurchasableBoat>() != null ||
-                transform.GetComponentInParent<ShipItem>() != null ||
-                transform.GetComponentInParent<ItemRigidbody>() != null ||
-                collider.name.IndexOf("hull player collider",
-                    StringComparison.OrdinalIgnoreCase) >= 0)
-                return false;
-            foreach (var root in BoatWalkRoots)
-                if (root != null && (transform == root || transform.IsChildOf(root)))
-                    return false;
-            return true;
-        }
+        // Supplies stand on the shore probe's static start ground. They also
+        // refuse any rigidbody, even a kinematic one the player may stand on,
+        // and any PurchasableBoat hierarchy (boats and beta houses).
+        private static bool IsVerifiedLandCollider(Collider collider) =>
+            ShoreProbe.IsLoaded(collider) && ShoreProbe.IsStaticGround(collider) &&
+            !ShoreProbe.IsUnsuitableStartSurface(collider) &&
+            collider.attachedRigidbody == null &&
+            collider.GetComponentInParent<PurchasableBoat>() == null;
 
         private static bool IsInsideEmbarkVolume(ShipItem item, Vector3 surface, Quaternion? rotation = null)
         {

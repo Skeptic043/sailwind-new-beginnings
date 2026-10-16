@@ -5,8 +5,10 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    // Crab Beach's recovery sphere misses the neighboring starter hull's
-    // BoatCapsule layer. Check root hull capsules, without moving that boat.
+    // Root hull capsules: the one selector and size math shared by boat
+    // sizing, berth planning and resident clearance. Crab Beach's recovery
+    // sphere also misses the neighboring starter hull's BoatCapsule layer, so
+    // its start checks root hull capsules, without moving that boat.
     internal static class BerthClearance
     {
         private const float Margin = 1f;
@@ -17,6 +19,15 @@ namespace NewBeginnings
         {
             internal Vector2 A, B;
             internal float Radius;
+        }
+
+        // One root capsule in body space: world-metre radius, axial length
+        // (never shorter than the diameter) and half-segment, and its scaled,
+        // unrotated center. Callers validate the inputs they accept.
+        internal struct HullDimensions
+        {
+            internal Vector3 Center;
+            internal float Radius, Length, HalfSegment;
         }
 
         internal static Vector3 AdjustCrabBeach(ResolvedStart selected, Vector3 nativePosition)
@@ -34,7 +45,7 @@ namespace NewBeginnings
                 var body = ropes.GetComponent<Rigidbody>();
                 var saveable = ropes.GetComponent<SaveableObject>();
                 if (body == null || body == selected.Body || saveable == null) continue;
-                var hulls = RootHulls(body);
+                var hulls = RootHulls(body, false);
                 if (hulls.Length != 1)
                 {
                     // An unrelated mod boat elsewhere must not disable this start.
@@ -65,13 +76,17 @@ namespace NewBeginnings
             return result;
         }
 
-        private static CapsuleCollider[] RootHulls(Rigidbody body) =>
-            body.GetComponents<CapsuleCollider>().Where(c => c != null && c.enabled &&
-                !c.isTrigger && c.attachedRigidbody == body).ToArray();
+        // Non-trigger capsules on the body's own GameObject. Distance hiding
+        // disables authored hulls that still reserve space, so sizing, berth
+        // planning and residents include them; Crab Beach reads only live
+        // capsules attached to the body.
+        internal static CapsuleCollider[] RootHulls(Rigidbody body, bool includeDisabled) =>
+            body.GetComponents<CapsuleCollider>().Where(c => c != null && !c.isTrigger &&
+                (includeDisabled || c.enabled && c.attachedRigidbody == body)).ToArray();
 
         private static Footprint ReadHull(Rigidbody body, Vector3 position, Quaternion rotation)
         {
-            var hulls = RootHulls(body);
+            var hulls = RootHulls(body, false);
             if (hulls.Length != 1)
                 throw new InvalidOperationException("Crab Beach hull clearance requires one measurable root capsule on " + body.name + ".");
             var hull = hulls[0];
@@ -109,17 +124,31 @@ namespace NewBeginnings
                 direction < 0 || direction > 2 || scale.x == 0f || scale.y == 0f || scale.z == 0f)
                 throw new InvalidOperationException("Crab Beach hull capsule has invalid geometry.");
             var axis = direction == 0 ? Vector3.right : direction == 1 ? Vector3.up : Vector3.forward;
-            var axialScale = Math.Abs(scale[direction]);
-            var radialScale = Math.Max(Math.Abs(scale[(direction + 1) % 3]), Math.Abs(scale[(direction + 2) % 3]));
-            var worldRadius = radius * radialScale;
-            var halfSegment = Math.Max(0f, height * axialScale * 0.5f - worldRadius);
-            var worldCenter = position + rotation * Vector3.Scale(center, scale);
-            var offset = rotation * axis * halfSegment;
+            var hull = Measure(scale, center, radius, height, direction);
+            var worldCenter = position + rotation * hull.Center;
+            var offset = rotation * axis * hull.HalfSegment;
             var a = worldCenter + offset;
             var b = worldCenter - offset;
-            if (!Finite(a) || !Finite(b) || !Finite(worldRadius) || worldRadius <= 0f)
+            if (!Finite(a) || !Finite(b) || !Finite(hull.Radius) || hull.Radius <= 0f)
                 throw new InvalidOperationException("Crab Beach hull capsule overflowed its geometry.");
-            return new Footprint { A = new Vector2(a.x, a.z), B = new Vector2(b.x, b.z), Radius = worldRadius };
+            return new Footprint { A = new Vector2(a.x, a.z), B = new Vector2(b.x, b.z), Radius = hull.Radius };
+        }
+
+        internal static HullDimensions Measure(CapsuleCollider capsule, Vector3 scale) =>
+            Measure(scale, capsule.center, capsule.radius, capsule.height, capsule.direction);
+
+        // Radius scales by the larger cross-axis scale, length by the axial one.
+        internal static HullDimensions Measure(Vector3 scale, Vector3 center, float radius,
+            float height, int direction)
+        {
+            var radialScale = Math.Max(Math.Abs(scale[(direction + 1) % 3]), Math.Abs(scale[(direction + 2) % 3]));
+            var worldRadius = radius * radialScale;
+            var length = Math.Max(height * Math.Abs(scale[direction]), 2f * worldRadius);
+            return new HullDimensions
+            {
+                Center = Vector3.Scale(center, scale), Radius = worldRadius, Length = length,
+                HalfSegment = Math.Max(0f, length * 0.5f - worldRadius)
+            };
         }
 
         internal static bool TryDirections(Vector3 right, Vector3 forward, Vector3 marker,
