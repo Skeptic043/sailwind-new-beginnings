@@ -21,7 +21,6 @@ namespace NewBeginnings
         private static ResolvedStart selectedStart;
         private static Line[] lines;
         private static int generation;
-        private static bool settled;
 
         private sealed class Line
         {
@@ -36,12 +35,6 @@ namespace NewBeginnings
             ++generation;
             selectedStart = null;
             lines = null;
-            settled = false;
-        }
-
-        internal static void MarkSettled(ResolvedStart selected)
-        {
-            if (ReferenceEquals(selectedStart, selected)) settled = true;
         }
 
         internal static void Arm(StartMenu menu, ResolvedStart selected,
@@ -78,7 +71,7 @@ namespace NewBeginnings
             while (token == generation && Plugin.Instance != null)
             {
                 // Native Update resets rope length when the hull becomes dynamic.
-                // Run after that Update, and after our final placement pass.
+                // Run after that Update.
                 yield return new WaitForEndOfFrame();
                 if (token != generation || Plugin.Instance == null) yield break;
                 var complete = false;
@@ -102,10 +95,10 @@ namespace NewBeginnings
                         // Ownership failure must not leave startup work alive.
                         // Native playing can precede the F prompt; time reading
                         // that prompt does not spend either startup deadline.
-                        if (!Plugin.Instance.WaitingForPlayerInput()) gameplayElapsed += elapsed;
+                        if (!StartArrival.WaitingForPlayerInput()) gameplayElapsed += elapsed;
                         if (!GameState.currentlyLoading) sawGameplay = true;
                     }
-                    else if (!Plugin.Instance.WaitingForPlayerInput())
+                    else if (!StartArrival.WaitingForPlayerInput())
                     {
                         preplayElapsed += elapsed;
                         if (preplayElapsed >= 90f)
@@ -132,7 +125,7 @@ namespace NewBeginnings
                         // cloth/line-renderer policy still decide visibility.
                         var effect = line.Rope.GetComponent<RopeEffect>();
                         if (effect != null) DistanceTimerField.SetValue(effect, 0f);
-                        if (!line.LengthApplied && ready && settled && !selected.Body.isKinematic &&
+                        if (!line.LengthApplied && ready && !selected.Body.isKinematic &&
                             line.Rope.isActiveAndEnabled && line.Dock.gameObject.activeInHierarchy &&
                             !(bool)WasKinematicField.GetValue(line.Rope))
                         {
@@ -213,12 +206,6 @@ namespace NewBeginnings
         private static class CastOff
         {
             private static void Prefix(PickupableBoatMooringRope __instance) => Relinquish(__instance);
-        }
-
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel();
         }
     }
 }

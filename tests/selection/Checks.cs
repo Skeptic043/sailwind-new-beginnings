@@ -121,14 +121,14 @@ internal static class Checks
     {
         var path = NewPath("chronos");
         var p = Plugin.Start(path);
-        Check(!p.Settings.PortPools.Contains(PortPool.Chronos), "Chronos unexpectedly changed default regions");
+        Check(!p.Settings.EnableChronos && p.Settings.PortPools.SetEquals(new[] { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin }), "Chronos unexpectedly changed default regions");
         Cm(p, "Random Port Pools", "Chronos", true);
-        Check(p.Settings.PortPools.Contains(PortPool.Chronos), "live Chronos config change not applied");
+        Check(p.Settings.EnableChronos && !p.Settings.PortPools.Contains(PortPool.Chronos), "live Chronos config change not applied");
         foreach (var key in new[] { "AlAnkh", "EmeraldArchipelago", "Aestrin", "FireFishLagoon", "SmallIslands" })
             Cm(p, "Random Port Pools", key, false);
         p.MenuSave();
         p = Plugin.Start(path);
-        Check(p.Settings.PortPools.SetEquals(new[] { PortPool.Chronos }), "Chronos-only pool lost on restart");
+        Check(p.Settings.PortPools.Count == 0 && p.Settings.EnableChronos, "Chronos-only pool lost on restart");
         var catalog = new SelectionCatalog();
         var ordinary = new PortChoice
         {
@@ -151,6 +151,7 @@ internal static class Checks
         Check(catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out var selected, out _) && selected.Port == ordinary, "Chronos pool selected Fort with mod ports disabled");
         p.Settings.IncludeModPorts = true;
         p.Settings.PortPools.Clear();
+        p.Settings.EnableChronos = false;
         Check(catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out selected, out _) && selected.Port == fort, "mod-only pool admitted ordinary Chronos");
         p.Settings.RandomPort = false;
         p.Settings.IncludeModPorts = false;
@@ -461,7 +462,7 @@ internal static class Checks
             Key = "vanilla:pirate",
             IdentityName = "site:pirate",
             Pool = PortPool.SmallIslands,
-            HiddenKey = "pirate",
+            Hidden = HiddenSite.Pirate,
             HasShipyard = true
         };
         var saffron = new PortChoice
@@ -470,7 +471,7 @@ internal static class Checks
             Key = "native:33",
             IdentityName = "Saffron",
             Pool = PortPool.SmallIslands,
-            HiddenKey = "saffron"
+            Hidden = HiddenSite.Saffron
         };
         var neverdin = new PortChoice
         {
@@ -487,7 +488,7 @@ internal static class Checks
             PortIndex = 21,
             BoatSceneIndex = 10
         };
-        s.PortPools.Add(PortPool.Chronos);
+        s.EnableChronos = true;
         var e = new IndividualExclusions();
         StartPair chosen;
         string reason;
@@ -505,6 +506,7 @@ internal static class Checks
         s.RandomPort = true;
         s.IncludeModPorts = true;
         s.PortPools.Clear();
+        s.EnableChronos = false;
         var seen = new HashSet<PortChoice>();
         for (var seed = 0; seed < 50; seed++)
         {

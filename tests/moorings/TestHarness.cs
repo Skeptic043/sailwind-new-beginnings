@@ -135,13 +135,6 @@ public class StartMenu
 {
 }
 
-public class SaveLoadManager
-{
-    public void LoadGame()
-    {
-    }
-}
-
 public class GameState
 {
     public static bool playing;
@@ -169,13 +162,17 @@ namespace NewBeginnings
         internal static bool IsSelectionStillActive(StartMenu m, ResolvedStart s) => Active;
     }
 
+    internal static class StartArrival
+    {
+        internal static bool WaitingForPlayerInput() => Plugin.Instance.Waiting;
+    }
+
     internal class Plugin
     {
         internal static Plugin Instance = new Plugin();
         internal IEnumerator Run;
         internal int DebugLogs, Warnings;
         internal bool Waiting;
-        internal bool WaitingForPlayerInput() => Waiting;
         public void StartCoroutine(IEnumerator run)
         {
             Run = run;
@@ -240,7 +237,6 @@ class TestHarness
     {
         GameState.playing = true;
         GameState.currentlyLoading = false;
-        StarterMooring.MarkSettled(selected);
     }
 
     static void Patch(string name, params object[] args) => typeof(StarterMooring).GetNestedType(name, BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, args);
@@ -289,9 +285,6 @@ class TestHarness
         {
             x = 1006.74f
         };
-        Step();
-        Check(front.currentRopeLengthSquared == 72900 && Plugin.Instance.DebugLogs == 0, "world movement to live endpoints does not bypass final-settle gate");
-        StarterMooring.MarkSettled(selected);
         Step();
         Check(front.currentRopeLengthSquared == 72900 && Plugin.Instance.DebugLogs == 0, "final placement still waits for native kinematic reset");
         front.FinishNativeKinematicReset();
@@ -343,23 +336,13 @@ class TestHarness
         Check(Plugin.Instance.Warnings == 1 && front.currentRopeLengthSquared == 72900 && !Step(), "hidden island geometry expires once with no writes");
         Arm();
         Ready();
-        Patch("CancelOnLoad");
+        // A saved-game load reaches this through FixedStart.CancelStartWork.
+        StarterMooring.Cancel();
         Check(!Step() && front.currentRopeLengthSquared == 72900, "saved load cancels pending slack");
         Arm();
         Ready();
         FixedStart.Active = false;
         Check(!Step() && front.currentRopeLengthSquared == 72900, "changed selection cancels operation");
-        Arm();
-        Ready();
-        StarterMooring.MarkSettled(new ResolvedStart());
-        Step();
-        Check(front.currentRopeLengthSquared == 25, "unrelated settle notification cannot clear completed settle");
-        Arm();
-        GameState.playing = true;
-        GameState.currentlyLoading = false;
-        StarterMooring.MarkSettled(new ResolvedStart());
-        Step();
-        Check(front.currentRopeLengthSquared == 72900, "unrelated settle notification cannot authorize this hull");
         Arm();
         Ready();
         selected.Boat.Purchased = false;

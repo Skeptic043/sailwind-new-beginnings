@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using HarmonyLib;
 using UnityEngine;
 
 namespace NewBeginnings
@@ -13,31 +12,19 @@ namespace NewBeginnings
         private const float ReadinessTimeout = 90f;
         private static int generation;
         private static ResolvedStart pending;
-        private static bool settled;
 
-        internal static void Cancel()
-        {
-            Cancel("startup operation reset");
-        }
-
-        private static void Cancel(string reason)
+        internal static void Cancel(string reason = null)
         {
             var selected = pending;
             ClearPending();
             if (selected != null)
-                Plugin.Instance?.Report($"Startup hull repair cancelled for boat {BoatLabel(selected)}: {reason}.");
+                Plugin.Instance?.Report($"Startup hull repair cancelled for boat {BoatLabel(selected)}: {reason ?? "startup operation reset"}.");
         }
 
         private static void ClearPending()
         {
             ++generation;
             pending = null;
-            settled = false;
-        }
-
-        internal static void MarkSettled(ResolvedStart selected)
-        {
-            if (ReferenceEquals(pending, selected)) settled = true;
         }
 
         internal static void Arm(StartMenu menu, ResolvedStart selected)
@@ -54,7 +41,7 @@ namespace NewBeginnings
             var token = generation;
             try
             {
-                Plugin.Instance.Report($"Startup hull repair scheduled for boat {BoatLabel(selected)}; waiting for settled ownership and active physics.");
+                Plugin.Instance.DebugLog($"Startup hull repair scheduled for boat {BoatLabel(selected)}; waiting for settled ownership and active physics.");
                 Plugin.Instance.StartCoroutine(RepairAfterPlacement(menu, selected, damage, token));
             }
             catch (Exception exception)
@@ -62,12 +49,6 @@ namespace NewBeginnings
                 Cancel("coroutine could not be scheduled");
                 Plugin.Instance?.Warn("Startup hull repair could not be scheduled: " + exception.Message);
             }
-        }
-
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel("saved-game load");
         }
 
         private static string BoatLabel(ResolvedStart selected) => selected?.Saveable != null
@@ -107,8 +88,8 @@ namespace NewBeginnings
                             if (GameState.playing) sawGameplay = true;
                             var purchased = selected.Boat.isPurchased();
                             if (purchased) sawOwnership = true;
-                            var awaitingInput = Plugin.Instance.WaitingForPlayerInput();
-                            var ready = settled && GameState.playing && !awaitingInput &&
+                            var awaitingInput = StartArrival.WaitingForPlayerInput();
+                            var ready = GameState.playing && !awaitingInput &&
                                 purchased && !selected.Body.isKinematic &&
                                 selected.Body.gameObject.activeInHierarchy;
                             if (!ready)
@@ -120,13 +101,13 @@ namespace NewBeginnings
                                 if (repairAt >= 0f && !reportedReset)
                                 {
                                     reportedReset = true;
-                                    Plugin.Instance.Report($"Startup hull repair waiting again for boat {BoatLabel(selected)}; readiness changed, so its eight-second delay will restart.");
+                                    Plugin.Instance.DebugLog($"Startup hull repair waiting again for boat {BoatLabel(selected)}; readiness changed, so its eight-second delay will restart.");
                                 }
                                 repairAt = -1f;
                                 if (!awaitingInput) waitingElapsed += elapsed;
                                 if (waitingElapsed >= ReadinessTimeout)
                                 {
-                                    stopReason = $"readiness timed out after 90 seconds (settled={settled}, playing={GameState.playing}, owned={purchased}, kinematic={selected.Body.isKinematic}, active={selected.Body.gameObject.activeInHierarchy})";
+                                    stopReason = $"readiness timed out after 90 seconds (playing={GameState.playing}, owned={purchased}, kinematic={selected.Body.isKinematic}, active={selected.Body.gameObject.activeInHierarchy})";
                                     stop = true;
                                 }
                             }
@@ -136,7 +117,7 @@ namespace NewBeginnings
                                 if (!reportedDelay)
                                 {
                                     reportedDelay = true;
-                                    Plugin.Instance.Report($"Startup hull repair delay started for boat {BoatLabel(selected)}; repair is due after eight seconds of readiness.");
+                                    Plugin.Instance.DebugLog($"Startup hull repair delay started for boat {BoatLabel(selected)}; repair is due after eight seconds of readiness.");
                                 }
                             }
                             else if (now >= repairAt)

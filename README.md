@@ -24,6 +24,8 @@ When added ports are detected, Mod ports appears with the Random Port pool check
 
 Better Ports' Bottleneck Isle is discovered automatically. Added locations without a normal starting berth are checked for room for the selected boat, a dry landing and the supplies. If a check fails, the start carries on with the closest fit it found and writes a warning to the log.
 
+Once you press Continue, New Beginnings never replaces your chosen start with Sailwind's regional start. If no valid start is available, Continue stays unavailable and the menu shows why.
+
 At Siren Song, your starting boat uses the cleats at the end of the dock. Other boats keep their normal positions. The game's recovery berth is unchanged.
 
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
@@ -35,7 +37,7 @@ Secret islands in the Spawn tab enables Chronos, Pirate Island and Saffron Islan
 
 Pirate Island is the far-western hideout in Al'Ankh waters. The secret islands start disabled, and Mod ports does not enable them. The grouped switch is also available in the Configuration Manager spoiler options. Existing individual location settings remain saved.
 
-At Pirate Island, Small boats can use the existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land. Your boat waits in open water off the east coast and is held in place until you board it. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
+At Pirate Island, Small boats use the existing docks when they can moor there. Other boats, and a Small boat that cannot moor, start farther offshore and are held in place until you board them. You and your supplies still start on the dock. At Saffron, you and your supplies start on dry land. Your boat waits in open water off the east coast and is held in place until you board it. These additional starts do not add recovery destinations. Shipwreck recovery continues to use the game's existing recovery ports.
 
 At Fort Juniper, the ordinary start places your boat alongside the open side of the lower-left dock with you and your supplies on the pier. Use shipyard berth instead uses Old Chronian's authored shipyard release berth and places you and your supplies on the same dock near the boat. The ordinary start uses mooring lines when they can reach the cleats and otherwise holds the boat in place until you board it.
 
@@ -45,7 +47,7 @@ At Fort Juniper, the ordinary start places your boat alongside the open side of 
 
 With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Regional supplies establish the layout first. Suitable added boxes can stack on the starting table, the larger regional food crate or other boxes and settle under the game's physics, while larger or awkward supplies are placed beside them. Each stack is limited to three placed items, counting the table or larger food crate when one forms its base. A dock seam or nearby fixed prop will not withhold the complete group when supported positions remain available. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 
-Boats that need to be moved away from their normal starting locations receive up to 3 metres of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance and up to 5 metres of extra line to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
+Boats that need to be moved away from their normal starting locations receive up to 1 metre of extra mooring line, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
 At Siren Song, the Cog for sale moves to the cleats at the end of the dock so your boat can use the normal berth. This also happens when you load a save with your boat in that berth. The move uses that fixed position even if the dock is crowded.
 

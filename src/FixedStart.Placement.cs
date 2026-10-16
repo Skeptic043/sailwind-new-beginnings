@@ -8,29 +8,25 @@ namespace NewBeginnings
 {
     internal static partial class FixedStart
     {
-        private static CustomStartSnapshot pendingCustomSnapshot;
-        private static Action customCleanup;
-        private static int customGeneration;
-        private static int customFlightGeneration = -1;
-        internal static bool CustomStartInFlight => customFlightGeneration == customGeneration;
+        private static StartSnapshot pendingSnapshot;
+        private static Action startCleanup;
+        private static int startGeneration;
+        private static int flightGeneration = -1;
+        internal static bool StartInFlight => flightGeneration == startGeneration;
         private static float startSelectedAt = -1f;
 
         internal static bool TryGetStartBlock(out string reason)
         {
-            reason = CustomStartInFlight ? "A starting location is already being prepared." : null;
+            reason = StartInFlight ? "A starting location is already being prepared." : null;
             return reason != null;
         }
 
         private static readonly System.Reflection.MethodInfo MovePlayerFactory = AccessTools.Method(typeof(StartMenu), "MovePlayerToStartPos");
-        private static readonly System.Reflection.MethodInfo AnchorGroundedMethod = AccessTools.Method(typeof(Anchor), "IsTouchingGround");
-        private static readonly System.Reflection.MethodInfo SetAnchorMethod = AccessTools.Method(typeof(Anchor), "SetAnchor");
         private static readonly System.Reflection.MethodInfo ReleaseAnchorMethod = AccessTools.Method(typeof(Anchor), "ReleaseAnchor");
         private static readonly System.Reflection.FieldInfo IslandMenuField = AccessTools.Field(typeof(StartMenu), "chooseIslandUI");
         private static readonly System.Reflection.FieldInfo LogoField = AccessTools.Field(typeof(StartMenu), "logo");
         private static readonly System.Reflection.FieldInfo CursorEnabledField = AccessTools.Field(typeof(MouseLook), "cursorEnabled");
         private static readonly System.Reflection.FieldInfo ControllerPointerField = AccessTools.Field(typeof(MouseButtonPointer), "controllerPointer");
-        private static bool AnchorGrounded(Anchor anchor) => anchor != null && AnchorGroundedMethod != null &&
-            (bool)AnchorGroundedMethod.Invoke(anchor, null);
 
         // Startup timing spans every mod's work, not only New Beginnings.
         internal static void MarkStartSelected() => startSelectedAt = Time.realtimeSinceStartup;
@@ -45,7 +41,7 @@ namespace NewBeginnings
             startSelectedAt = -1f;
         }
 
-        private static void CleanupCustom(Action cleanup)
+        private static void CleanupStart(Action cleanup)
         {
             try { cleanup(); }
             catch (Exception exception) { Plugin.Instance?.Error("A disappeared object interrupted starting-location cleanup.", exception); }
@@ -77,22 +73,50 @@ namespace NewBeginnings
             }
         }
 
-        internal static void CancelCustomStart()
+        internal static void CancelStart()
         {
             StarterOwnership.Cancel();
-            PirateStationKeeper.RemoveActive();
-            ++customGeneration;
-            var cleanup = customCleanup; customCleanup = null;
-            var snapshot = pendingCustomSnapshot;
-            pendingCustomSnapshot = null;
+            OffshoreHold.RemoveActive();
+            ++startGeneration;
+            var cleanup = startCleanup; startCleanup = null;
+            var snapshot = pendingSnapshot;
+            pendingSnapshot = null;
             cleanup?.Invoke();
-            CleanupCustom(() => snapshot?.Restore("Starting-location preparation was cancelled."));
+            CleanupStart(() => snapshot?.Restore("Starting-location preparation was cancelled."));
         }
 
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
+        // The one owner of "cancel everything for the current start". Each
+        // subsystem keeps its own Arm/Cancel and generation; this only fixes
+        // which of them are cancelled and in what order. CancelStart runs
+        // first, so an in-flight placement rolls back before the armed work
+        // it scheduled is cancelled.
+        internal static void CancelStartWork(string reason = null)
+        {
+            CancelStart();
+            CancelArmedSystems(reason);
+        }
+
+        // Also run by an in-flight start's cleanup, which CancelStart may
+        // invoke, so it must not call CancelStart itself. Every Cancel is
+        // idempotent; a second pass after that cleanup changes nothing.
+        private static void CancelArmedSystems(string reason = null)
+        {
+            CleanupStart(StarterMooring.Cancel);
+            CleanupStart(() => StarterBoatRepair.Cancel(reason));
+            CleanupStart(StartArrival.CancelTracking);
+            CleanupStart(StartArrival.ClearSite);
+            CleanupStart(StarterCargo.Disarm);
+            CleanupStart(StartingValues.Cancel);
+            CleanupStart(StarterOwnership.Cancel);
+            CleanupStart(LeopardStarterRig.Cancel);
+        }
+
+        // Loading a save never arms startup work. Cancel an interrupted
+        // new-game start before native loading raises its own justStarted.
+        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
         private static class CancelBeforeLoad
         {
-            private static void Prefix() => CancelCustomStart();
+            private static void Prefix() => CancelStartWork("saved-game load");
         }
 
         // Native FadeIslandMenu owns a separate Juicebox tween and a delayed
@@ -100,17 +124,17 @@ namespace NewBeginnings
         // Hide this one menu immediately so that restore has no foreign
         // animation to race.
         [HarmonyPatch(typeof(StartMenu), "DisableIslandMenu")]
-        private static class CustomMenuHide
+        private static class StartMenuHide
         {
             private static bool Prefix(StartMenu __instance)
             {
-                return pendingCustomSnapshot == null || !pendingCustomSnapshot.Hide(__instance);
+                return pendingSnapshot == null || !pendingSnapshot.Hide(__instance);
             }
         }
 
         // Captured before StartNewGame's currency/region/menu writes. There are
         // no ownership writes in that method after its coroutine factory call.
-        private sealed class CustomStartSnapshot
+        private sealed class StartSnapshot
         {
             private readonly StartMenu menu;
             private readonly Transform observer, controller, observerParent, controllerParent;
@@ -132,7 +156,7 @@ namespace NewBeginnings
             private readonly Transform pointer;
             private bool restored;
 
-            internal CustomStartSnapshot(StartMenu menu, int originalRegion)
+            internal StartSnapshot(StartMenu menu, int originalRegion)
             {
                 this.menu = menu;
                 if (!TryGetNativeStartActors(menu, out observer, out var actor))
@@ -215,14 +239,14 @@ namespace NewBeginnings
 
         // Keep the original factory signature, but never replace an accepted
         // selection with the regional starter when its setup cannot complete.
-        internal static bool TryPreparePendingCustom(StartMenu menu, Transform nativeStart, out IEnumerator sequence,
+        internal static bool TryPreparePendingStart(StartMenu menu, out IEnumerator sequence,
             Func<Transform, IEnumerator> continuation = null)
         {
             sequence = null;
-            if (pending == null || !pending.UsesCustomBerth || !ReferenceEquals(menu, pendingMenu)) return false;
-            var pair = pending; var options = pendingOptions; var snapshot = pendingCustomSnapshot;
-            pending = null; pendingMenu = null; pendingOptions = null; pendingCustomSnapshot = null;
-            sequence = PrepareCustomStart(menu, pair, options, snapshot, nativeStart, continuation);
+            if (pending == null || !ReferenceEquals(menu, pendingMenu)) return false;
+            var pair = pending; var options = pendingOptions; var snapshot = pendingSnapshot;
+            pending = null; pendingMenu = null; pendingOptions = null; pendingSnapshot = null;
+            sequence = PrepareStart(menu, pair, options, snapshot, continuation);
             return true;
         }
 
@@ -232,14 +256,14 @@ namespace NewBeginnings
         // reported as an incomplete start, never a different starter. Only a real
         // cancellation (a saved-game load, another new game or plugin
         // teardown) unwinds the selected start.
-        private static IEnumerator PrepareCustomStart(StartMenu menu, StartPair pair,
-            StartingOptionsSettings options, CustomStartSnapshot snapshot, Transform nativeStart,
+        private static IEnumerator PrepareStart(StartMenu menu, StartPair pair,
+            StartingOptionsSettings options, StartSnapshot snapshot,
             Func<Transform, IEnumerator> continuation)
         {
-            var generation = customGeneration;
-            customFlightGeneration = generation;
+            var generation = startGeneration;
+            flightGeneration = generation;
             const string cancelled = "Starting-location preparation was cancelled.";
-            CustomPlacement placement = null;
+            StartPlacement placement = null;
             IEnumerator native = null;
             var committed = false;
             var cleaned = false;
@@ -252,14 +276,13 @@ namespace NewBeginnings
                 catch (Exception exception) { Plugin.Instance?.Error("Boat rollback could not fully restore a disappeared scene object.", exception); }
                 finally
                 {
-                    StartupProfiler.Cancel();
-                    DisarmCustomStart();
-                    CleanupCustom(() => snapshot?.Restore(cancelled));
+                    CancelArmedSystems();
+                    CleanupStart(() => snapshot?.Restore(cancelled));
                     ClearStartTiming();
                     Plugin.Instance?.Warn(cancelled);
                 }
             };
-            customCleanup = cleanup;
+            startCleanup = cleanup;
             try
             {
                 Transform target = null;
@@ -273,7 +296,7 @@ namespace NewBeginnings
                     snapshot.Approach(pair.Port);
                     var deadline = Time.realtimeSinceStartup + 30f;
                     var readyFrame = -1;
-                    while (generation == customGeneration && menu != null && !GameState.currentlyLoading &&
+                    while (generation == startGeneration && menu != null && !GameState.currentlyLoading &&
                         StartDestinations.IsCurrent(pair.Port) && Time.realtimeSinceStartup < deadline)
                     {
                         if (StartDestinations.SceneryReady(pair.Port))
@@ -284,52 +307,22 @@ namespace NewBeginnings
                         else readyFrame = -1;
                         yield return null;
                     }
-                    if (generation != customGeneration || menu == null || GameState.currentlyLoading) yield break;
+                    if (generation != startGeneration || menu == null || GameState.currentlyLoading) yield break;
                     if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
                         Plugin.Instance?.Warn("The selected island scenery did not report ready" + SinceSelection() +
                             ". Preparing the start anyway.");
-                    else Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
-                    var profiled = StartupProfiler.Enter();
-                    try { placement = TryPrepareCustom(menu, pair, options); }
-                    finally { StartupProfiler.Exit(profiled); }
+                    else Plugin.Instance?.DebugLog("Starting-location scenery ready" + SinceSelection() + ".");
+                    placement = TryPrepareStart(menu, pair, options);
                     if (placement == null) yield break;
-                    if (placement != null && placement.Selected.Berth.Anchored)
-                    {
-                        var anchor = placement.Selected.Ropes.anchor;
-                        var anchorDeadline = Time.realtimeSinceStartup + 4f;
-                        // OnLoad stores the normalized length. Native Update applies
-                        // it to the physical joint, including when contact was immediate.
-                        yield return null;
-                        while (generation == customGeneration && anchor != null && !AnchorGrounded(anchor) &&
-                            Time.realtimeSinceStartup < anchorDeadline && !GameState.currentlyLoading)
-                            yield return new WaitForFixedUpdate();
-                        if (generation != customGeneration || GameState.currentlyLoading) yield break;
-                        if (anchor == null || !AnchorGrounded(anchor))
-                        {
-                            Plugin.Instance?.Warn("The anchor did not report seabed contact. The boat stays at its planned anchorage and the start continues.");
-                            placement.ReleaseHull();
-                        }
-                        else if (!placement.SecureAnchor(out var anchorProblem))
-                        {
-                            Plugin.Instance?.Warn("The anchor could not be secured (" + anchorProblem +
-                                "). The boat stays at its planned anchorage and the start continues.");
-                            placement.ReleaseHull();
-                        }
-                    }
                     if (placement != null)
                     {
-                        profiled = StartupProfiler.Enter();
-                        try
+                        if (placement.Commit(out var placed, out var problem)) target = placed;
+                        else
                         {
-                            if (placement.Commit(out var placed, out var problem)) target = placed;
-                            else
-                            {
-                                Plugin.Instance?.Error("The selected start cannot be handed to Sailwind (" + problem +
-                                    "). No regional start was substituted.", null);
-                                yield break;
-                            }
+                            Plugin.Instance?.Error("The selected start cannot be handed to Sailwind (" + problem +
+                                "). No regional start was substituted.", null);
+                            yield break;
                         }
-                        finally { StartupProfiler.Exit(profiled); }
                     }
                 }
                 if (target == null)
@@ -349,7 +342,7 @@ namespace NewBeginnings
                 var warnedBoat = false;
                 // Keep cancellation available until the native iterator actually
                 // grants the boat, rather than only until its IEnumerator exists.
-                while (generation == customGeneration && menu != null && !GameState.currentlyLoading)
+                while (generation == startGeneration && menu != null && !GameState.currentlyLoading)
                 {
                     if (placement != null && !warnedOffshore && placement.Selected.Berth.OffshoreHeld &&
                         (!StartDestinations.IsCurrent(placement.Selected.Destination) || placement.Selected.Body == null ||
@@ -366,31 +359,31 @@ namespace NewBeginnings
                         Plugin.Instance?.Warn("The selected boat became unavailable before the native grant. The start continues.");
                     }
                     if (!native.MoveNext()) { finished = true; break; }
-                    if (!committed && Granted(menu, placement))
+                    if (!committed && Granted(placement))
                     {
-                        committed = true; customCleanup = null;
-                        Plugin.Instance?.Report("Starting boat granted" + SinceSelection() + ".");
+                        committed = true; startCleanup = null;
+                        Plugin.Instance?.DebugLog("Starting boat granted" + SinceSelection() + ".");
                     }
                     yield return native.Current;
                 }
-                if (Granted(menu, placement)) { committed = true; customCleanup = null; }
+                if (Granted(placement)) { committed = true; startCleanup = null; }
                 else if (finished)
                     Plugin.Instance?.Error("The native start sequence ended without granting the selected boat. This start is incomplete.", null);
             }
             finally
             {
-                if (Granted(menu, placement)) committed = true;
-                if (ReferenceEquals(customCleanup, cleanup)) customCleanup = null;
+                if (Granted(placement)) committed = true;
+                if (ReferenceEquals(startCleanup, cleanup)) startCleanup = null;
                 try { (native as IDisposable)?.Dispose(); }
                 catch (Exception exception) { Plugin.Instance?.Error("Native start iterator cleanup failed.", exception); }
                 try
                 {
-                    if (generation != customGeneration || menu == null || GameState.currentlyLoading) cleanup();
+                    if (generation != startGeneration || menu == null || GameState.currentlyLoading) cleanup();
                     else if (!finished && !committed)
                     {
                         // An exception or an external stop ended the sequence.
                         // Leave the start as placed, without temporary holds.
-                        CleanupCustom(() => placement?.ReleaseHull());
+                        CleanupStart(() => placement?.ReleaseHull());
                         Plugin.Instance?.Warn("The start sequence stopped before it finished" + SinceSelection() +
                             ". The selected start was left as placed.");
                     }
@@ -398,67 +391,55 @@ namespace NewBeginnings
                 finally
                 {
                     StarterOwnership.Cancel(placement?.Selected);
-                    if (customFlightGeneration == generation) customFlightGeneration = -1;
+                    if (flightGeneration == generation) flightGeneration = -1;
                 }
             }
         }
 
-        private static bool Granted(StartMenu menu, CustomPlacement placement)
+        private static bool Granted(StartPlacement placement)
         {
             if (placement != null) return placement.Selected.Boat != null && placement.Selected.Boat.isPurchased();
             return false;
         }
 
-        private static void DisarmCustomStart()
-        {
-            CleanupCustom(() => Plugin.Instance?.CancelBoatSettle());
-            CleanupCustom(() => Plugin.Instance?.CancelPlayerStartTracking());
-            CleanupCustom(() => Plugin.Instance?.ClearDocksideSurface());
-            CleanupCustom(StarterCargo.Disarm);
-            CleanupCustom(StartingValues.Cancel);
-            StarterOwnership.Cancel();
-            CleanupCustom(LeopardStarterRig.Cancel);
-        }
-
         // Returns null only when no placement could be produced. A problem that
         // still leaves a usable placement is logged and placement continues.
-        private static CustomPlacement TryPrepareCustom(StartMenu menu, StartPair pair, StartingOptionsSettings options)
+        private static StartPlacement TryPrepareStart(StartMenu menu, StartPair pair, StartingOptionsSettings options)
         {
-            CustomPlacement placement = null;
+            StartPlacement placement = null;
             try
             {
                 if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason, pair.UseShipyardBerth))
                     return NoPlacement("The selected start could not be planned: " + reason);
                 if (selected.Berth == null)
                 {
-                    // The selected yard disappeared during scenery loading.
-                    // Keep the ordinary berth selected by the existing native
-                    // resolver, while completing this already-started lifecycle.
-                    Plugin.Instance?.Warn("The shipyard berth is unavailable. Using this location's ordinary starting berth.");
+                    // An ordinary port, or a selected yard that disappeared
+                    // during scenery loading. Use the berth chosen by the
+                    // native resolver and keep its recovery marker as the
+                    // player and supply frame.
+                    if (pair.UseShipyardBerth)
+                        Plugin.Instance?.Warn("The shipyard berth is unavailable. Using this location's ordinary starting berth.");
                     selected.Berth = OrdinaryBerthPlan(selected);
-                    selected.Recovery = null;
                 }
                 if (selected.Boat != pair.Boat.Boat || selected.Saveable != pair.Boat.Saveable)
                     Plugin.Instance?.Warn("The selected boat changed while scenery loaded. Using the boat now loaded for that selection.");
                 if (selected.Ropes == null || selected.Ropes.anchor == null || selected.Ropes.GetAnchorController() == null)
                     return NoPlacement("The selected boat lacks native shipwreck-recovery components.");
-                if (selected.Berth.Anchored && (AnchorGroundedMethod == null || SetAnchorMethod == null || ReleaseAnchorMethod == null))
-                    return NoPlacement("The native anchor lifecycle methods are unavailable in this game build.");
                 selected.Options = options; selected.Size = pair.Boat.Size; selected.Menu = menu;
-                placement = new CustomPlacement(selected, menu);
+                placement = new StartPlacement(selected, menu);
                 placement.Move();
                 return placement;
             }
             catch (Exception exception)
             {
                 var failedPlacement = placement;
-                CleanupCustom(() => failedPlacement?.Rollback());
+                CleanupStart(() => failedPlacement?.Rollback());
                 Plugin.Instance?.Error("The selected boat could not be placed. This start is incomplete and no regional start was substituted.", exception);
                 return null;
             }
         }
 
-        private static CustomPlacement NoPlacement(string reason)
+        private static StartPlacement NoPlacement(string reason)
         {
             Plugin.Instance?.Error(reason + " This start is incomplete and no regional start was substituted.", null);
             return null;
@@ -468,17 +449,26 @@ namespace NewBeginnings
         {
             var native = selected.NativeBerth;
             var rotation = native != null ? selected.Body.rotation : selected.Recovery.boatPos.rotation;
-            var position = native != null ? selected.Body.position :
-                AdjustLargeBoatBerth(selected, GetBerthPosition(selected), rotation);
+            var position = native != null ? selected.Body.position : GetBerthPosition(selected);
+            if (native == null)
+            {
+                // Optional berth spacing never prevents the start. A failed
+                // adjustment keeps the position chosen before it.
+                try { position = BerthClearance.AdjustCrabBeach(selected, position); }
+                catch (Exception exception)
+                { Plugin.Instance?.Warn("Crab Beach berth clearance was skipped; the native berth is used. " + exception.Message); }
+                try { position = AdjustLargeBoatBerth(selected, position, rotation); }
+                catch (Exception exception)
+                { Plugin.Instance?.Warn("Large-boat berth distance was skipped; the unadjusted berth is used. " + exception.Message); }
+            }
             var shore = native != null ? native.ShorePosition : selected.Recovery.transform.position;
             var frame = selected.Destination.DockRoot;
             return new StartBerthPlan { Destination = selected.Destination, Frame = frame,
                 LocalPosition = frame.InverseTransformPoint(position), LocalRotation = Quaternion.Inverse(frame.rotation) * rotation,
                 LocalShorePosition = frame.InverseTransformPoint(shore),
+                Mode = native != null ? StartBerthMode.Preserved : StartBerthMode.Moored,
                 Front = selected.FrontMooring, Back = selected.BackMooring,
-                FrontSpring = selected.FrontMooring?.spring, BackSpring = selected.BackMooring?.spring,
-                FrontRope = native?.FrontRope, BackRope = native?.BackRope,
-                ClearanceVerified = false, DepartureVerified = false, LandingVerified = false };
+                FrontRope = native?.FrontRope, BackRope = native?.BackRope };
         }
 
         private static bool NativeRecoveryReady(out string reason)
@@ -491,7 +481,7 @@ namespace NewBeginnings
             return ready;
         }
 
-        private sealed class CustomPlacement
+        private sealed class StartPlacement
         {
             internal readonly ResolvedStart Selected;
             private readonly StartMenu menu;
@@ -511,12 +501,11 @@ namespace NewBeginnings
             private readonly PurchasableBoat[] starters;
             private readonly Transform starterBoat, lastBoat, lastOwnedBoat;
             private readonly Port lastPort;
-            private ProbeVelocityGuard guard;
-            private PirateStationKeeper stationKeeper;
+            private OffshoreHold offshoreHold;
             private PickupableBoatMooringRope frontRope, backRope;
             private bool moved, rolledBack, changedNative;
 
-            internal CustomPlacement(ResolvedStart selected, StartMenu menu)
+            internal StartPlacement(ResolvedStart selected, StartMenu menu)
             {
                 Selected = selected; this.menu = menu;
                 var body = selected.Body; parent = body.transform.parent;
@@ -545,9 +534,9 @@ namespace NewBeginnings
             internal void Move()
             {
                 var s = Selected;
-                if (!s.Berth.Revalidate(s.Body, s.Ropes, out var reason))
-                    Plugin.Instance?.Warn("The planned berth did not pass its final check (" + reason + "). The boat is placed there anyway.");
-                guard = new ProbeVelocityGuard(s.Saveable);
+                // The boat already lies at its own authored berth, as resolved
+                // this frame. Leave its hull, anchor and dock lines untouched.
+                if (s.Berth.Mode == StartBerthMode.Preserved) return;
                 moved = true;
                 if (anchorWasSet)
                     TryStartupSetup("release the starter anchor", () => ReleaseAnchorMethod.Invoke(s.Ropes.anchor, null));
@@ -556,17 +545,7 @@ namespace NewBeginnings
                 s.Body.transform.SetPositionAndRotation(s.Berth.Position, s.Berth.Rotation);
                 s.Body.position = s.Berth.Position; s.Body.rotation = s.Berth.Rotation;
                 s.Body.velocity = Vector3.zero; s.Body.angularVelocity = Vector3.zero;
-                if (s.Berth.Anchored)
-                {
-                    // Only the bounded contact wait holds the hull. Successful
-                    // completion releases it to normal native anchor physics.
-                    s.Body.isKinematic = true;
-                    anchorBody.rotation = s.Berth.AnchorModel.AnchorRotation;
-                    anchorBody.position = s.Berth.AnchorPosition;
-                    anchorBody.isKinematic = false;
-                    s.Ropes.anchor.OnLoad(false, s.Berth.AnchorLength);
-                }
-                else if (s.Berth.OffshoreHeld)
+                if (s.Berth.OffshoreHeld)
                 {
                     StowOffshoreAnchor();
                     if (s.Berth.Mode == StartBerthMode.ShipyardHeld &&
@@ -583,7 +562,7 @@ namespace NewBeginnings
                             frontRope = null; backRope = null;
                         }
                     }
-                    if (s.Berth.OffshoreHeld) stationKeeper = PirateStationKeeper.Attach(s.Body, s.Berth.Frame);
+                    if (s.Berth.OffshoreHeld) offshoreHold = OffshoreHold.Attach(s.Body, s.Berth.Frame);
                 }
                 else
                 {
@@ -604,7 +583,7 @@ namespace NewBeginnings
                 var s = Selected;
                 var rotation = s.Body.rotation * anchorBoatRotation;
                 var joint = AccessTools.Field(typeof(RopeControllerAnchor), "joint")?.GetValue(s.Ropes.GetAnchorController()) as ConfigurableJoint;
-                if (!PirateStationKeeper.TryStowedPosition(s.Body, anchorBody, joint, rotation, out var position))
+                if (!TryStowedPosition(s.Body, anchorBody, joint, rotation, out var position))
                     throw new InvalidOperationException("The native anchor joint cannot provide a finite stowed pose.");
                 // A deployed anchor's original pose belongs only to rollback.
                 // Retracting at the physical joint endpoint avoids a zero-length
@@ -619,32 +598,23 @@ namespace NewBeginnings
                 Physics.SyncTransforms();
             }
 
-            internal bool SecureAnchor(out string reason)
+            private static bool TryStowedPosition(Rigidbody hull, Rigidbody anchor, ConfigurableJoint joint,
+                Quaternion rotation, out Vector3 position)
             {
-                reason = null;
-                var s = Selected;
-                if (!AnchorGrounded(s.Ropes.anchor) || !StartDestinations.IsCurrent(s.Destination))
-                { reason = "The anchorage changed before native anchor setup."; return false; }
-                if (s.Berth.AnchorModel == null ||
-                    !s.Berth.AnchorModel.ReadyToSecure(s.Ropes, s.Body, s.Berth.AnchorLength,
-                        s.Berth.AnchorPosition, out reason)) return false;
-                try { SetAnchorMethod.Invoke(s.Ropes.anchor, null); }
-                catch (Exception exception)
-                {
-                    reason = "native anchor setup failed: " + (exception.InnerException ?? exception).Message;
-                    return false;
-                }
-                s.Body.isKinematic = bodyKinematic;
-                if (!s.Ropes.anchor.IsSet()) { reason = "the native anchor did not report set"; return false; }
-                return true;
+                position = default(Vector3);
+                if (hull == null || anchor == null || joint == null || joint.GetComponent<Rigidbody>() != anchor ||
+                    joint.connectedBody != hull || !IsFinite(rotation)) return false;
+                var endpoint = hull.transform.TransformPoint(joint.connectedAnchor);
+                var pivot = rotation * Vector3.Scale(joint.anchor, anchor.transform.lossyScale);
+                position = endpoint - pivot;
+                return IsFinite(endpoint) && IsFinite(pivot) && IsFinite(position);
             }
 
             // Release temporary holds when setup cannot finish, so the hull
             // returns to normal physics where it was placed.
             internal void ReleaseHull()
             {
-                if (Selected.Body != null) Selected.Body.isKinematic = bodyKinematic;
-                guard?.Restore(); guard = null;
+                if (moved && Selected.Body != null) Selected.Body.isKinematic = bodyKinematic;
             }
 
             internal bool Commit(out Transform target, out string reason)
@@ -655,7 +625,11 @@ namespace NewBeginnings
                     var s = Selected;
                     if (!StartDestinations.IsCurrent(s.Destination)) { reason = "the starting location is no longer loaded"; return false; }
                     if (!NativeRecoveryReady(out var recovery)) Plugin.Instance?.Warn(recovery + " The start continues.");
-                    var playerTarget = Plugin.Instance.MakeTemporaryStart(s, s.Berth.Rotation, s.Berth.ShorePosition, s.Berth.Position);
+                    // A relocated ordinary port keeps Sailwind's own berth marker as the
+                    // probe reference, so an occupied-berth or Crab Beach offset of
+                    // the hull does not turn the inland probe direction.
+                    var probeBerth = s.NativeBerth == null && s.Recovery != null ? s.Recovery.boatPos.position : s.Berth.Position;
+                    var playerTarget = StartArrival.MakeTarget(s, s.Berth.Rotation, s.Berth.ShorePosition, probeBerth);
                     target = playerTarget;
                     var replacement = (PurchasableBoat[])starters.Clone(); replacement[s.Region] = s.Boat;
                     changedNative = true;
@@ -664,17 +638,16 @@ namespace NewBeginnings
                     GameState.lastVisitedPort = s.Port;
                     StarterOwnership.Arm(s);
                     StartingValues.Arm(s);
-                    TryStartupSetup("track the player's landing", () => Plugin.Instance.BeginPlayerStartTracking(menu, playerTarget));
+                    TryStartupSetup("track the player's landing", () => StartArrival.BeginTracking(menu, playerTarget));
                     TryStartupSetup("prepare starter supplies", () => StarterCargo.Arm(s));
+                    // Only lines this start connected receive slack. A preserved
+                    // berth keeps its native lines as authored.
                     if (s.Berth.Mode == StartBerthMode.Moored && frontRope != null && backRope != null)
                     {
                         TryStartupSetup("settle starter moorings", () => StarterMooring.Arm(menu, s, frontRope, backRope));
                     }
                     TryStartupSetup("schedule starter hull repair", () => StarterBoatRepair.Arm(menu, s));
                     TryStartupSetup("prepare the starter rig", () => LeopardStarterRig.Arm(menu, s));
-                    guard?.Restore(); guard = null;
-                    TryStartupSetup("finish starter mooring setup", () => StarterMooring.MarkSettled(s));
-                    TryStartupSetup("finish starter hull setup", () => StarterBoatRepair.MarkSettled(s));
                     return true;
                 }
                 catch (Exception exception) { reason = "Starting-location handoff failed: " + exception.Message; return false; }
@@ -684,45 +657,41 @@ namespace NewBeginnings
             {
                 if (rolledBack) return;
                 rolledBack = true;
-                PirateStationKeeper.Remove(stationKeeper);
+                OffshoreHold.Remove(offshoreHold);
                 var s = Selected;
                 StarterOwnership.Cancel(s);
-                try
+                if (GameState.currentlyLoading) return;
+                if (changedNative)
                 {
-                    if (GameState.currentlyLoading) return;
-                    if (changedNative)
-                    {
-                        StartingBoatsField.SetValue(menu, starters); s.StarterSet.starterBoat = starterBoat;
-                        GameState.lastBoat = lastBoat; GameState.lastOwnedBoat = lastOwnedBoat; GameState.lastVisitedPort = lastPort;
-                    }
-                    if (!moved || s.Body == null) return;
-                    if (s.Ropes != null) s.Ropes.UnmoorAllRopes();
-                    if (s.Ropes?.anchor != null && s.Ropes.anchor.IsSet()) ReleaseAnchorMethod.Invoke(s.Ropes.anchor, null);
-                    s.Body.transform.SetParent(parent, false); s.Body.transform.localPosition = localPosition; s.Body.transform.localRotation = localRotation;
-                    s.Body.position = s.Body.transform.position; s.Body.rotation = s.Body.transform.rotation;
-                    s.Body.velocity = velocity; s.Body.angularVelocity = angularVelocity; s.Body.isKinematic = bodyKinematic;
-                    if (anchorBody != null)
-                    {
-                        anchorBody.transform.SetParent(anchorParent, false); anchorBody.transform.localPosition = anchorLocal; anchorBody.transform.localRotation = anchorRotation;
-                        anchorBody.position = anchorBody.transform.position; anchorBody.rotation = anchorBody.transform.rotation;
-                        anchorBody.velocity = anchorVelocity; anchorBody.angularVelocity = anchorAngularVelocity;
-                        anchorBody.isKinematic = anchorKinematic; anchorBody.drag = anchorDrag;
-                    }
-                    if (s.Ropes?.anchor != null && (!anchorWasSet || anchorBody != null))
-                        s.Ropes.anchor.OnLoad(anchorWasSet, anchorLength);
-                    foreach (var saved in ropePositions)
-                    {
-                        if (saved.Rope == null) continue;
-                        try
-                        {
-                            if (saved.Mooring != null) saved.Rope.MoorTo(saved.Mooring);
-                            else { saved.Rope.transform.SetParent(saved.Parent, false); saved.Rope.transform.localPosition = saved.Position; saved.Rope.transform.localRotation = saved.Rotation; }
-                        }
-                        catch (Exception exception) { Plugin.Instance?.Warn("An original mooring could not be restored: " + exception.Message); }
-                    }
-                    Physics.SyncTransforms();
+                    StartingBoatsField.SetValue(menu, starters); s.StarterSet.starterBoat = starterBoat;
+                    GameState.lastBoat = lastBoat; GameState.lastOwnedBoat = lastOwnedBoat; GameState.lastVisitedPort = lastPort;
                 }
-                finally { guard?.Restore(); guard = null; }
+                if (!moved || s.Body == null) return;
+                if (s.Ropes != null) s.Ropes.UnmoorAllRopes();
+                if (s.Ropes?.anchor != null && s.Ropes.anchor.IsSet()) ReleaseAnchorMethod.Invoke(s.Ropes.anchor, null);
+                s.Body.transform.SetParent(parent, false); s.Body.transform.localPosition = localPosition; s.Body.transform.localRotation = localRotation;
+                s.Body.position = s.Body.transform.position; s.Body.rotation = s.Body.transform.rotation;
+                s.Body.velocity = velocity; s.Body.angularVelocity = angularVelocity; s.Body.isKinematic = bodyKinematic;
+                if (anchorBody != null)
+                {
+                    anchorBody.transform.SetParent(anchorParent, false); anchorBody.transform.localPosition = anchorLocal; anchorBody.transform.localRotation = anchorRotation;
+                    anchorBody.position = anchorBody.transform.position; anchorBody.rotation = anchorBody.transform.rotation;
+                    anchorBody.velocity = anchorVelocity; anchorBody.angularVelocity = anchorAngularVelocity;
+                    anchorBody.isKinematic = anchorKinematic; anchorBody.drag = anchorDrag;
+                }
+                if (s.Ropes?.anchor != null && (!anchorWasSet || anchorBody != null))
+                    s.Ropes.anchor.OnLoad(anchorWasSet, anchorLength);
+                foreach (var saved in ropePositions)
+                {
+                    if (saved.Rope == null) continue;
+                    try
+                    {
+                        if (saved.Mooring != null) saved.Rope.MoorTo(saved.Mooring);
+                        else { saved.Rope.transform.SetParent(saved.Parent, false); saved.Rope.transform.localPosition = saved.Position; saved.Rope.transform.localRotation = saved.Rotation; }
+                    }
+                    catch (Exception exception) { Plugin.Instance?.Warn("An original mooring could not be restored: " + exception.Message); }
+                }
+                Physics.SyncTransforms();
             }
         }
     }

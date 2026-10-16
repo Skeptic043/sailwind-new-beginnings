@@ -9,7 +9,6 @@
   <ItemGroup>
     <Compile Include="../common/SceneDoubles.cs" />
     <Compile Include="NativeYardGeometry.cs" />
-    <Compile Include="../../src/StartAnchorModel.cs" />
     <Compile Include="PirateCandidates.generated.cs" />
   </ItemGroup>
 </Project>

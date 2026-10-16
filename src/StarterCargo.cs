@@ -87,8 +87,6 @@ namespace NewBeginnings
             new Dictionary<ShipItem, Quaternion>(ReferenceComparer);
         private static readonly Dictionary<ShipItem, string> AuthoredNames =
             new Dictionary<ShipItem, string>(ReferenceComparer);
-        private static readonly List<Transform> BoatWalkRoots =
-            new List<Transform>();
 
         private static ResolvedStart armed;
         private static float readyAt = -1f;
@@ -108,15 +106,10 @@ namespace NewBeginnings
             Plugin.Instance?.DebugLog($"Dockside starter supplies armed for region {selected.Region}: {Captured.Count} native items captured.");
         }
 
-        internal static bool Armed => armed != null;
-        internal static string Stage => armed != null ? placementStage ?? "waiting for dockside supplies" : null;
-
         internal static void Disarm()
         {
             if (armed != null && placementStage != null)
                 Plugin.Instance?.DebugLog("Dockside supply setup released at stage: " + placementStage + ".");
-            if (armed != null)
-                StartupProfiler.Finish(Time.realtimeSinceStartup, "supplies " + (placementStage ?? "released"));
             armed = null;
             placementStage = null;
             readyAt = -1f;
@@ -138,8 +131,7 @@ namespace NewBeginnings
             AuthoredPositions.Clear();
             AuthoredRotations.Clear();
             AuthoredNames.Clear();
-            BoatWalkRoots.Clear();
-            Plugin.Instance?.ClearDocksideCargoSurface();
+            StartArrival.ClearCargoSurface();
         }
 
         private static void FailAndDisarm(string reason)
@@ -186,7 +178,7 @@ namespace NewBeginnings
             if (Time.realtimeSinceStartup - readyAt < 0.75f) return;
             fallbackScheduled = true;
             Plugin.Instance?.DebugLog($"Dockside supply fallback scheduled (starter coroutine observed: {wrapperObserved}).");
-            Plugin.Instance?.StartCoroutine(StartupProfiler.Measure(PlaceCaptured(selected)));
+            Plugin.Instance?.StartCoroutine(PlaceCaptured(selected));
         }
 
         // Observe only Difficulty's synchronous starter adjustment. Receipt of
@@ -346,7 +338,7 @@ namespace NewBeginnings
                 try
                 {
                     moved = original.MoveNext();
-                    if (IsCurrentCapture(armed, selected, rosterFinalized))
+                    if (armed != null && ReferenceEquals(armed, selected) && !rosterFinalized)
                         foreach (var item in CollectItems(set.transform)) Capture(item);
                 }
                 catch (Exception exception)
@@ -360,7 +352,7 @@ namespace NewBeginnings
             if (ReferenceEquals(armed, selected)) nativeStarterCompleted = true;
             if (ReferenceEquals(armed, selected) && !placementClaimed)
             {
-                var placement = StartupProfiler.Measure(PlaceCaptured(selected));
+                var placement = PlaceCaptured(selected);
                 while (placement.MoveNext()) yield return placement.Current;
             }
         }
@@ -412,7 +404,7 @@ namespace NewBeginnings
                     yield break;
                 }
                 if (nativeReady &&
-                    Plugin.Instance.TryGetDocksideCargoSurface(out var ground, out var groundCollider))
+                    StartArrival.TryGetCargoSurface(out var ground, out var groundCollider))
                 {
                     if (Camera.main == null ||
                         Vector3.Distance(Camera.main.transform.position, ground) > 500f)
@@ -434,7 +426,7 @@ namespace NewBeginnings
                     yield break;
                 }
                 else if (lastReason == null)
-                    lastReason = Plugin.Instance.CargoSurfaceStatus ?? "the loaded dockside ground has not resolved";
+                    lastReason = StartArrival.CargoSurfaceStatus ?? "the loaded dockside ground has not resolved";
                 placementStage = lastReason;
                 yield return null;
             }
@@ -462,8 +454,7 @@ namespace NewBeginnings
                     ReleaseForCupPickup();
                     return true;
                 }
-                return !ShouldProtectCupLiquid(true, true, GameState.currentlyLoading,
-                    false, Time.realtimeSinceStartup, cupProtectionEndsAt);
+                return GameState.currentlyLoading || Time.realtimeSinceStartup >= cupProtectionEndsAt;
             }
         }
 
@@ -513,10 +504,6 @@ namespace NewBeginnings
                 Disarm();
             }
         }
-
-        private static bool ShouldProtectCupLiquid(bool active, bool captured,
-            bool loading, bool held, float now, float expiresAt) =>
-            active && captured && !loading && !held && now < expiresAt;
 
         private static bool IsNativeCup(ShipItem item) =>
             item is ShipItemBottle && item.GetComponent<Mug>() != null;
@@ -685,8 +672,8 @@ namespace NewBeginnings
                 reason = "waiting for the exact Difficulty-requested native item removals to finish";
                 return false;
             }
-            if (Captured.Count == 0 && IsIntentionalEmptyRoster(nativeStarterCompleted,
-                difficultyAdjustmentCompleted, difficultyRemovalsApplied, standardSuppliesSuppressed))
+            if (Captured.Count == 0 && nativeStarterCompleted && (standardSuppliesSuppressed ||
+                difficultyAdjustmentCompleted && difficultyRemovalsApplied > 0))
                 return true;
             if (Captured.Count == 0 || RegisteredField == null)
             {
@@ -717,9 +704,8 @@ namespace NewBeginnings
 
         private static void ReconcileDifficultyRemovals()
         {
-            var removed = ConfirmedIntentionalRemovals(Captured, DifficultyRemovalRequests,
-                item => item == null, difficultyAdjustmentCompleted && !difficultyAdjustmentFailed,
-                rosterFinalized);
+            if (!difficultyAdjustmentCompleted || difficultyAdjustmentFailed || rosterFinalized) return;
+            var removed = Captured.Where(item => DifficultyRemovalRequests.Contains(item) && item == null).ToArray();
             if (removed.Length == 0) return;
             foreach (var item in removed)
             {
@@ -732,18 +718,6 @@ namespace NewBeginnings
             }
             Plugin.Instance?.DebugLog($"Sailwind Difficulty intentionally removed {removed.Length} native items; remaining starter roster {Captured.Count} native items.");
         }
-
-        private static T[] ConfirmedIntentionalRemovals<T>(IEnumerable<T> captured,
-            ISet<T> requested, Func<T, bool> destroyed, bool adjustmentCompleted, bool finalized) =>
-            !adjustmentCompleted || finalized ? new T[0] :
-                captured.Where(item => requested.Contains(item) && destroyed(item)).ToArray();
-
-        private static bool IsIntentionalEmptyRoster(bool starterCompleted,
-            bool adjustmentCompleted, int observedRemovals, bool suppliesSuppressed = false) =>
-            starterCompleted && (suppliesSuppressed || adjustmentCompleted && observedRemovals > 0);
-
-        private static bool IsCurrentCapture(object currentSelection, object ownerSelection, bool finalized) =>
-            currentSelection != null && ReferenceEquals(currentSelection, ownerSelection) && !finalized;
 
         private static void RemoveIntentionalScrambledSeasMap()
         {
@@ -792,7 +766,6 @@ namespace NewBeginnings
         {
             reason = null;
             if (!NativeItemsReady(out reason)) return false;
-            RefreshBoatWalkRoots();
             if (!IsVerifiedLandCollider(groundCollider))
             {
                 reason = "the player's resolved surface is not stationary dock or shore ground: " +
@@ -802,7 +775,7 @@ namespace NewBeginnings
             Physics.SyncTransforms();
             // Adjacent dock planks can win a later raycast. Refresh a usable
             // hit, but keep the already resolved landing when this probe misses.
-            if (Plugin.Instance.TryProbeDocksideCargoSurface(ground,
+            if (StartArrival.TryProbeCargoSurface(ground,
                     out var liveGround, out var liveCollider) &&
                 IsVerifiedLandCollider(liveCollider))
             {
@@ -1078,7 +1051,7 @@ namespace NewBeginnings
                     bounds.max.z > other.min.z - .04f)) continue;
                 var surface = new Vector3(center.x - offset.x,
                     playerGround.y, center.z - offset.z);
-                var supported = Plugin.Instance.TryProbeDocksideCargoSurface(center,
+                var supported = StartArrival.TryProbeCargoSurface(center,
                     out var hit, out var collider) && IsVerifiedLandCollider(collider) &&
                     Mathf.Abs(hit.y - playerGround.y) <= .45f;
                 if (supported) surface.y = hit.y;
@@ -1243,7 +1216,7 @@ namespace NewBeginnings
                     Point = oar ? OarBaseGround(item, sample, selectedRotation) : sample,
                     Radius = radius
                 }, reserved)) continue;
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var point, out var collider) ||
+                if (!StartArrival.TryProbeCargoSurface(sample, out var point, out var collider) ||
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(point.y - groupGround.y) > 0.45f ||
                     Vector3.Distance(point, playerGround) > 4.25f ||
@@ -1302,7 +1275,7 @@ namespace NewBeginnings
                 Vector3.back * 0.2f
             })
             {
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(basePoint +
+                if (!StartArrival.TryProbeCargoSurface(basePoint +
                         sampleOffset, out var surface, out var collider) ||
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(surface.y - pivotGround.y) > 0.45f)
@@ -1385,7 +1358,7 @@ namespace NewBeginnings
                 if (rejectedGrounds != null && rejectedGrounds.Any(point =>
                     new Vector2(sample.x - point.x, sample.z - point.z).magnitude < 0.9f))
                     continue;
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var surface,
+                if (!StartArrival.TryProbeCargoSurface(sample, out var surface,
                     out var collider) || !IsVerifiedLandCollider(collider)) continue;
                 if (Mathf.Abs(surface.y - playerGround.y) > 0.45f ||
                     otherGroup.HasValue &&
@@ -1443,9 +1416,6 @@ namespace NewBeginnings
                 (source.center - itemPosition), source.size);
 
         private static bool HasSupportFootprint(ShipItem support, Vector3 center)
-            => HasSupportFootprintCore(support, center);
-
-        private static bool HasSupportFootprintCore(ShipItem support, Vector3 center)
         {
             // Test under the base's four edges, not just its pivot. Clamp
             // unusually large modded collider bounds to a local footprint so
@@ -1466,7 +1436,7 @@ namespace NewBeginnings
             var maxHeightDifference = IsNativeCup(support) ? 0.02f : 0.45f;
             foreach (var offset in offsets)
             {
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(center + offset,
+                if (!StartArrival.TryProbeCargoSurface(center + offset,
                     out var edge, out var edgeCollider) ||
                     !IsVerifiedLandCollider(edgeCollider) ||
                     Mathf.Abs(edge.y - center.y) > maxHeightDifference)
@@ -1475,36 +1445,14 @@ namespace NewBeginnings
             return true;
         }
 
-        private static void RefreshBoatWalkRoots()
-        {
-            BoatWalkRoots.Clear();
-            foreach (var boat in Resources.FindObjectsOfTypeAll<BoatRefs>())
-                if (boat != null && boat.walkCol != null)
-                    BoatWalkRoots.Add(boat.walkCol);
-        }
-
-        private static bool IsVerifiedLandCollider(Collider collider)
-        {
-            if (collider == null || !collider.gameObject.activeInHierarchy ||
-                !collider.gameObject.scene.isLoaded || collider.isTrigger ||
-                collider.attachedRigidbody != null ||
-                Plugin.IsUnsuitableStartSurface(collider) ||
-                collider.CompareTag("Boat") || collider.CompareTag("Player"))
-                return false;
-            var transform = collider.transform;
-            if (transform.GetComponentInParent<BoatRefs>() != null ||
-                transform.GetComponentInParent<BoatMooringRopes>() != null ||
-                transform.GetComponentInParent<PurchasableBoat>() != null ||
-                transform.GetComponentInParent<ShipItem>() != null ||
-                transform.GetComponentInParent<ItemRigidbody>() != null ||
-                collider.name.IndexOf("hull player collider",
-                    StringComparison.OrdinalIgnoreCase) >= 0)
-                return false;
-            foreach (var root in BoatWalkRoots)
-                if (root != null && (transform == root || transform.IsChildOf(root)))
-                    return false;
-            return true;
-        }
+        // Supplies stand on the shore probe's static start ground. They also
+        // refuse any rigidbody, even a kinematic one the player may stand on,
+        // and any PurchasableBoat hierarchy (boats and beta houses).
+        private static bool IsVerifiedLandCollider(Collider collider) =>
+            ShoreProbe.IsLoaded(collider) && ShoreProbe.IsStaticGround(collider) &&
+            !ShoreProbe.IsUnsuitableStartSurface(collider) &&
+            collider.attachedRigidbody == null &&
+            collider.GetComponentInParent<PurchasableBoat>() == null;
 
         private static bool IsInsideEmbarkVolume(ShipItem item, Vector3 surface, Quaternion? rotation = null)
         {

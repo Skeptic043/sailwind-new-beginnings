@@ -20,7 +20,7 @@ sealed class GameObject {internal bool activeInHierarchy=true;}
 sealed class SelectionCatalog {internal List<int> Ports=new List<int>{1},Boats=new List<int>{1};internal List<string> Rejections=new List<string>();internal static int Calls;internal static bool Fail,Empty;internal static SelectionCatalog Discover(object o){Calls++;if(Fail)throw new Exception("fixture discovery failure");var c=new SelectionCatalog();if(Empty)c.Ports.Clear();return c;}}
 sealed class MenuUi {
 internal bool built=true;internal object settings=new object();internal Func<object> overrides;internal SelectionCatalog catalog;internal bool catalogFaultLogged,catalogUnavailable;internal GameObject gameObject=new GameObject();internal bool editing,EditingAny;internal object confirm,back;internal Plugin reloadSource;internal float nextDiscoveryRefresh;internal int registrationRevision=-1;internal int displays;
-void HideNativeRegionChoice(){}void ApplyContinueState(){}void Hide(object o){}void RefreshEditor(){}void ShowCatalogUnavailable(){catalog=null;catalogUnavailable=true;}void RefreshDisplay(){displays++;}void OnSettingsReloaded(){RefreshCatalog();}
+void HideNativeRegionChoice(){}void ApplyContinueState(){}void Hide(object o){}void RefreshEditor(){}void ShowCatalogUnavailable(string reason){catalog=null;catalogUnavailable=true;}void RefreshDisplay(){displays++;}void OnSettingsReloaded(){RefreshCatalog();}
 internal void Open()=>OnEnable();internal void Tick()=>Update();
 '''
 src+='\n'.join(block(menu,m) for m in ['private void OnEnable()','private void Update()','internal void RefreshCatalog()'])

@@ -18,14 +18,15 @@ internal static class SecretIslandChecks
             check(p.Settings.SetPortPool(pool, false), "secret selection blocked last geographic pool removal");
         p.MenuSave();
         p = Plugin.Start(path);
-        check(p.Settings.PortPools.SetEquals(new[] { PortPool.Chronos }) && p.Settings.SecretIslandsEnabled, "secret-only selection restored a geographic pool");
+        check(p.Settings.PortPools.Count == 0 && p.Settings.SecretIslandsEnabled, "secret-only selection restored a geographic pool");
         p.Config[new ConfigDefinition("Spoilers", "EnablePirateIsland")].BoxedValue = false;
         check(!p.Settings.SecretIslandsEnabled && p.Settings.AnySecretIslandsEnabled && p.Settings.EnableSaffronIsland, "external individual choice lost mixed state");
         p.MenuSave();
         p = Plugin.Start(path);
-        check(!p.Settings.EnablePirateIsland && p.Settings.EnableSaffronIsland && p.Settings.PortPools.Contains(PortPool.Chronos), "mixed secret keys overwritten on reload");
+        check(!p.Settings.EnablePirateIsland && p.Settings.EnableSaffronIsland && p.Settings.EnableChronos, "mixed secret keys overwritten on reload");
         p.Settings.PortPools.Clear();
         p.Settings.PortPools.Add(PortPool.AlAnkh);
+        p.Settings.EnableChronos = false;
         p.Settings.EnableSaffronIsland = false;
         p.Settings.EnablePirateIsland = true;
         check(p.Settings.SetPortPool(PortPool.AlAnkh, false), "Pirate-only selection blocked removal of last geographic checkbox");
@@ -50,7 +51,7 @@ internal static class SecretIslandChecks
             Index = -1,
             IdentityName = "pirate",
             Key = "pirate",
-            HiddenKey = "pirate",
+            Hidden = HiddenSite.Pirate,
             Pool = PortPool.SmallIslands,
             HasShipyard = true
         };
@@ -59,7 +60,7 @@ internal static class SecretIslandChecks
             Index = 33,
             IdentityName = "saffron",
             Key = "saffron",
-            HiddenKey = "saffron",
+            Hidden = HiddenSite.Saffron,
             Pool = PortPool.SmallIslands,
             IsModded = true
         };
@@ -134,5 +135,49 @@ internal static class SecretIslandChecks
         {
             FixedStart.Viable = viable;
         }
+
+        LastPortSourceRule(check);
+    }
+
+    // Every combination of geographic pools, mod ports and the three secret
+    // islands: a checked source can be unchecked unless it is the last one.
+    private static void LastPortSourceRule(Action<bool, string> check)
+    {
+        var geographic = new[] { PortPool.AlAnkh, PortPool.Emerald, PortPool.Aestrin, PortPool.FireFishLagoon, PortPool.SmallIslands };
+        string poolFailure = null, modFailure = null, secretFailure = null;
+        for (var mask = 0; mask < 1 << 9; mask++)
+        {
+            Func<SelectionSettings> make = () =>
+            {
+                var s = new SelectionSettings { IncludeModPorts = (mask & 32) != 0, EnablePirateIsland = (mask & 64) != 0,
+                    EnableSaffronIsland = (mask & 128) != 0, EnableChronos = (mask & 256) != 0 };
+                s.PortPools.Clear();
+                for (var i = 0; i < geographic.Length; i++)
+                    if ((mask & (1 << i)) != 0) s.PortPools.Add(geographic[i]);
+                return s;
+            };
+            var sources = 0;
+            for (var bit = 0; bit < 9; bit++) sources += (mask >> bit) & 1;
+            var state = make();
+            if (state.HasRandomPortSource != sources > 0) poolFailure = poolFailure ?? "source count " + mask;
+            foreach (var pool in geographic)
+            {
+                var s = make();
+                var lastSource = s.PortPools.Contains(pool) && sources == 1;
+                if (s.CanUncheckPortPool(pool) == lastSource || s.SetPortPool(pool, false) == lastSource ||
+                    s.PortPools.Contains(pool) != lastSource)
+                    poolFailure = poolFailure ?? pool + " in state " + mask;
+            }
+            if (state.CanUncheckModPorts == (state.IncludeModPorts && sources == 1))
+                modFailure = modFailure ?? "state " + mask;
+            var secrets = make();
+            secrets.SetSecretIslands(false);
+            if (!secrets.HasRandomPortSource || secrets.AnySecretIslandsEnabled ||
+                secrets.PortPools.Count != Math.Max(state.PortPools.Count, state.IncludeModPorts ? 0 : 1))
+                secretFailure = secretFailure ?? "state " + mask;
+        }
+        check(poolFailure == null, "geographic pool toggle broke the last-source rule: " + poolFailure);
+        check(modFailure == null, "mod ports toggle broke the last-source rule: " + modFailure);
+        check(secretFailure == null, "disabling secret islands left no random port source or restored geography needlessly: " + secretFailure);
     }
 }

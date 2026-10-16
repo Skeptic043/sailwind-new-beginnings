@@ -14,9 +14,12 @@ def block(path, marker):
 s = 'using System;using System.Linq;using UnityEngine;\nnamespace NewBeginnings {internal static partial class StartDestinations {'
 s += block('src/StartDestinations.cs', 'internal static bool BelongsToIsland(') + '}\ninternal static partial class FixedStart {'
 s += block('src/FixedStart.cs', 'private static bool TryResolveRelocation(')
+fixed = (root / 'src/FixedStart.cs').read_text()
+# The placement's anchor stowing reuses FixedStart's finite-value helpers.
+s += fixed[fixed.index('private static bool IsFinite(Vector3 value)'):fixed.index(';', fixed.index('private static bool IsFinite(float value)')) + 1]
 s += 'internal static bool ResolveRelocationForCheck(ResolvedStart s,out string reason)=>TryResolveRelocation(s,out reason);}}'
 (here / 'NativeYards.generated.cs').write_text(s)
 s = (root / 'src/FixedStart.cs').read_text()
-assert 'var recovery = destination.UsesCustomBerth ? null : registered?.FirstOrDefault' in s
+assert 'var recovery = destination.NeedsPlannedBerth ? null : registered?.FirstOrDefault' in s
 assert 'Port = port, Recovery = relocation.Recovery, Destination = destination, Berth = relocation.Berth' in s
 assert 'Size = size, UseShipyardBerth = relocation.UseShipyardBerth' in s

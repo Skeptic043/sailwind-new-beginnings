@@ -1,19 +1,9 @@
 using System;
 using System.Linq;
-using System.Reflection;
-using NewBeginnings;
 using UnityEngine;
 
 // Native scene objects are boundaries. System.Numerics supplies independent
-// quaternion/vector math. The complete production StartAnchorModel is compiled.
-namespace HarmonyLib
-{
-    static class AccessTools
-    {
-        public static FieldInfo Field(Type t, string n) => t.GetField(n, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-    }
-}
-
+// quaternion/vector math.
 namespace UnityEngine
 {
     public class Object
@@ -108,12 +98,6 @@ namespace UnityEngine
             var r = System.Numerics.Vector3.Transform(new(v.x, v.y, v.z), N(q));
             return new(r.X, r.Y, r.Z);
         }
-
-        public static float Angle(Quaternion a, Quaternion b)
-        {
-            var dot = MathF.Min(1, MathF.Abs(System.Numerics.Quaternion.Dot(N(a), N(b))));
-            return MathF.Acos(dot) * 360 / MathF.PI;
-        }
     }
 
     public class Transform : Object
@@ -187,44 +171,14 @@ namespace UnityEngine
         public Quaternion rotation { get => transform.rotation; set => transform.rotation = value; }
     }
 
-    public struct Bounds
-    {
-        public Vector3 min;
-    }
-
     public class Collider : Component
     {
-        public bool enabled = true, isTrigger;
-        public Rigidbody attachedRigidbody;
-        public Bounds bounds;
-    }
-
-    public enum ConfigurableJointMotion
-    {
-        Locked,
-        Limited,
-        Free
-    }
-
-    public struct SoftJointLimit
-    {
-        public float limit, bounciness, contactDistance;
-    }
-
-    public struct SoftJointLimitSpring
-    {
-        public float spring, damper;
     }
 
     public class ConfigurableJoint : Component
     {
         public Rigidbody connectedBody;
-        public Vector3 anchor, connectedAnchor, axis = new(1, 0, 0), secondaryAxis = new(0, 1, 0);
-        public ConfigurableJointMotion xMotion = ConfigurableJointMotion.Limited, yMotion = ConfigurableJointMotion.Limited, zMotion = ConfigurableJointMotion.Limited, angularXMotion = ConfigurableJointMotion.Free, angularYMotion = ConfigurableJointMotion.Free, angularZMotion = ConfigurableJointMotion.Free;
-        public bool autoConfigureConnectedAnchor, enableCollision, enablePreprocessing = true;
-        public float breakForce = float.PositiveInfinity, breakTorque = float.PositiveInfinity, massScale = 1, connectedMassScale = 1;
-        public SoftJointLimit linearLimit;
-        public SoftJointLimitSpring linearLimitSpring;
+        public Vector3 anchor, connectedAnchor;
     }
 
     public static class Mathf
@@ -258,22 +212,6 @@ public class PurchasableBoat : UnityEngine.Component
     public bool isPurchased() => purchased;
 }
 
-class Anchor : Component
-{
-    public Collider[] contacts;
-    public T[] GetComponentsInChildren<T>() => contacts.OfType<T>().ToArray();
-}
-
-class RopeControllerAnchor : Component
-{
-    public float maxLength = 30;
-    public UnityEngine.Object anchorRope;
-    public ConfigurableJoint joint;
-}
-
 class BoatMooringRopes : Component
 {
-    public Anchor anchor;
-    public RopeControllerAnchor controller;
-    public RopeControllerAnchor GetAnchorController() => controller;
 }

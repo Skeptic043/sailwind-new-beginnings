@@ -105,6 +105,7 @@ class UiHarness
     PanelHarness startingOptions = new();
     readonly List<GameObject> mainControls = new();
     bool catalogUnavailable, built = true;
+    string catalogUnavailableReason;
     void RefreshCatalog()
     {
         RefreshDisplay();
@@ -170,9 +171,9 @@ class UiHarness
         SubmenuNavigation(check);
         ConfigureBeforeRandom(check);
         var ordered = new UiHarness();
-        ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.Chronos }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, HiddenKey = "pirate" }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
+        ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.Chronos }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
         ordered.catalog.SortPorts();
-        ordered.settings.PortPools.Add(PortPool.Chronos);
+        ordered.settings.EnableChronos = true;
         var expected = new[]
         {
             "native:alpha",
@@ -259,9 +260,9 @@ class UiHarness
         var sites = new UiHarness();
         sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "native:21", IdentityName = "port 21 M chronos", DisplayName = "Chronos" });
         sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "provider:fort", SiteIdentity = "provider:fort", DisplayName = "Fort Juniper", IsModded = true });
-        sites.catalog.Ports.Add(new PortChoice { Index = 33, Key = "native:saffron", DisplayName = "Saffron", HiddenKey = "saffron" });
+        sites.catalog.Ports.Add(new PortChoice { Index = 33, Key = "native:saffron", DisplayName = "Saffron", Hidden = HiddenSite.Saffron });
         sites.settings.PortIndex = 21;
-        sites.settings.PortPools.Add(PortPool.Chronos);
+        sites.settings.EnableChronos = true;
         sites.RefreshDisplay();
         check(sites.portValue.text == "Chronos", "legacy port index did not retain ordinary Chronos");
         sites.CyclePort(1);
@@ -276,7 +277,7 @@ class UiHarness
         check(sites.settings.DestinationKey == "native:21", "could not explicitly replace unavailable provider with sole visible location");
         sites.catalog.Ports.Add(new PortChoice { Key = "mod:x", IsModded = true });
         sites.settings.RandomPort = true;
-        sites.settings.PortPools.Remove(PortPool.Chronos);
+        sites.settings.EnableChronos = false;
         sites.RefreshDisplay();
         check(sites.includeModPorts.transform.parent.gameObject.active && !sites.includeModPorts.unclickable, "mod checkbox absent with detected mod location");
         sites.ToggleModPorts();
@@ -320,11 +321,14 @@ class UiHarness
         guarded.catalogUnavailable = true;
         FixedStart.BlockStart = true;
         guarded.RefreshDisplay();
-        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out var blocked) && blocked == "Starting blocked for fixture", "start guard did not block Continue and direct CanStart before native fallback");
-        guarded.ShowCatalogUnavailable();
-        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out _), "catalog error fallback bypassed persistent start guard");
+        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out var blocked) && blocked == "Starting blocked for fixture", "start guard did not block Continue and direct CanStart");
+        guarded.ShowCatalogUnavailable("Fixture discovery failed");
+        check(!guarded.continueAvailable && guarded.status.text == "Starting blocked for fixture" && !guarded.CanStart(out _), "catalog error bypassed persistent start guard");
         FixedStart.BlockStart = false;
-        check(guarded.CanStart(out _), "released guard prevented ordinary native fallback");
+        guarded.ShowCatalogUnavailable("Fixture discovery failed");
+        check(!guarded.continueAvailable && guarded.status.text == "Fixture discovery failed" && !guarded.CanStart(out var unavailable) && unavailable == "Fixture discovery failed", "unavailable catalog did not block Continue with its reason");
+        guarded.ShowCatalogUnavailable("");
+        check(guarded.status.text == CatalogUnavailableReason && !guarded.CanStart(out unavailable) && unavailable == CatalogUnavailableReason, "unavailable catalog without a reason lacked the generic reason");
         Console.WriteLine("PASS extracted production UI state matrix; GameObject activation and pointer parents modeled, no rendered-menu claim.");
     }
 

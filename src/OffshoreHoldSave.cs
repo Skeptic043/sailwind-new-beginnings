@@ -13,15 +13,15 @@ namespace NewBeginnings
         internal const string Key = Plugin.Id + ".offshoreHold.v1";
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
+        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame", new[] { typeof(int) })]
         private static class BeforeLoad
         {
             private static void Prefix() => ClearBeforeLoad();
         }
 
+        // FixedStart.CancelStartWork removes the active hold before a load.
         internal static void ClearBeforeLoad()
         {
-            PirateStationKeeper.RemoveActive();
             // Native LoadGame replaces this dictionary only when the incoming
             // save has one. Do not inherit our previous save's marker otherwise.
             GameState.modData?.Remove(Key);
@@ -36,7 +36,7 @@ namespace NewBeginnings
         internal static void Save()
         {
             GameState.modData?.Remove(Key);
-            if (!PirateStationKeeper.TryGetHold(out var body, out var frame, out var position, out var yaw)) return;
+            if (!OffshoreHold.TryGetHold(out var body, out var frame, out var position, out var yaw)) return;
             var boat = body.GetComponent<SaveableObject>();
             var island = frame.GetComponentInParent<IslandHorizon>();
             if (boat == null || island == null)
@@ -60,7 +60,7 @@ namespace NewBeginnings
 
         internal static void Load()
         {
-            PirateStationKeeper.RemoveActive();
+            OffshoreHold.RemoveActive();
             if (GameState.modData == null || !GameState.modData.TryGetValue(Key, out var value)) return;
             var fields = value?.Split('|');
             if (fields == null || fields.Length != 6 ||
@@ -84,7 +84,7 @@ namespace NewBeginnings
                 Plugin.Instance?.Warn("The saved offshore hold's boat or island is unavailable.");
                 return;
             }
-            PirateStationKeeper.Restore(body, island, new Vector3(x, y, z), yaw);
+            OffshoreHold.Restore(body, island, new Vector3(x, y, z), yaw);
         }
 
         private static bool ReadFloat(string value, out float result) =>

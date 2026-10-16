@@ -11,8 +11,6 @@ namespace NewBeginnings
     // single medium lateen only for a successfully selected new start.
     internal static class LeopardStarterRig
     {
-        private const int BoatIndex = 207;
-        private const string BoatName = "BOAT LEOPARD (207)(Clone)";
         private const string MastPath = "boat leopard/structure_container/MAINMAST/mainmast";
         private const int SailIndex = 60;
         private const string SailName = "60 SAIL Am lateen mid";
@@ -138,17 +136,11 @@ namespace NewBeginnings
 
         internal static void Arm(StartMenu menu, ResolvedStart selected)
         {
-            if (selected.Saveable.sceneIndex != BoatIndex || selected.Saveable.name != BoatName) return;
+            if (!KnownSites.IsLeopard(selected.Saveable.sceneIndex, selected.Saveable.name)) return;
             Cancel();
             var token = generation;
             try { Plugin.Instance.StartCoroutine(InstallAfterStart(menu, selected, token)); }
             catch (Exception exception) { Plugin.Instance.Warn("Leopard starter sail could not be scheduled: " + exception.Message); }
-        }
-
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
-        private static class CancelOnLoad
-        {
-            private static void Prefix() => Cancel();
         }
 
         private static bool StillSelected(StartMenu menu, ResolvedStart selected, int token)
@@ -171,8 +163,8 @@ namespace NewBeginnings
                 if (GameState.playing && !GameState.currentlyLoading && selected.Boat.isPurchased()) break;
                 yield return null;
             }
-            // Let the existing hull settling pass complete before creating a
-            // hinged sail. Native attachment handles ropes, registration and angles.
+            // Let native physics run a few steps after placement before creating
+            // a hinged sail. Native attachment handles ropes, registration and angles.
             for (var frame = 0; frame < 4; ++frame) yield return new WaitForFixedUpdate();
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();

@@ -107,6 +107,7 @@ namespace UnityEngine
 
         public static Vector3 operator +(Vector3 a, Vector3 b) => new(a.x + b.x, a.y + b.y, a.z + b.z);
         public static Vector3 operator -(Vector3 a, Vector3 b) => new(a.x - b.x, a.y - b.y, a.z - b.z);
+        public static Vector3 Scale(Vector3 a, Vector3 b) => new(a.x * b.x, a.y * b.y, a.z * b.z);
         public override string ToString() => $"({x},{y},{z})";
     }
 
@@ -130,6 +131,11 @@ namespace UnityEngine
         }
 
         public static Quaternion operator *(Quaternion a, Quaternion b) => new(a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x, a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+        public static Vector3 operator *(Quaternion q, Vector3 v)
+        {
+            var r = System.Numerics.Vector3.Transform(new(v.x, v.y, v.z), new System.Numerics.Quaternion(q.x, q.y, q.z, q.w));
+            return new(r.X, r.Y, r.Z);
+        }
     }
 
     public class Component : Object
@@ -192,6 +198,7 @@ namespace UnityEngine
         public Transform parent;
         public Vector3 localPosition;
         public Quaternion localRotation = Quaternion.identity;
+        public Vector3 lossyScale = new(1, 1, 1);
         public Transform(GameObject owner)
         {
             gameObject = owner;
@@ -275,6 +282,7 @@ public enum PortRegion
 
 public class Port : UnityEngine.Component
 {
+    public int portIndex;
 }
 
 public class Shipyard : UnityEngine.Component
@@ -434,18 +442,15 @@ public class PickupableBoatMooringRope : UnityEngine.Component
 
 public class Anchor : UnityEngine.Component
 {
-    public bool Set, Grounded, ThrowSet;
+    public bool Set;
     public float Length;
     public readonly List<string> Calls = new();
     public bool IsSet() => Set;
     public float GetRopeLength() => Length;
-    private bool IsTouchingGround() => Grounded;
     private void SetAnchor()
     {
         Calls.Add("set");
         Set = true;
-        if (ThrowSet)
-            throw new InvalidOperationException("Injected anchor set failure");
         GetComponent<UnityEngine.Rigidbody>().isKinematic = true;
         GetComponent<UnityEngine.Rigidbody>().drag = 50;
     }
@@ -605,16 +610,15 @@ public static class ScrambledBoundary
         object[] args =
         {
             menu,
-            target,
             observer,
             controller,
             null
         };
         bool original = (bool)typeof(NewBeginnings.ScrambledSeasIntegration).GetMethod("BeforePlayerStart", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, args);
         if (!original)
-            return (IEnumerator)args[4];
+            return (IEnumerator)args[3];
         FactoryCalls++;
-        Target = (UnityEngine.Transform)args[1];
+        Target = target;
         Observer = observer;
         Controller = controller;
         return menu.Native = new NativeIterator(menu);
@@ -629,10 +633,12 @@ namespace NewBeginnings
         internal Shipyard Yard;
         internal UnityEngine.Transform DockRoot => Island.transform;
 
-        internal string HiddenKey, SiteIdentity, IdentityName;
+        internal Port Port;
+        internal HiddenSite Hidden;
+        internal string SiteIdentity, IdentityName;
         internal int Index;
         internal IslandHorizon Island;
-        internal bool Current = true, Scenery = true, UsesCustomBerth = true;
+        internal bool Current = true, Scenery = true, NeedsPlannedBerth = true;
     }
 
     internal enum BoatSize
@@ -655,25 +661,24 @@ namespace NewBeginnings
         internal PortChoice Port;
         internal BoatChoice Boat;
         internal bool UseShipyardBerth;
-        internal bool UsesCustomBerth => Port.UsesCustomBerth || UseShipyardBerth;
     }
 
     internal class StartingOptionsSettings
     {
     }
 
-    internal class PirateStationKeeper
+    internal class OffshoreHold
     {
-        internal static PirateStationKeeper Active;
+        internal static OffshoreHold Active;
         internal bool Removed;
-        internal static PirateStationKeeper Attach(UnityEngine.Rigidbody body, UnityEngine.Transform frame)
+        internal static OffshoreHold Attach(UnityEngine.Rigidbody body, UnityEngine.Transform frame)
         {
             RemoveActive();
             return Active = new();
         }
 
         internal static void RemoveActive() => Remove(Active);
-        internal static void Remove(PirateStationKeeper keeper)
+        internal static void Remove(OffshoreHold keeper)
         {
             if (keeper == null)
                 return;
@@ -681,42 +686,14 @@ namespace NewBeginnings
             if (ReferenceEquals(keeper, Active))
                 Active = null;
         }
-
-        // Geometry is exercised against the actual helper in the separate keeper fixture.
-        internal static bool TryStowedPosition(UnityEngine.Rigidbody hull, UnityEngine.Rigidbody anchor, UnityEngine.ConfigurableJoint joint, UnityEngine.Quaternion rotation, out UnityEngine.Vector3 position)
-        {
-            position = new();
-            if (joint == null || joint.connectedBody != hull || joint.GetComponent<UnityEngine.Rigidbody>() != anchor)
-                return false;
-            position = hull.transform.TransformPoint(joint.connectedAnchor) - joint.anchor;
-            return true;
-        }
-    }
-
-    internal class StartAnchorModel
-    {
-        internal UnityEngine.Quaternion AnchorRotation = UnityEngine.Quaternion.identity;
-        internal bool Ready = true;
-        internal int Checks;
-        internal bool ReadyToSecure(BoatMooringRopes ropes, UnityEngine.Rigidbody body, float normalized, UnityEngine.Vector3 expected, out string reason)
-        {
-            ++Checks;
-            var actual = ropes.anchor.GetComponent<UnityEngine.Rigidbody>().position;
-            var dx = actual.x - expected.x;
-            var dy = actual.y - expected.y;
-            var dz = actual.z - expected.z;
-            var valid = Ready && float.IsFinite(dx) && float.IsFinite(dy) && float.IsFinite(dz) && dx * dx + dy * dy + dz * dz <= .0025f;
-            reason = valid ? null : "Injected unapplied joint limit or drifted contact";
-            return valid;
-        }
     }
 
     internal enum StartBerthMode
     {
         Moored,
-        Anchored,
         OffshoreHeld,
-        ShipyardHeld
+        ShipyardHeld,
+        Preserved
     }
 
     internal class StartBerthPlan
@@ -724,15 +701,11 @@ namespace NewBeginnings
         private UnityEngine.Transform frame;
         internal UnityEngine.Transform Frame { get => frame ?? Destination.Island.transform; set => frame = value; }
 
-        internal StartAnchorModel AnchorModel = new();
         internal StartBerthMode Mode;
-        internal bool Anchored { get => Mode == StartBerthMode.Anchored; set => Mode = value ? StartBerthMode.Anchored : StartBerthMode.Moored; }
 
-        internal bool RetainedDockLanding;
         internal PortChoice Destination;
         internal bool OffshoreHeld => Mode == StartBerthMode.OffshoreHeld || Mode == StartBerthMode.ShipyardHeld;
 
-        internal bool Valid = true;
         private UnityEngine.Vector3 position, shorePosition, localPosition, localShore;
         private UnityEngine.Quaternion rotation, localRotation;
         private bool localPose, localShorePose, localRot;
@@ -770,17 +743,8 @@ namespace NewBeginnings
         internal UnityEngine.Vector3 ShorePosition { get => localShorePose ? Frame.TransformPoint(localShore) : shorePosition; set => shorePosition = value; }
         internal UnityEngine.Quaternion Rotation { get => localRot ? Frame.rotation * localRotation : rotation; set => rotation = value; }
 
-        internal UnityEngine.Vector3 AnchorPosition;
         internal GPButtonDockMooring Front, Back;
-        internal UnityEngine.SpringJoint FrontSpring, BackSpring;
-        internal bool ClearanceVerified, DepartureVerified, LandingVerified;
-        internal float AnchorLength;
         internal PickupableBoatMooringRope FrontRope, BackRope;
-        internal bool Revalidate(UnityEngine.Rigidbody body, BoatMooringRopes ropes, out string reason)
-        {
-            reason = Valid ? null : "Injected invalid berth";
-            return Valid;
-        }
     }
 
     internal class NativeBerth
@@ -853,41 +817,62 @@ namespace NewBeginnings
         internal static bool SceneryReady(PortChoice site) => site.Scenery && site.Current;
     }
 
-    internal class ProbeVelocityGuard
+    // Fixture state for the shore probe and arrival doubles lives on the
+    // Plugin double, so each fixture's new Plugin resets it.
+    internal static class ShoreProbe
     {
-        internal static bool CanGuard(SaveableObject s) => s != null;
-        internal static int Outstanding;
-        private bool restored;
-        internal ProbeVelocityGuard(SaveableObject save)
+        internal static bool TryFindStartShore(PortChoice d, UnityEngine.Vector3 seed, UnityEngine.Vector3 boat, out UnityEngine.Vector3 shore, out object surface, out string reason)
         {
-            Outstanding++;
+            var fixture = Plugin.Instance;
+            fixture.LastShoreSeed = seed;
+            shore = seed + new UnityEngine.Vector3(2, 0, 0);
+            surface = null;
+            reason = fixture.ShoreFound ? null : "injected shore miss";
+            return fixture.ShoreFound;
+        }
+    }
+
+    internal static class StartArrival
+    {
+        internal static void CancelTracking()
+        {
+            var fixture = Plugin.Instance;
+            fixture.Cancellations++;
+            if (fixture.Tracking)
+                CancelRecord.Calls.Add("PlayerStartTracking");
+            fixture.Tracking = false;
         }
 
-        internal void Restore()
+        internal static void ClearSite()
         {
-            if (!restored)
-            {
-                Outstanding--;
-                restored = true;
-            }
+            if (Plugin.Instance.DocksideSet)
+                CancelRecord.Calls.Add("DocksideSurface");
+            Plugin.Instance.DocksideSet = false;
         }
+
+        internal static UnityEngine.Transform MakeTarget(ResolvedStart s, UnityEngine.Quaternion rotation, UnityEngine.Vector3 shore, UnityEngine.Vector3 berth)
+        {
+            Plugin.Instance.LastBerth = berth;
+            if (Plugin.Instance.FailTarget)
+                throw new InvalidOperationException("Injected player target failure");
+            var t = new UnityEngine.GameObject().transform;
+            t.SetPositionAndRotation(shore, rotation);
+            return t;
+        }
+
+        internal static void BeginTracking(StartMenu menu, UnityEngine.Transform target) => Plugin.Instance.Tracking = true;
     }
 
     internal class Plugin
     {
         internal bool ShoreFound = true;
         internal UnityEngine.Vector3 LastShoreSeed;
-        internal bool TryFindStartShore(PortChoice d, UnityEngine.Vector3 seed, UnityEngine.Vector3 boat, out UnityEngine.Vector3 shore, out object surface, out string reason)
-        {
-            LastShoreSeed = seed;
-            shore = seed + new UnityEngine.Vector3(2, 0, 0);
-            surface = null;
-            reason = ShoreFound ? null : "injected shore miss";
-            return ShoreFound;
-        }
 
         internal const string Id = "fixture";
         internal void Report(string text)
+        {
+        }
+        internal void DebugLog(string text)
         {
         }
 
@@ -896,44 +881,30 @@ namespace NewBeginnings
         internal int Cancellations;
         internal readonly List<string> Errors = new();
         internal readonly List<string> Warnings = new();
-        internal void CancelBoatSettle()
-        {
-            Cancellations++;
-            StarterMooring.Cancel();
-            StarterBoatRepair.Cancel();
-        }
-
-        internal void CancelPlayerStartTracking()
-        {
-            Cancellations++;
-        }
-
-        internal void ClearDocksideSurface()
-        {
-        }
-
+        internal bool Tracking, DocksideSet;
         internal void Warn(string text) => Warnings.Add(text);
         internal void Error(string text, Exception ex) => Errors.Add(text);
-        internal UnityEngine.Transform MakeTemporaryStart(ResolvedStart s, UnityEngine.Quaternion rotation, UnityEngine.Vector3 shore, UnityEngine.Vector3 berth)
-        {
-            if (FailTarget)
-                throw new InvalidOperationException("Injected player target failure");
-            var t = new UnityEngine.GameObject().transform;
-            t.SetPositionAndRotation(shore, rotation);
-            return t;
-        }
-
-        internal void BeginPlayerStartTracking(StartMenu menu, UnityEngine.Transform target)
-        {
-        }
+        internal UnityEngine.Vector3 LastBerth;
     }
 
     internal class MenuUi
     {
+        internal static int BlockedShown;
         internal static MenuUi ActiveFor(StartMenu menu) => new();
-        internal void ShowBlockedStart(string reason)
-        {
-        }
+        internal void ShowBlockedStart(string reason) => BlockedShown++;
+    }
+
+    internal static class BerthClearance
+    {
+        internal static bool Throw;
+        internal static UnityEngine.Vector3 AdjustCrabBeach(ResolvedStart s, UnityEngine.Vector3 p) => Throw ? throw new InvalidOperationException("Injected Crab Beach failure") : p + new UnityEngine.Vector3(1, 0, 0);
+    }
+
+    // Armed side-system work that a cancellation actually released, in call
+    // order. Like production, cancelling unarmed work records nothing.
+    internal static class CancelRecord
+    {
+        internal static readonly List<string> Calls = new();
     }
 
     internal static class StarterCargo
@@ -946,43 +917,61 @@ namespace NewBeginnings
             Armed = true;
         }
 
-        internal static void Disarm() => Armed = false;
+        internal static void Disarm()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StarterCargo");
+            Armed = false;
+        }
     }
 
     internal static class StartingValues
     {
         internal static bool Armed;
         internal static void Arm(ResolvedStart x) => Armed = true;
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StartingValues");
+            Armed = false;
+        }
     }
 
     internal static class LeopardStarterRig
     {
         internal static bool Armed;
         internal static void Arm(StartMenu m, ResolvedStart x) => Armed = true;
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("LeopardStarterRig");
+            Armed = false;
+        }
     }
 
     internal static class StarterMooring
     {
         internal static bool Armed;
         internal static void Arm(StartMenu m, ResolvedStart x, PickupableBoatMooringRope a, PickupableBoatMooringRope b) => Armed = true;
-        internal static void MarkSettled(ResolvedStart x)
-        {
-        }
 
-        internal static void Cancel() => Armed = false;
+        internal static void Cancel()
+        {
+            if (Armed)
+                CancelRecord.Calls.Add("StarterMooring");
+            Armed = false;
+        }
     }
 
     internal static class StarterBoatRepair
     {
         internal static bool Armed;
         internal static void Arm(StartMenu m, ResolvedStart x) => Armed = true;
-        internal static void MarkSettled(ResolvedStart x)
+        internal static void Cancel(string reason = null)
         {
+            if (Armed)
+                CancelRecord.Calls.Add("StarterBoatRepair:" + (reason ?? "default"));
+            Armed = false;
         }
-
-        internal static void Cancel() => Armed = false;
     }
 
     internal static partial class FixedStart
@@ -991,8 +980,8 @@ namespace NewBeginnings
         private static StartMenu pendingMenu;
         private static StartingOptionsSettings pendingOptions;
         internal static bool RequestedYard;
-        internal static int OrdinaryApplies;
-        private static UnityEngine.Vector3 AdjustLargeBoatBerth(ResolvedStart s, UnityEngine.Vector3 p, UnityEngine.Quaternion q) => p;
+        internal static bool ThrowLargeBoatBerth;
+        private static UnityEngine.Vector3 AdjustLargeBoatBerth(ResolvedStart s, UnityEngine.Vector3 p, UnityEngine.Quaternion q) => ThrowLargeBoatBerth ? throw new InvalidOperationException("Injected large-boat failure") : p + new UnityEngine.Vector3(0, 0, 1);
         private static UnityEngine.Vector3 GetBerthPosition(ResolvedStart s) => s.Recovery.boatPos.position;
         private static void ChooseMooringRopes(ResolvedStart s, out PickupableBoatMooringRope front, out PickupableBoatMooringRope back)
         {
@@ -1001,17 +990,6 @@ namespace NewBeginnings
         }
 
         internal static bool IsSelectionStillActive(StartMenu menu, ResolvedStart s) => menu != null && s.Boat != null && s.Saveable != null && s.StarterSet.starterBoat == s.Saveable.transform && menu.startingBoats[s.Region] == s.Boat;
-        internal static bool ApplyPendingAtStart(StartMenu menu, ref UnityEngine.Transform target)
-        {
-            if (pending == null || pendingMenu != menu || pending.Port.UsesCustomBerth)
-                return false;
-            OrdinaryApplies++;
-            pending = null;
-            pendingMenu = null;
-            pendingOptions = null;
-            return true;
-        }
-
         private static readonly FieldInfo CurrentRegionField = HarmonyLib.AccessTools.Field(typeof(StartMenu), "currentRegion"), MenuAnimationsField = HarmonyLib.AccessTools.Field(typeof(StartMenu), "animsPlaying"), StartingBoatsField = HarmonyLib.AccessTools.Field(typeof(StartMenu), "startingBoats"), RecoveryPortsField = HarmonyLib.AccessTools.Field(typeof(Recovery), "ports"), PurchaseUiField = HarmonyLib.AccessTools.Field(typeof(PurchasableBoat), "purchaseUI");
         private class RopePosition
         {
@@ -1049,8 +1027,8 @@ namespace NewBeginnings
             if (TryGetStartBlock(out _))
                 return null;
             Fixture = s;
-            pendingCustomSnapshot = new CustomStartSnapshot(menu, menu.currentRegion);
-            customFlightGeneration = customGeneration;
+            pendingSnapshot = new StartSnapshot(menu, menu.currentRegion);
+            flightGeneration = startGeneration;
             menu.currentRegion = s.Region;
             menu.animsPlaying++;
             PlayerGold.currency[s.Region] = 999;
@@ -1070,37 +1048,26 @@ namespace NewBeginnings
             pendingOptions = new();
             if (scrambled)
                 return ScrambledBoundary.Invoke(menu, NativeStart, menu.Observer, menu.Controller);
-            TryPreparePendingCustom(menu, NativeStart, out var sequence);
+            TryPreparePendingStart(menu, out var sequence);
             return sequence;
         }
 
         // Each independent scenario models a fresh process. Never called between attempts.
         internal static void ResetStartGuardFixture()
         {
-            CancelCustomStart();
-            customFlightGeneration = -1;
+            CancelStart();
+            flightGeneration = -1;
             ResolveFails = false;
+            ThrowLargeBoatBerth = false;
+            BerthClearance.Throw = false;
             pending = null;
             pendingMenu = null;
             pendingOptions = null;
         }
 
-        internal static bool PendingConsumedFixture() => pending == null && pendingMenu == null && pendingOptions == null && pendingCustomSnapshot == null;
-        internal static void SeedOrdinaryFixture(StartMenu menu)
-        {
-            pending = new StartPair
-            {
-                Port = new PortChoice
-                {
-                    UsesCustomBerth = false
-                }
-            };
-            pendingMenu = menu;
-            pendingOptions = new();
-        }
-
+        internal static bool PendingConsumedFixture() => pending == null && pendingMenu == null && pendingOptions == null && pendingSnapshot == null;
         internal static void LoadPrefixFixture() => typeof(FixedStart).GetNestedType("CancelBeforeLoad", BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
-        internal static bool HidePrefixFixture(StartMenu menu) => (bool)typeof(FixedStart).GetNestedType("CustomMenuHide", BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { menu });
-        internal static void PendingSnapshotFixture(StartMenu menu) => pendingCustomSnapshot = new CustomStartSnapshot(menu, menu.currentRegion);
+        internal static bool HidePrefixFixture(StartMenu menu) => (bool)typeof(FixedStart).GetNestedType("StartMenuHide", BindingFlags.NonPublic).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, new object[] { menu });
+        internal static void PendingSnapshotFixture(StartMenu menu) => pendingSnapshot = new StartSnapshot(menu, menu.currentRegion);
     }
 }

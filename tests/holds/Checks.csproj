@@ -9,7 +9,7 @@
     <Compile Include="../common/SceneDoubles.cs" />
     <Compile Include="Doubles.cs" />
     <Compile Include="Checks.cs" />
-    <Compile Include="../../src/PirateStationKeeper.cs" />
+    <Compile Include="../../src/OffshoreHold.cs" />
     <Compile Include="../../src/OffshoreHoldSave.cs" />
   </ItemGroup>
 </Project>

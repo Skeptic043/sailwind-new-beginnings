@@ -64,16 +64,10 @@ namespace NewBeginnings
             private static bool Prefix(PlayerEmbarkerNew __instance) => !Blocks(__instance);
         }
 
-        [HarmonyPatch(typeof(SaveLoadManager), "LoadGame")]
-        private static class LoadPatch
-        {
-            private static void Prefix() => Plugin.Instance?.CancelPlayerStartTracking();
-        }
-
         [HarmonyPatch(typeof(StartMenu), "EnableStartMenu")]
         private static class MenuPatch
         {
-            private static void Prefix() => Plugin.Instance?.CancelPlayerStartTracking();
+            private static void Prefix() => StartArrival.CancelTracking();
         }
     }
 }

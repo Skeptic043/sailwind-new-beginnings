@@ -64,26 +64,34 @@ namespace NewBeginnings
         public void Report(string s) => Messages.Add(s);
         public void Warn(string s) => Messages.Add(s);
         public void Error(string s, Exception e) => Messages.Add(s);
-        public bool TryGetDocksideCargoSurface(out Vector3 p, out Collider c)
+    }
+
+    // StarterCargo's surface boundary. Fixture state lives on the Plugin
+    // double, which each check replaces.
+    internal static class StartArrival
+    {
+        public static string CargoSurfaceStatus => Plugin.Instance.CargoSurfaceStatus;
+        public static bool TryGetCargoSurface(out Vector3 p, out Collider c)
         {
             p = Vector3.zero;
-            c = Ground;
+            c = Plugin.Instance.Ground;
             return true;
         }
 
-        public bool TryProbeDocksideCargoSurface(Vector3 q, out Vector3 p, out Collider c)
+        public static bool TryProbeCargoSurface(Vector3 q, out Vector3 p, out Collider c)
         {
-            Probes++;
+            var fixture = Plugin.Instance;
+            fixture.Probes++;
             p = new(q.x, 0, q.z);
-            c = ProbeCollider ?? Ground;
-            if (Surface != null)
+            c = fixture.ProbeCollider ?? fixture.Ground;
+            if (fixture.Surface != null)
             {
-                var hit = Surface(q);
+                var hit = fixture.Surface(q);
                 p = hit ?? p;
-                return GroundExists && hit.HasValue;
+                return fixture.GroundExists && hit.HasValue;
             }
 
-            return GroundExists && MathF.Abs(q.x) <= HalfWidth && MathF.Abs(q.z) <= HalfDepth;
+            return fixture.GroundExists && MathF.Abs(q.x) <= fixture.HalfWidth && MathF.Abs(q.z) <= fixture.HalfDepth;
         }
     }
 
@@ -158,17 +166,12 @@ namespace NewBeginnings
             return true;
         }
 
-        static void RefreshBoatWalkRoots()
-        {
-        }
-
         static bool IsVerifiedLandCollider(Collider c) => c != null && (c == Plugin.Instance.Ground || c == Plugin.Instance.ProbeCollider);
         static string AuthoredName(ShipItem i) => i.gameObject.name;
         static bool AuthoredNameContains(ShipItem i, string s) => AuthoredName(i).IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0;
         static bool IsNativeOar(ShipItem i) => i.IsOar;
         static bool IsNativeCup(ShipItem i) => false;
         static float LooseFootprintRadius(ShipItem i) => i.IsOar ? .4f : FootprintRadius(i);
-        static bool HasSupportFootprint(ShipItem i, Vector3 p) => HasSupportFootprintCore(i, p);
         static void PreparePackedItem(ShipItem i)
         {
         }

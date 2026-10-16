@@ -2,21 +2,23 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    // Offshore hold. Ownership can be granted while the player is
-    // still ashore; boarding, rather than purchase, hands the hull to physics.
-    internal sealed class PirateStationKeeper : MonoBehaviour
+    // Holds every offshore start (Pirate, Saffron, Siren Song, Fort Juniper,
+    // shipyard and best-effort holds) in its island frame. Ownership can be
+    // granted while the player is still ashore; boarding, rather than
+    // purchase, hands the hull to physics.
+    internal sealed class OffshoreHold : MonoBehaviour
     {
-        private static PirateStationKeeper active;
+        private static OffshoreHold active;
         private Rigidbody body;
         private Transform frame;
         private Vector3 localPosition;
         private float localYaw;
         private bool awaitingLoad;
 
-        internal static PirateStationKeeper Attach(Rigidbody body, Transform frame)
+        internal static OffshoreHold Attach(Rigidbody body, Transform frame)
         {
             RemoveActive();
-            var keeper = body.gameObject.AddComponent<PirateStationKeeper>();
+            var keeper = body.gameObject.AddComponent<OffshoreHold>();
             keeper.body = body; keeper.frame = frame;
             keeper.localPosition = frame.InverseTransformPoint(body.position);
             keeper.localYaw = Mathf.DeltaAngle(frame.eulerAngles.y, body.rotation.eulerAngles.y);
@@ -47,7 +49,7 @@ namespace NewBeginnings
             return true;
         }
 
-        internal static void Remove(PirateStationKeeper keeper)
+        internal static void Remove(OffshoreHold keeper)
         {
             if (keeper == null) return;
             if (active == keeper) active = null;
@@ -92,19 +94,6 @@ namespace NewBeginnings
             GameState.currentBoat != null && (GameState.currentBoat == heldBody.transform ||
                 GameState.currentBoat.parent == heldBody.transform) || GameState.currentShipyard != null &&
                 GameState.currentShipyard.GetCurrentBoat() == heldBody.gameObject;
-
-        internal static bool TryStowedPosition(Rigidbody hull, Rigidbody anchor, ConfigurableJoint joint,
-            Quaternion rotation, out Vector3 position)
-        {
-            position = default(Vector3);
-            if (hull == null || anchor == null || joint == null || joint.GetComponent<Rigidbody>() != anchor ||
-                joint.connectedBody != hull || !Finite(rotation.x) || !Finite(rotation.y) ||
-                !Finite(rotation.z) || !Finite(rotation.w)) return false;
-            var endpoint = hull.transform.TransformPoint(joint.connectedAnchor);
-            var pivot = rotation * Vector3.Scale(joint.anchor, anchor.transform.lossyScale);
-            position = endpoint - pivot;
-            return Finite(endpoint) && Finite(pivot) && Finite(position);
-        }
 
         private static bool Finite(Vector3 value) => Finite(value.x) && Finite(value.y) && Finite(value.z);
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
