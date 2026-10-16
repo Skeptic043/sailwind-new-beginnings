@@ -5,7 +5,7 @@
 ### Added
 
 - Automatic starting-location discovery for mod ports.
-- A `Mod ports` checkbox as one of the options for Random Port pool checkboxes when added locations are detected.
+- A `Mod ports` checkbox as one of the options for Random Port pool checkboxes when mod locations are detected.
 - A `Use shipyard berth` option that starts the game with the selected boat at the port's shipyard berth. It applies to manual and random starts and is disabled by default.
 - A `Spawn` tab in Starting options menu that contains boat/island exclusions, shipyard settings and a Secret islands toggle. Existing settings carry over.
 - Fort Juniper is an added starting location when [Old Chronian](https://github.com/Aquilarts/OldChronian) is installed. Fort Juniper also qualifies for Shipyard ports only spawning.
