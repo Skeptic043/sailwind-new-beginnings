@@ -399,7 +399,7 @@ class UiHarness
         ui.ToggleEditorRow(0);
         ui.ShowEditorTab(true);
         ui.ToggleEditorRow(0);
-        ui.CloseEditor(true);
+        ui.CloseEditor();
         check(ui.saves == 2 && ui.individualExclusions.IsPortExcluded(port) && ui.individualExclusions.IsBoatExcluded(boat) && ui.settings.ShipyardPortsOnly && !ui.settings.RandomPort && !ui.settings.RandomBoat, "both exclusion tabs must save in manual mode with shipyard-only on without changing those flags");
         plugin.ReloadConfigFile();
         check(ui.settings.ShipyardPortsOnly && !ui.settings.RandomPort && !ui.settings.RandomBoat && ui.individualExclusions.IsPortExcluded(port) && ui.individualExclusions.IsBoatExcluded(boat), "manual-mode spawn configuration must survive config reload");
@@ -471,13 +471,9 @@ class UiHarness
         check(ui.editorRoot.active && !panel.contentRoot.active && panel.IsOpen && panel.gameObject.active && ui.editorDraft.IsPortExcluded(port) && !ui.individualExclusions.IsPortExcluded(port), "nested editor must hide only panel content and keep exclusion draft separate");
         ui.RefreshDisplay();
         check(ui.mainControls.All(c => !c.active) && !ui.portExclusions.transform.parent.gameObject.active, "refresh must not reveal hidden main/spawn targets");
-        ui.CloseEditor(false);
-        check(panel.contentRoot.active && panel.SpawnTabOpen && !ui.editorRoot.active && !ui.individualExclusions.IsPortExcluded(port) && ui.saves == 1 && !ui.confirm.gameObject.active, "Back must discard exclusion draft and return to the Spawn tab");
-        ui.OpenEditor(false);
-        ui.ToggleEditorRow(0);
-        ui.CloseEditor(true);
-        check(ui.individualExclusions.IsPortExcluded(port) && ui.saves == 2 && panel.contentRoot.active && panel.SpawnTabOpen && !ui.confirm.gameObject.active, "Done must save exclusions and return to the Spawn tab");
-        check(ReferenceEquals(panel.draft, draft) && draft.CurrencyMultiplier == 7f && draft.StartingReputation == 4 && draft.EquipmentQuantities["fixture-item"] == 2 && panel.amounts[0] == "123" && plugin.StartOptions.CurrencyMultiplier == 1f, "both exclusion returns must preserve the pending Money, Reputation and Equipment draft");
+        ui.CloseEditor();
+        check(panel.contentRoot.active && panel.SpawnTabOpen && !ui.editorRoot.active && ui.individualExclusions.IsPortExcluded(port) && ui.saves == 2 && !ui.confirm.gameObject.active, "the exclusion editor's only close action must save its draft and return to the Spawn tab");
+        check(ReferenceEquals(panel.draft, draft) && draft.CurrencyMultiplier == 7f && draft.StartingReputation == 4 && draft.EquipmentQuantities["fixture-item"] == 2 && panel.amounts[0] == "123" && plugin.StartOptions.CurrencyMultiplier == 1f, "exclusion Done must preserve the pending Money, Reputation and Equipment draft");
         foreach (var tab in new[] { 0, 1, 2, 3 })
         {
             panel.ShowTab(tab);
@@ -508,26 +504,27 @@ class UiHarness
         check(ui.editing && !panel.contentRoot.active && panel.SpawnTabOpen && ui.editorRoot.active && !ui.confirm.gameObject.active && ui.saves == 2, "disabling both random modes externally must keep the editor open without saving");
         ui.ShowEditorTab(true);
         check(ui.editingBoats && ui.editorTitle.text == "Random Boat Exclusions", "both editor tabs must work while Random is off");
-        ui.CloseEditor(false);
+        ui.CloseEditor();
         ui.settings.RandomPort = true;
         ui.settings.RandomBoat = true;
         panel.draft.CurrencyMultiplier = 11f;
         ui.OpenEditor(true);
         ui.ToggleEditorRow(0);
         ui.OnDisable();
-        check(!panel.IsOpen && panel.draft == null && !ui.editing && !panel.gameObject.active && !ui.editorRoot.active && !ui.individualExclusions.IsBoatExcluded(boat) && ui.saves == 2 && plugin.StartOptions.CurrencyMultiplier == 8f, "menu disable must discard parent and exclusion drafts and close both");
+        check(!panel.IsOpen && panel.draft == null && !ui.editing && !panel.gameObject.active && !ui.editorRoot.active && ui.individualExclusions.IsBoatExcluded(boat) && ui.saves == 4 && plugin.StartOptions.CurrencyMultiplier == 8f, "menu disable must save the active exclusion draft while discarding the separate parent draft");
         panel.Open();
         panel.ShowTab(3);
         ui.OpenEditor(true);
+        ui.ToggleEditorRow(0);
         panel.OnDisable();
-        check(!panel.IsOpen && !ui.editing && !ui.editorRoot.active && ui.confirm.gameObject.active, "panel disable while nested must close child and restore native actions");
+        check(!panel.IsOpen && !ui.editing && !ui.editorRoot.active && !ui.individualExclusions.IsBoatExcluded(boat) && ui.saves == 5 && ui.confirm.gameObject.active, "panel disable while nested must save the child draft and restore native actions");
         ui.confirm.gameObject.SetActive(false);
         ui.back.gameObject.SetActive(false);
         ui.titleTemplate.gameObject.SetActive(false);
         panel.Open();
         panel.ShowTab(3);
         ui.OpenEditor(false);
-        ui.CloseEditor(false);
+        ui.CloseEditor();
         panel.Close(false);
         check(!ui.confirm.gameObject.active && !ui.back.gameObject.active && !ui.titleTemplate.gameObject.active, "submenu return must preserve originally hidden native controls");
         plugin.SettingsReloaded -= ui.OnSettingsReloaded;

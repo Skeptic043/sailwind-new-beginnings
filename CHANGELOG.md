@@ -1,33 +1,32 @@
 # Release notes
 
-## Version 1.5.0
+## Version 1.5.1
 
 ### Added
 
-- Automatic starting-location discovery for modded ports.
+- Automatic starting-location discovery for mod ports.
 - A `Mod ports` checkbox as one of the options for Random Port pool checkboxes when added locations are detected.
 - A `Use shipyard berth` option that starts the game with the selected boat at the port's shipyard berth. It applies to manual and random starts and is disabled by default.
 - A `Spawn` tab in Starting options menu that contains boat/island exclusions, shipyard settings and a Secret islands toggle. Existing settings carry over.
 - Fort Juniper is an added starting location when [Old Chronian](https://github.com/Aquilarts/OldChronian) is installed. Fort Juniper also qualifies for Shipyard ports only spawning.
 - Bottleneck Isle is an added starting location when [Better Ports](https://github.com/winterspices/BetterPorts) is installed.
-- Boat authors can register the player-facing name used in the boat selector and exclusion list.
-- Port authors can supply optional dock, berth, shore, mooring and shipyard details for an automatically discovered native port.
+- Boat authors can register the player-facing name used in the boat selector and exclusion list using the new [boat author API](BOAT_AUTHORS.md).
+- Port authors can supply optional dock, berth, shore, mooring and shipyard details for an automatically discovered native port using the new [port author API](PORT_AUTHORS.md).
 
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
 - Chronos is now included in Small Islands randomization if enabled, and can be enabled or disabled in the new `Spawn` tab.
 - Pirate Island and Saffron Island are now optional Small Islands starts when enabled in the `Spawn` tab.
-- Pirate Island uses its existing docks for Small boats when they can moor there. Larger boats that cannot moor wait offshore until the player boards them (make sure to drop the anchor when you do to prevent the ship floating away).
-- At Saffron, the player and supplies start on dry land near the water while the boat waits offshore until the player boards (make sure to drop the anchor when you do to prevent the ship floating away).
+- Pirate Island uses one of its existing docks for Small boats when they can moor there. Larger boats that don't fit well at the dock wait offshore until the player boards them (make sure to drop the anchor when you board to prevent the ship floating away).
+- At Saffron, the player and supplies start on dry land near the water while the boat waits offshore until the player boards (make sure to drop the anchor when you board to prevent the ship floating away).
 
 </details>
 
 ### Changed
 
 - Shipyard ports only uses detected shipyards instead of a fixed list of vanilla ports.
-- Exclusions and shipyard settings can be edited from the Spawn tab without first enabling their related random option. Port controls, Spawn labels and menu messages have also been rearranged for readability.
-- Shipyard starts use port-specific berths and nearby landing areas at Gold Rock City, Dragon Cliffs, Fort Aestrin, Fort Juniper and Kicia Bay.
+- Exclusions and shipyard settings can be edited from the new Spawn tab without enabling random selection first. Port controls, Spawn labels and menu messages have also been rearranged for readability.
 - Starting supplies favor the space nearest the player and suitable crates can begin in short stacks up to 3 items high.
 - Starting mooring lines receive up to one metre of extra slack on every boat (down from 3).
 - Siren Song can now be used with any boat.

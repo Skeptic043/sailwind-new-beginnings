@@ -199,7 +199,7 @@ namespace NewBeginnings
         {
             if (reloadSource != null) reloadSource.SettingsReloaded -= OnSettingsReloaded;
             reloadSource = null;
-            if (editing) CloseEditor(false);
+            if (editing) CloseEditor();
             startingOptions?.Close(false);
         }
 
@@ -529,12 +529,8 @@ namespace NewBeginnings
                 -.51f, .45f, .45f, () => ChangeEditorPage(-1));
             editorNext = MakeButton(page, "Next exclusions page", 1.18f,
                 -.51f, .45f, .45f, () => ChangeEditorPage(1));
-            var cancel = MakeButton(page, "Back from exclusions", -.55f, -.76f,
-                .82f, .64f, () => CloseEditor(false));
-            SetButtonText(cancel, "Back");
-            cancel.description = "Discard changes and return to Spawn options.";
-            var done = MakeButton(page, "Done editing exclusions", .55f, -.76f,
-                .82f, .64f, () => CloseEditor(true));
+            var done = MakeButton(page, "Done editing exclusions", 0f, -.76f,
+                .82f, .64f, CloseEditor);
             SetButtonText(done, "Done");
             done.description = "Save individual island and boat exclusions.";
         }
@@ -557,14 +553,14 @@ namespace NewBeginnings
 
         internal void RefreshSpawnOptions() => RefreshDisplay();
 
-        internal void CloseExclusions() => CloseEditor(false);
+        internal void CloseExclusions() => CloseEditor();
 
         private void OpenEditor(bool boats)
         {
             if (startingOptions == null || !startingOptions.SpawnTabOpen || editing || settings == null ||
                 individualExclusions == null || editorRoot == null) return;
             RefreshCatalog();
-            // Edit a draft: Done applies it, any other close discards it.
+            // Keep edits isolated until the editor closes, then save them together.
             editorDraft = individualExclusions.Copy();
             editing = true;
             editingBoats = boats;
@@ -576,20 +572,17 @@ namespace NewBeginnings
             HideNativeRegionChoice();
         }
 
-        private void CloseEditor(bool save)
+        private void CloseEditor()
         {
             if (!editing) return;
             editing = false;
-            if (save)
-            {
-                individualExclusions?.ReplaceWith(editorDraft);
-            }
+            individualExclusions?.ReplaceWith(editorDraft);
             editorDraft = null;
             editorRoot.SetActive(false);
             startingOptions?.ShowExclusionEditor(false);
             HideNativeRegionChoice();
             RefreshDisplay();
-            if (save) changed?.Invoke();
+            changed?.Invoke();
         }
 
         private void ShowEditorTab(bool boats)
