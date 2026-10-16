@@ -408,9 +408,11 @@ namespace NewBeginnings
         private static bool CanPack(ShipItem item) =>
             CanPack(item, ScaledPackingTools.Contains(item) || ScaledStarterMaps.Contains(item));
 
-        private static bool CanPack(ShipItem item, bool allowScaledPacking)
+        // Shared with ModEquipment's catalogue gate. Native withdrawal resets
+        // the root scale to one; Append records the supported scale exceptions
+        // for this loadout.
+        internal static bool CanPack(ShipItem item, bool allowScaledPacking)
         {
-            // Append records the supported scale exceptions for this loadout.
             return item != null && !item.big &&
                 ((item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f ||
                  (allowScaledPacking && ModEquipment.ValidScale(item.transform.localScale)));

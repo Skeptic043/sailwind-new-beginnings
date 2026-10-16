@@ -202,12 +202,10 @@ namespace NewBeginnings
                     flightGeneration = startGeneration;
                     plugin.Report($"New Beginnings selected port {pair.Port.Index} and boat scene {pair.Boat.Index}.");
                     MarkStartSelected();
-                    StartupProfiler.Begin(Time.realtimeSinceStartup, Time.frameCount);
                 }
                 catch (Exception exception)
                 {
                     ClearStartTiming();
-                    StartupProfiler.Cancel();
                     pending = null;
                     pendingMenu = null;
                     pendingOptions = null;

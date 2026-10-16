@@ -942,7 +942,6 @@ static class PirateCandidateChecks
         Reset();
         clear = _ => false;
         Check(TryFixedOffshoreHold(saffron, new Rigidbody(), new Hull(), 2, SaffronOffshoreCenter, Vector3.forward, new Survey(true), saffronLanding, out plan, out saffronReason) && plan.OffshoreDiagnostics.StartsWith("Saffron Island offshore hold") && plan.OffshoreDiagnostics.Contains("hull clearance unverified"), "Saffron hold cancelled or reported another location");
-        Check(PiratePlanMessage(StartBerthMode.OffshoreHeld, 12).Contains("OffshoreHeld") && PiratePlanMessage(StartBerthMode.Moored, 12).Length < 100, "mode diagnostic ambiguous or excessive");
         front.transform.position = new(0, 1, 0);
         back.transform.position = new(4, 1, 0);
         Reset();

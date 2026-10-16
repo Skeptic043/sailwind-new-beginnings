@@ -53,8 +53,7 @@ for marker in [
     'private static bool Finite(float',
     'private static bool Finite(Vector3',
     'internal static bool RopeFits(',
-    'private static bool PirateRequiresOffshore(',
-    'private static string PiratePlanMessage('
+    'private static bool PirateRequiresOffshore('
 ]:
     start = source.index(marker)
     candidate_members += '\n' + source[start:source.index(';', start) + 1]

@@ -159,16 +159,6 @@ namespace NewBeginnings
 
         private void Update()
         {
-            StartupProfiler.Tick(Time.realtimeSinceStartup, Time.frameCount, GameState.currentlyLoading,
-                GameState.playing, StarterCargo.Armed, StarterCargo.Stage ??
-                (GameState.playing || StartArrival.WaitingForPlayerInput() ? "after the start prompt" : "new-game transition"));
-            var profiled = StartupProfiler.Enter();
-            try { UpdateCore(); }
-            finally { StartupProfiler.Exit(profiled); }
-        }
-
-        private void UpdateCore()
-        {
             if (GameState.currentlyLoading) FixedStart.ClearStartTiming();
             else if (GameState.playing || StartArrival.WaitingForPlayerInput()) FixedStart.ReportGameplayReached();
             if (StartArrival.HasSite && GameState.currentlyLoading)

@@ -41,7 +41,7 @@ namespace NewBeginnings
             var token = generation;
             try
             {
-                Plugin.Instance.Report($"Startup hull repair scheduled for boat {BoatLabel(selected)}; waiting for settled ownership and active physics.");
+                Plugin.Instance.DebugLog($"Startup hull repair scheduled for boat {BoatLabel(selected)}; waiting for settled ownership and active physics.");
                 Plugin.Instance.StartCoroutine(RepairAfterPlacement(menu, selected, damage, token));
             }
             catch (Exception exception)
@@ -101,7 +101,7 @@ namespace NewBeginnings
                                 if (repairAt >= 0f && !reportedReset)
                                 {
                                     reportedReset = true;
-                                    Plugin.Instance.Report($"Startup hull repair waiting again for boat {BoatLabel(selected)}; readiness changed, so its eight-second delay will restart.");
+                                    Plugin.Instance.DebugLog($"Startup hull repair waiting again for boat {BoatLabel(selected)}; readiness changed, so its eight-second delay will restart.");
                                 }
                                 repairAt = -1f;
                                 if (!awaitingInput) waitingElapsed += elapsed;
@@ -117,7 +117,7 @@ namespace NewBeginnings
                                 if (!reportedDelay)
                                 {
                                     reportedDelay = true;
-                                    Plugin.Instance.Report($"Startup hull repair delay started for boat {BoatLabel(selected)}; repair is due after eight seconds of readiness.");
+                                    Plugin.Instance.DebugLog($"Startup hull repair delay started for boat {BoatLabel(selected)}; repair is due after eight seconds of readiness.");
                                 }
                             }
                             else if (now >= repairAt)

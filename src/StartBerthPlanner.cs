@@ -88,20 +88,10 @@ namespace NewBeginnings
         internal static bool TryPlan(PortChoice destination, Rigidbody body, BoatMooringRopes ropes, BoatSize? size,
             out StartBerthPlan plan, out string reason)
         {
-            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var accepted = TryPlanCore(destination, body, ropes, size, out plan, out reason);
-            if (accepted && destination.Hidden == HiddenSite.Pirate)
-            {
-                var milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0 /
-                    System.Diagnostics.Stopwatch.Frequency;
-                Plugin.Instance.Report(PiratePlanMessage(plan.Mode, milliseconds));
-            }
             if (accepted && !string.IsNullOrEmpty(plan.OffshoreDiagnostics)) Plugin.Instance.Warn(plan.OffshoreDiagnostics);
             return accepted;
         }
-
-        private static string PiratePlanMessage(StartBerthMode mode, double milliseconds) =>
-            $"Pirate berth survey accepted {mode} plan in {milliseconds:F1} ms.";
 
         private static bool PirateRequiresOffshore(PortChoice destination, BoatSize? size) =>
             destination.Hidden == HiddenSite.Pirate && size != BoatSize.Small;

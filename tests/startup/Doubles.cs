@@ -872,6 +872,9 @@ namespace NewBeginnings
         internal void Report(string text)
         {
         }
+        internal void DebugLog(string text)
+        {
+        }
 
         internal static Plugin Instance = new();
         internal bool FailTarget;

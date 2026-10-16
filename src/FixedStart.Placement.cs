@@ -276,7 +276,6 @@ namespace NewBeginnings
                 catch (Exception exception) { Plugin.Instance?.Error("Boat rollback could not fully restore a disappeared scene object.", exception); }
                 finally
                 {
-                    StartupProfiler.Cancel();
                     CancelArmedSystems();
                     CleanupStart(() => snapshot?.Restore(cancelled));
                     ClearStartTiming();
@@ -312,25 +311,18 @@ namespace NewBeginnings
                     if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
                         Plugin.Instance?.Warn("The selected island scenery did not report ready" + SinceSelection() +
                             ". Preparing the start anyway.");
-                    else Plugin.Instance?.Report("Starting-location scenery ready" + SinceSelection() + ".");
-                    var profiled = StartupProfiler.Enter();
-                    try { placement = TryPrepareStart(menu, pair, options); }
-                    finally { StartupProfiler.Exit(profiled); }
+                    else Plugin.Instance?.DebugLog("Starting-location scenery ready" + SinceSelection() + ".");
+                    placement = TryPrepareStart(menu, pair, options);
                     if (placement == null) yield break;
                     if (placement != null)
                     {
-                        profiled = StartupProfiler.Enter();
-                        try
+                        if (placement.Commit(out var placed, out var problem)) target = placed;
+                        else
                         {
-                            if (placement.Commit(out var placed, out var problem)) target = placed;
-                            else
-                            {
-                                Plugin.Instance?.Error("The selected start cannot be handed to Sailwind (" + problem +
-                                    "). No regional start was substituted.", null);
-                                yield break;
-                            }
+                            Plugin.Instance?.Error("The selected start cannot be handed to Sailwind (" + problem +
+                                "). No regional start was substituted.", null);
+                            yield break;
                         }
-                        finally { StartupProfiler.Exit(profiled); }
                     }
                 }
                 if (target == null)
@@ -370,7 +362,7 @@ namespace NewBeginnings
                     if (!committed && Granted(placement))
                     {
                         committed = true; startCleanup = null;
-                        Plugin.Instance?.Report("Starting boat granted" + SinceSelection() + ".");
+                        Plugin.Instance?.DebugLog("Starting boat granted" + SinceSelection() + ".");
                     }
                     yield return native.Current;
                 }

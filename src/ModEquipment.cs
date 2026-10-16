@@ -18,6 +18,14 @@ namespace NewBeginnings
         private const int NativeDirectoryLength = 390;
         private const string NavigationProvider = "com.larsonlogistics.sailwind.navsuite";
         private const string FurnitureProvider = "com.kemy.kemyfurniture";
+        private const string RadioProvider = "local.sailwind.radio";
+        private static readonly string[] RadioTitles = { "Radio", "Small Speaker" };
+        // Title and variant pairs whose authored prefab name only restates the item.
+        private static readonly string[][] RedundantVariants =
+        {
+            new[] { "Propeller Controller", "Pump Controller" },
+            new[] { "Celestial Atlas", "star atlas" }
+        };
         private static readonly Provider Unattributed = new Provider
         { Id = "registered", Name = "Other mod items" };
         private static readonly FieldInfo CurrentCrate = AccessTools.Field(typeof(SaveablePrefab), "currentCrateId");
@@ -98,36 +106,38 @@ namespace NewBeginnings
                 var looseNavigation = knownEquipment && owner.Id == NavigationProvider &&
                     itemAssembly == typeof(ShipItem).Assembly && owners.Length <= 1 &&
                     (owners.Length == 0 || owners[0] == owner) && ValidScale(prefab.transform.localScale);
-                if (!FitsCrate(item) && !looseNavigation) continue;
+                if (!AdditionalEquipment.CanPack(item, allowScaledPacking: false) && !looseNavigation) continue;
                 var scaledPacking = looseNavigation && !item.big &&
                     (MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "compassPrefab", prefab) ||
                      MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "inclinometerPrefab", prefab));
                 var title = string.IsNullOrWhiteSpace(item.name) ? CanonicalName(prefab.name) : item.name;
-                // The authored variant name distinguishes same-name gauges,
-                // compasses and telltales without exposing a mutable save index.
-                var variant = CanonicalName(prefab.name);
-                var bearingCompassLabel = owner.Id == NavigationProvider && variant == "BearingCompass";
-                if (bearingCompassLabel) title = "Bearing Compass";
-                var radioLabel = owner.Id == "local.sailwind.radio" &&
-                    (string.Equals(title, "Radio", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(title, "Small Speaker", StringComparison.OrdinalIgnoreCase));
-                if (radioLabel)
-                    title = string.Equals(title, "Radio", StringComparison.OrdinalIgnoreCase) ? "Radio" : "Small Speaker";
-                var redundantVariant = radioLabel || bearingCompassLabel ||
-                    (string.Equals(title, "Propeller Controller", StringComparison.OrdinalIgnoreCase) &&
-                     string.Equals(variant, "Pump Controller", StringComparison.OrdinalIgnoreCase)) ||
-                    (string.Equals(title, "Celestial Atlas", StringComparison.OrdinalIgnoreCase) &&
-                     string.Equals(variant, "star atlas", StringComparison.OrdinalIgnoreCase));
-                if (!redundantVariant && !string.Equals(title, variant, StringComparison.OrdinalIgnoreCase))
-                    title += " (" + variant + ")";
                 found.Add(new EquipmentEntry(index, prefab.name, item.GetType().FullName,
-                    title, owner.Id, owner.Name, scaledPacking));
+                    DisplayName(owner.Id, title, CanonicalName(prefab.name)), owner.Id, owner.Name, scaledPacking));
             }
             return found.GroupBy(entry => entry.Key, StringComparer.Ordinal)
                 .Where(group => group.Count() == 1).Select(group => group.Single())
                 .OrderBy(entry => entry.SourceName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
         }
+
+        // The authored variant name distinguishes same-name gauges, compasses
+        // and telltales without exposing a mutable save index. Known mod items
+        // get a fixed title and no suffix that only repeats the item.
+        private static string DisplayName(string providerId, string title, string variant)
+        {
+            if (providerId == NavigationProvider && variant == "BearingCompass") return "Bearing Compass";
+            if (providerId == RadioProvider)
+            {
+                var label = RadioTitles.FirstOrDefault(value => SameName(title, value));
+                if (label != null) return label;
+            }
+            if (SameName(title, variant) ||
+                RedundantVariants.Any(pair => SameName(title, pair[0]) && SameName(variant, pair[1]))) return title;
+            return title + " (" + variant + ")";
+        }
+
+        private static bool SameName(string left, string right) =>
+            string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
         private static bool HasVisibleMesh(GameObject prefab)
         {
@@ -150,13 +160,6 @@ namespace NewBeginnings
                 if (mesh != null && renderer.sharedMaterials.Any(material => material != null && material.shader != null)) return true;
             }
             return false;
-        }
-
-        private static bool FitsCrate(ShipItem item)
-        {
-            // Keep aligned with AdditionalEquipment.CanPack: native withdrawal
-            // resets the root scale to one, so scaled items cannot be offered.
-            return !item.big && (item.transform.localScale - Vector3.one).sqrMagnitude < 0.000001f;
         }
 
         internal static bool ValidScale(Vector3 scale) => ValidScaleAxis(scale.x) &&
