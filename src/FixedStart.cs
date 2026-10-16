@@ -69,6 +69,12 @@ namespace NewBeginnings
         private static Transform nativeTweenTarget;
         private static bool nativeTweenSeamReady;
 
+        // New Beginnings runs only when Sailwind's player-start sequence and any
+        // provider seam were hooked at launch. Otherwise it stays out of the way:
+        // its menu is never attached and Sailwind's normal new game runs.
+        internal static bool CanSelect => nativeTweenSeamReady && PlayerObserverField != null &&
+            PlayerControllerField != null && ScrambledSeasIntegration.CanSelect;
+
         private static void ClearAcceptedButtonChoice()
         {
             acceptedButtonPair = null;
@@ -90,7 +96,7 @@ namespace NewBeginnings
                 { MenuUi.ActiveFor(__instance)?.ShowBlockedStart(blocked); return false; }
                 ClearAcceptedButtonChoice();
                 var plugin = Plugin.Instance;
-                if (plugin == null || !ScrambledSeasIntegration.CanSelect) return true;
+                if (plugin == null || !CanSelect) return true;
                 MenuUi activeUi = null;
                 try
                 {
@@ -122,7 +128,7 @@ namespace NewBeginnings
                         plugin.Warn("New game blocked by New Beginnings selection: " + reason);
                         return false;
                     }
-                    if (!nativeTweenSeamReady || !TryGetNativeStartActors(__instance, out _, out _))
+                    if (!TryGetNativeStartActors(__instance, out _, out _))
                     {
                         activeUi.ShowBlockedStart("The native player-start sequence is unavailable.");
                         return false;
@@ -166,7 +172,7 @@ namespace NewBeginnings
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
                 var plugin = Plugin.Instance;
-                if (plugin == null || !ScrambledSeasIntegration.CanSelect) return true;
+                if (plugin == null || !CanSelect) return true;
 
                 object previousRegion = null;
                 var regionUpdated = false;
@@ -185,8 +191,6 @@ namespace NewBeginnings
                         plugin.Error("New Beginnings could not choose a start for a new game it did not begin; that caller's start was left unchanged. " + reason, null);
                         return true;
                     }
-                    if (!nativeTweenSeamReady)
-                        throw new InvalidOperationException("The native player-start seam is unavailable.");
                     // Scrambled Seas may move every island, recovery marker and boat
                     // in its own prefix. Keep identities here; resolve coordinates and
                     // mutate the boat only in the selected coroutine factory.

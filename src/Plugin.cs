@@ -36,7 +36,10 @@ namespace NewBeginnings
                 ScrambledSeasIntegration.Initialize(harmony);
                 // Subscribe last, so a failed initialization leaves no handler.
                 Config.SettingChanged += OnConfigSettingChanged;
-                Logger.LogInfo("New Beginnings loaded with port and boat selection.");
+                if (FixedStart.CanSelect)
+                    Logger.LogInfo("New Beginnings loaded with port and boat selection.");
+                else
+                    Logger.LogWarning("New Beginnings is inactive for this game build (see the warnings above); Sailwind's normal new-game menu is used.");
             }
             catch (Exception exception)
             {
@@ -64,9 +67,9 @@ namespace NewBeginnings
             {
                 var plugin = Instance;
                 if (plugin == null) return;
-                // An unknown Scrambled Seas build keeps its own and Sailwind's
-                // menu controls, matching the untouched startup fallback.
-                if (!ScrambledSeasIntegration.CanSelect) return;
+                // An unhooked start sequence or unknown Scrambled Seas build
+                // keeps Sailwind's own menu and new game untouched.
+                if (!FixedStart.CanSelect) return;
                 try
                 {
                     if (MenuUi.Attach(__instance, plugin.Settings, () => plugin.Overrides,
