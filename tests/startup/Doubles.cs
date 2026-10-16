@@ -107,6 +107,7 @@ namespace UnityEngine
 
         public static Vector3 operator +(Vector3 a, Vector3 b) => new(a.x + b.x, a.y + b.y, a.z + b.z);
         public static Vector3 operator -(Vector3 a, Vector3 b) => new(a.x - b.x, a.y - b.y, a.z - b.z);
+        public static Vector3 Scale(Vector3 a, Vector3 b) => new(a.x * b.x, a.y * b.y, a.z * b.z);
         public override string ToString() => $"({x},{y},{z})";
     }
 
@@ -130,6 +131,11 @@ namespace UnityEngine
         }
 
         public static Quaternion operator *(Quaternion a, Quaternion b) => new(a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x, a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+        public static Vector3 operator *(Quaternion q, Vector3 v)
+        {
+            var r = System.Numerics.Vector3.Transform(new(v.x, v.y, v.z), new System.Numerics.Quaternion(q.x, q.y, q.z, q.w));
+            return new(r.X, r.Y, r.Z);
+        }
     }
 
     public class Component : Object
@@ -192,6 +198,7 @@ namespace UnityEngine
         public Transform parent;
         public Vector3 localPosition;
         public Quaternion localRotation = Quaternion.identity;
+        public Vector3 lossyScale = new(1, 1, 1);
         public Transform(GameObject owner)
         {
             gameObject = owner;
@@ -275,6 +282,7 @@ public enum PortRegion
 
 public class Port : UnityEngine.Component
 {
+    public int portIndex;
 }
 
 public class Shipyard : UnityEngine.Component
@@ -625,7 +633,9 @@ namespace NewBeginnings
         internal Shipyard Yard;
         internal UnityEngine.Transform DockRoot => Island.transform;
 
-        internal string HiddenKey, SiteIdentity, IdentityName;
+        internal Port Port;
+        internal HiddenSite Hidden;
+        internal string SiteIdentity, IdentityName;
         internal int Index;
         internal IslandHorizon Island;
         internal bool Current = true, Scenery = true, NeedsPlannedBerth = true;
@@ -657,34 +667,24 @@ namespace NewBeginnings
     {
     }
 
-    internal class PirateStationKeeper
+    internal class OffshoreHold
     {
-        internal static PirateStationKeeper Active;
+        internal static OffshoreHold Active;
         internal bool Removed;
-        internal static PirateStationKeeper Attach(UnityEngine.Rigidbody body, UnityEngine.Transform frame)
+        internal static OffshoreHold Attach(UnityEngine.Rigidbody body, UnityEngine.Transform frame)
         {
             RemoveActive();
             return Active = new();
         }
 
         internal static void RemoveActive() => Remove(Active);
-        internal static void Remove(PirateStationKeeper keeper)
+        internal static void Remove(OffshoreHold keeper)
         {
             if (keeper == null)
                 return;
             keeper.Removed = true;
             if (ReferenceEquals(keeper, Active))
                 Active = null;
-        }
-
-        // Geometry is exercised against the actual helper in the separate keeper fixture.
-        internal static bool TryStowedPosition(UnityEngine.Rigidbody hull, UnityEngine.Rigidbody anchor, UnityEngine.ConfigurableJoint joint, UnityEngine.Quaternion rotation, out UnityEngine.Vector3 position)
-        {
-            position = new();
-            if (joint == null || joint.connectedBody != hull || joint.GetComponent<UnityEngine.Rigidbody>() != anchor)
-                return false;
-            position = hull.transform.TransformPoint(joint.connectedAnchor) - joint.anchor;
-            return true;
         }
     }
 

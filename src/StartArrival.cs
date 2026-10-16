@@ -76,8 +76,7 @@ namespace NewBeginnings
                 selected.FrontMooring != null ? selected.FrontMooring.transform : null,
                 selected.BackMooring != null ? selected.BackMooring.transform : null,
                 berthPosition,
-                selected.Port != null && selected.Port.portIndex == 6 &&
-                    string.Equals(selected.Port.gameObject.name, "port A/M 6 (Oasis)", StringComparison.Ordinal),
+                KnownSites.IsOasis(selected.Port),
                 -1);
             // A new target starts any pending control hold again.
             if (phase == Phase.HoldingControl) phase = Phase.Snapping;

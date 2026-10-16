@@ -111,7 +111,7 @@ static class Checks
             var site = new PortChoice
             {
                 Island = island,
-                HiddenKey = pirateOffshore ? "pirate" : null
+                Hidden = pirateOffshore ? HiddenSite.Pirate : HiddenSite.None
             };
             var plan = new StartBerthPlan
             {
@@ -314,7 +314,7 @@ static class Checks
         var f = new Fixture(beforeBegin: x => x.Selected.Berth.Mode = StartBerthMode.Moored);
         var target = f.Selected.Berth.Position;
         f.Finish();
-        Check(f.Selected.Body.position.Equals(target) && f.Selected.Ropes.ropes.All(r => r.IsMoored()) && StarterMooring.Armed && PirateStationKeeper.Active == null, "best-effort rope-reachable berth did not use native lines at unchanged pose");
+        Check(f.Selected.Body.position.Equals(target) && f.Selected.Ropes.ropes.All(r => r.IsMoored()) && StarterMooring.Armed && OffshoreHold.Active == null, "best-effort rope-reachable berth did not use native lines at unchanged pose");
     }
 
     static void ShipyardMooringAndHoldFallback()
@@ -333,9 +333,9 @@ static class Checks
             f.Finish();
             Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(target) && StarterCargo.Armed, "shipyard mooring result blocked the start, supplies or moved the approved pose");
             if (failedLine < 0)
-                Check(f.Selected.Berth.Mode == StartBerthMode.Moored && StarterMooring.Armed && PirateStationKeeper.Active == null && f.Selected.Ropes.ropes.All(r => r.IsMoored()), "successful shipyard mooring kept station hold or skipped native slack");
+                Check(f.Selected.Berth.Mode == StartBerthMode.Moored && StarterMooring.Armed && OffshoreHold.Active == null && f.Selected.Ropes.ropes.All(r => r.IsMoored()), "successful shipyard mooring kept station hold or skipped native slack");
             else
-                Check(f.Selected.Berth.Mode == StartBerthMode.ShipyardHeld && !StarterMooring.Armed && PirateStationKeeper.Active != null && f.Selected.Ropes.ropes.All(r => !r.IsMoored()), "failed shipyard connection left partial mooring or lost held fallback");
+                Check(f.Selected.Berth.Mode == StartBerthMode.ShipyardHeld && !StarterMooring.Armed && OffshoreHold.Active != null && f.Selected.Ropes.ropes.All(r => !r.IsMoored()), "failed shipyard connection left partial mooring or lost held fallback");
         }
     }
 
@@ -491,7 +491,7 @@ static class Checks
         Check(FixedStart.RequestedYard && f.Selected.Boat.purchased && f.Selected.Body.position.Equals(target), "shipyard preference snapshot or moving-frame native release pose lost");
         Check(f.Selected.Body.rotation.Equals(marker.rotation), "shipyard release rotation altered");
         Check(f.Menu.NativeTarget.position.Equals(f.Selected.Berth.ShorePosition) && f.Menu.NativeTarget.position.y == 6 && f.Menu.NativeTarget.position.x != target.x, "player was put aboard instead of on dry shore");
-        Check(StarterCargo.Armed && PirateStationKeeper.Active != null && !StarterMooring.Armed && !f.Anchor.IsSet(), "shipyard start failed supply/hold setup or used mooring/anchor path");
+        Check(StarterCargo.Armed && OffshoreHold.Active != null && !StarterMooring.Armed && !f.Anchor.IsSet(), "shipyard start failed supply/hold setup or used mooring/anchor path");
         Check(f.Selected.Destination.NeedsPlannedBerth == false, "shipyard start mutated catalog recovery identity");
     }
 
@@ -499,7 +499,7 @@ static class Checks
     {
         var f = new Fixture(beforeBegin: SetupShipyard);
         f.Until(() => f.Menu.Native != null);
-        var held = PirateStationKeeper.Active;
+        var held = OffshoreHold.Active;
         FixedStart.CancelStart();
         f.Finish();
         f.Restored();
@@ -538,7 +538,7 @@ static class Checks
             f.Finish();
             Check(f.Selected.Boat.purchased && f.Selected.Body.position.Equals(new Vector3(204, 2, 2)) && f.Starters.All(b => !b.purchased), "ordinary port did not grant the selected boat at its adjusted recovery berth");
             Check(f.Selected.Berth.Mode == StartBerthMode.Moored && f.Selected.Ropes.ropes[0].Mooring == f.Selected.FrontMooring && f.Selected.Ropes.ropes[1].Mooring == f.Selected.BackMooring && StarterMooring.Armed, "ordinary port did not moor with the chosen ropes and arm slack");
-            Check(f.Selected.Recovery == recovery && f.Menu.NativeTarget.position.Equals(recovery.transform.position) && PirateStationKeeper.Active == null && Plugin.Instance.LastBerth.Equals(recovery.boatPos.position), "ordinary port lost its recovery marker or probe reference, or kept a hold");
+            Check(f.Selected.Recovery == recovery && f.Menu.NativeTarget.position.Equals(recovery.transform.position) && OffshoreHold.Active == null && Plugin.Instance.LastBerth.Equals(recovery.boatPos.position), "ordinary port lost its recovery marker or probe reference, or kept a hold");
             Check(Plugin.Instance.Warnings.Any(w => w.Contains("ordinary starting berth")) == yardFallback, "ordinary berth diagnostic did not match the shipyard fallback");
         }
     }
@@ -749,8 +749,8 @@ static class Checks
         Check(f.Selected.Boat.purchased && !f.Selected.Body.isKinematic, "initially set Pirate anchor prevented native grant");
         Check(!f.Anchor.IsSet() && f.Anchor.Length == 0 && f.AnchorBody.position.Equals(new Vector3(1003, 1, 0)), "deployed anchor was not retracted at live joint endpoint");
         Check(f.Anchor.Calls.Count(c => c == "set") == 1 && f.Anchor.Calls.Contains("release"), "Pirate attempted to secure anchor after releasing original");
-        Check(!StarterMooring.Armed && PirateStationKeeper.Active != null && GameState.lastOwnedBoat == f.Selected.Saveable.transform, "offshore grant lost hold/ownership or armed dock ropes");
-        var held = PirateStationKeeper.Active;
+        Check(!StarterMooring.Armed && OffshoreHold.Active != null && GameState.lastOwnedBoat == f.Selected.Saveable.transform, "offshore grant lost hold/ownership or armed dock ropes");
+        var held = OffshoreHold.Active;
         FixedStart.CancelStart();
         Check(held.Removed && f.Selected.Boat.purchased, "postgrant cleanup lost owned boat or leaked hold");
     }
@@ -769,11 +769,11 @@ static class Checks
         f.AnchorBody.position = new(13, -90, 500);
         f.Anchor.OnLoad(true, .4f);
         f.Until(() => f.Menu.Native != null);
-        var held = PirateStationKeeper.Active;
+        var held = OffshoreHold.Active;
         FixedStart.CancelStart();
         f.Finish();
         f.Restored();
-        Check(PirateStationKeeper.Active == null && held.Removed, "cancellation leaked offshore hold");
+        Check(OffshoreHold.Active == null && held.Removed, "cancellation leaked offshore hold");
         InitiallySetAnchorRestored(f);
     }
 
@@ -798,11 +798,11 @@ static class Checks
     {
         var f = new Fixture(pirateOffshore: true);
         f.Until(() => f.Menu.Native != null);
-        var held = PirateStationKeeper.Active;
+        var held = OffshoreHold.Active;
         FixedStart.CancelStart();
         f.Finish();
         f.Restored();
-        Check(held.Removed && PirateStationKeeper.Active == null, "cancelled offshore hold survived");
+        Check(held.Removed && OffshoreHold.Active == null, "cancelled offshore hold survived");
     }
 
     static void PirateDestroyedAnchorWarnsAndContinues()
@@ -813,7 +813,7 @@ static class Checks
         f.AnchorBody.Destroyed = true;
         f.Finish();
         f.GrantedAtBerth("native anchor disappeared");
-        Check(PirateStationKeeper.Active != null, "lost anchor removed the offshore hold");
+        Check(OffshoreHold.Active != null, "lost anchor removed the offshore hold");
     }
 
     static void StartGuardThroughGrant()
@@ -1005,12 +1005,12 @@ static class Checks
             Plugin.Instance = new();
             ArmEverySideSystem();
             StarterOwnership.Arm(new ResolvedStart());
-            PirateStationKeeper.Attach(null, null);
+            OffshoreHold.Attach(null, null);
             CancelRecord.Calls.Clear();
             cancel();
             Check(CancelRecord.Calls.SequenceEqual(new[] { "StarterMooring", "StarterBoatRepair:" + repairReason, "PlayerStartTracking", "DocksideSurface", "StarterCargo", "StartingValues", "LeopardStarterRig" }), "cancellation list not each subsystem once: " + string.Join(",", CancelRecord.Calls));
             Check(!StarterCargo.Armed && !StartingValues.Armed && !LeopardStarterRig.Armed && !StarterMooring.Armed && !StarterBoatRepair.Armed, "armed subsystem survived cancellation");
-            Check(ownershipPending.GetValue(null) == null && PirateStationKeeper.Active == null, "ownership or offshore hold survived cancellation");
+            Check(ownershipPending.GetValue(null) == null && OffshoreHold.Active == null, "ownership or offshore hold survived cancellation");
         }
     }
 

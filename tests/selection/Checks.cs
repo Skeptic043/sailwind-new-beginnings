@@ -461,7 +461,7 @@ internal static class Checks
             Key = "vanilla:pirate",
             IdentityName = "site:pirate",
             Pool = PortPool.SmallIslands,
-            HiddenKey = "pirate",
+            Hidden = HiddenSite.Pirate,
             HasShipyard = true
         };
         var saffron = new PortChoice
@@ -470,7 +470,7 @@ internal static class Checks
             Key = "native:33",
             IdentityName = "Saffron",
             Pool = PortPool.SmallIslands,
-            HiddenKey = "saffron"
+            Hidden = HiddenSite.Saffron
         };
         var neverdin = new PortChoice
         {

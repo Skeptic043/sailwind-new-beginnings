@@ -115,7 +115,7 @@ namespace NewBeginnings
             {
                 var summary = new SurfaceProbeSummary();
                 var tooFar = 0;
-                foreach (var sample in StartShoreSamples(seed, berth, destination.HiddenKey == "pirate"))
+                foreach (var sample in StartShoreSamples(seed, berth, destination.Hidden == HiddenSite.Pirate))
                 {
                     ++summary.Samples;
                     if (!probe.TryProbe(sample, out ground, out support, summary)) continue;

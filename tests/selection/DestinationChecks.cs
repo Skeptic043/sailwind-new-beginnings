@@ -7,7 +7,6 @@ namespace Lifetime
     // destroyed-object null behavior. These add only captured destination data.
     internal sealed class CapturedIsland : IslandHorizon
     {
-        internal string name;
     }
 
     internal sealed class CurrentPort : Port
@@ -20,7 +19,7 @@ namespace Lifetime
         internal CurrentPort Port;
         internal CapturedIsland Island;
         internal int Region;
-        internal string HiddenKey;
+        internal HiddenSite Hidden;
         internal UnityEngine.Transform DockRoot, Marker, ShoreMarker, SceneryRoot;
         internal GPButtonDockMooring PreferredFront, PreferredBack;
         internal Shipyard Yard;
@@ -81,11 +80,11 @@ namespace Lifetime
             marker.Loaded = true;
             site.Marker = null;
             check(StartDestinations.IsCurrent(site), "genuinely absent optional marker remains supported");
-            site.HiddenKey = "saffron";
+            site.Hidden = HiddenSite.Saffron;
             check(!StartDestinations.IsCurrent(site), "Saffron requires its marker");
             site.Marker = marker;
             check(StartDestinations.IsCurrent(site), "Saffron accepts its live same-island marker");
-            site.HiddenKey = null;
+            site.Hidden = HiddenSite.None;
             site.Yard = new Shipyard
             {
                 Island = island,
@@ -119,7 +118,7 @@ namespace Lifetime
             {
                 Island = pirateIsland,
                 DockRoot = pirateIsland.transform,
-                HiddenKey = "pirate",
+                Hidden = HiddenSite.Pirate,
                 Region = 0
             };
             check(StartDestinations.IsCurrent(pirate), "correct Pirate destination works without a native Port");

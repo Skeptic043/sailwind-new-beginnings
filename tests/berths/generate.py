@@ -2,6 +2,7 @@ from pathlib import Path
 here = Path(__file__).resolve().parent
 root = here.parents[1]
 source = (root / 'src/StartBerthPlanner.cs').read_text(encoding='utf-8')
+known = (root / 'src/KnownSites.cs').read_text(encoding='utf-8')
 
 def method(marker):
     start = source.index(marker)
@@ -60,11 +61,19 @@ for marker in [
 candidate_members = candidate_members.replace('internal static bool TryNativeShipyard(', 'private static bool TryNativeShipyard(').replace('internal static bool TryFortShipyardShore(', 'private static bool TryFortShipyardShore(').replace('internal static void PrepareShipyardMoorings(', 'private static void PrepareShipyardMoorings(')
 catalog = (root / 'src/SelectionCatalog.cs').read_text(encoding='utf-8')
 route_members = ''
-for marker in ['internal bool IsSirenSong =>', 'internal bool NeedsPlannedBerth =>', 'internal int Index =>']:
+for marker in ['internal bool NeedsPlannedBerth =>', 'internal int Index =>']:
     start = catalog.index(marker)
     route_members += catalog[start:catalog.index(';', start) + 1] + '\n'
 candidate_members += '\nclass SirenRoute { internal RoutePort Port; internal RouteIsland Island; internal object Recovery; internal string SiteIdentity; ' + route_members + '}\n'
-assert 'if (destination.IsSirenSong)' in core and core.index('return TrySirenSong(') < core.index('var cleats ='), 'Siren override fell through generic survey'
+# Identity is extracted from KnownSites; the Siren predicate runs on the route double.
+def known_statement(marker):
+    start = known.index(marker)
+    return known[start:known.index(';', start) + 1]
+siren = known_statement('internal static bool IsSirenSong(PortChoice site)')
+candidate_members += '\n' + known[known.index('internal enum HiddenSite'):known.index('}', known.index('internal enum HiddenSite')) + 1]
+candidate_members += '\nstatic class KnownSites {\n' + known_statement('internal const int GoldRockPort') + '\n' + \
+    siren.replace('IsSirenSong(PortChoice site)', 'IsSirenSong(SirenRoute site)') + '\n}\n'
+assert 'if (KnownSites.IsSirenSong(destination))' in core and core.index('return TrySirenSong(') < core.index('var cleats ='), 'Siren override fell through generic survey'
 assert not (root / 'src/SirenSongCog.cs').exists(), 'Obsolete Cog load hook still compiled'
 assert 'SirenSongCog' not in fixed, 'New-start Cog mutation still called'
 assert 'if (!skipsNativeBerth) NativeBerth.TryResolve(' in fixed, 'Native preservation bypass lost planned-berth routing'

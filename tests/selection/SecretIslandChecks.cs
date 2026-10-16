@@ -50,7 +50,7 @@ internal static class SecretIslandChecks
             Index = -1,
             IdentityName = "pirate",
             Key = "pirate",
-            HiddenKey = "pirate",
+            Hidden = HiddenSite.Pirate,
             Pool = PortPool.SmallIslands,
             HasShipyard = true
         };
@@ -59,7 +59,7 @@ internal static class SecretIslandChecks
             Index = 33,
             IdentityName = "saffron",
             Key = "saffron",
-            HiddenKey = "saffron",
+            Hidden = HiddenSite.Saffron,
             Pool = PortPool.SmallIslands,
             IsModded = true
         };

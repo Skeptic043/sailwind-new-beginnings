@@ -171,7 +171,7 @@ class UiHarness
         SubmenuNavigation(check);
         ConfigureBeforeRandom(check);
         var ordered = new UiHarness();
-        ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.Chronos }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, HiddenKey = "pirate" }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
+        ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.Chronos }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Pirate Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
         ordered.catalog.SortPorts();
         ordered.settings.PortPools.Add(PortPool.Chronos);
         var expected = new[]
@@ -260,7 +260,7 @@ class UiHarness
         var sites = new UiHarness();
         sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "native:21", IdentityName = "port 21 M chronos", DisplayName = "Chronos" });
         sites.catalog.Ports.Add(new PortChoice { Index = 21, Key = "provider:fort", SiteIdentity = "provider:fort", DisplayName = "Fort Juniper", IsModded = true });
-        sites.catalog.Ports.Add(new PortChoice { Index = 33, Key = "native:saffron", DisplayName = "Saffron", HiddenKey = "saffron" });
+        sites.catalog.Ports.Add(new PortChoice { Index = 33, Key = "native:saffron", DisplayName = "Saffron", Hidden = HiddenSite.Saffron });
         sites.settings.PortIndex = 21;
         sites.settings.PortPools.Add(PortPool.Chronos);
         sites.RefreshDisplay();

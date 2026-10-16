@@ -16,5 +16,6 @@
     <Compile Include="../../src/StartupProfiler.cs" />
     <Compile Include="../../src/StarterOwnership.cs" />
     <Compile Include="../../src/ShipyardStart.cs" />
+    <Compile Include="../../src/KnownSites.cs" />
   </ItemGroup>
 </Project>

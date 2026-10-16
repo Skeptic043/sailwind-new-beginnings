@@ -11,8 +11,6 @@ namespace NewBeginnings
     // single medium lateen only for a successfully selected new start.
     internal static class LeopardStarterRig
     {
-        private const int BoatIndex = 207;
-        private const string BoatName = "BOAT LEOPARD (207)(Clone)";
         private const string MastPath = "boat leopard/structure_container/MAINMAST/mainmast";
         private const int SailIndex = 60;
         private const string SailName = "60 SAIL Am lateen mid";
@@ -138,7 +136,7 @@ namespace NewBeginnings
 
         internal static void Arm(StartMenu menu, ResolvedStart selected)
         {
-            if (selected.Saveable.sceneIndex != BoatIndex || selected.Saveable.name != BoatName) return;
+            if (!KnownSites.IsLeopard(selected.Saveable.sceneIndex, selected.Saveable.name)) return;
             Cancel();
             var token = generation;
             try { Plugin.Instance.StartCoroutine(InstallAfterStart(menu, selected, token)); }

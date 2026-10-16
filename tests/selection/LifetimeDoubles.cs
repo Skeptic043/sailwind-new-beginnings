@@ -37,6 +37,7 @@ public static class Refs
 public class IslandHorizon : UnityEngine.Component
 {
     public int islandIndex;
+    public string name;
     public IslandHorizon()
     {
         Island = this;

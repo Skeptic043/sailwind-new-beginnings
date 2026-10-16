@@ -16,12 +16,12 @@ static class Checks
             throw new Exception(message);
     }
 
-    static void Tick(PirateStationKeeper keeper) => typeof(PirateStationKeeper).GetMethod("FixedUpdate", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(keeper, null);
+    static void Tick(OffshoreHold keeper) => typeof(OffshoreHold).GetMethod("FixedUpdate", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(keeper, null);
     static Transform BoardedChild(Rigidbody hull) => new()
     {
         parent = hull.transform
     };
-    static PirateStationKeeper Active() => (PirateStationKeeper)typeof(PirateStationKeeper).GetField("active", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+    static OffshoreHold Active() => (OffshoreHold)typeof(OffshoreHold).GetField("active", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
     sealed class Fixture
     {
         internal Rigidbody body = new();
@@ -29,7 +29,7 @@ static class Checks
         {
             islandIndex = 9
         };
-        internal PirateStationKeeper keeper;
+        internal OffshoreHold keeper;
         internal Fixture()
         {
             OffshoreHoldSave.ClearBeforeLoad();
@@ -60,14 +60,14 @@ static class Checks
             island.transform.island = island;
             island.transform.position = new(10, 0, -10);
             Refs.islands[9] = island.transform;
-            keeper = PirateStationKeeper.Attach(body, island.transform);
+            keeper = OffshoreHold.Attach(body, island.transform);
         }
 
         // Production LoadGame prefixes: FixedStart.CancelStartWork removes the
         // active hold, then OffshoreHoldSave drops the previous save's marker.
         internal static void BeforeLoad()
         {
-            PirateStationKeeper.RemoveActive();
+            OffshoreHold.RemoveActive();
             OffshoreHoldSave.ClearBeforeLoad();
         }
 
@@ -97,7 +97,7 @@ static class Checks
         f.island.transform.rotation = new(0, MathF.Sqrt(.5f), 0, MathF.Sqrt(.5f));
         f.Load(saved);
         Check(f.keeper.Destroyed, "old hold survived load");
-        Check(PirateStationKeeper.TryGetHold(out var restored, out var frame, out var local, out var yaw) && restored == f.body && frame == f.island.transform && local == new Vector3(20, 2, -10), "serialized target or identity lost");
+        Check(OffshoreHold.TryGetHold(out var restored, out var frame, out var local, out var yaw) && restored == f.body && frame == f.island.transform && local == new Vector3(20, 2, -10), "serialized target or identity lost");
         var active = Active();
         Tick(active);
         Check(!active.Destroyed && f.body.ForceCalls == 0, "hold applied or destroyed during native loading");
@@ -112,17 +112,17 @@ static class Checks
         var boarded = f.SaveRoundtrip();
         Check(!boarded.ContainsKey(OffshoreHoldSave.Key) && active.Destroyed, "native child boarding between physics ticks retained saved hold");
         f.Load(boarded);
-        Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "after-boarding reload recreated hold");
+        Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _), "after-boarding reload recreated hold");
         f = new Fixture();
         saved = f.SaveRoundtrip();
         f.Load(new() { { "other.mod", "incoming" } });
-        Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _) && GameState.modData["other.mod"] == "incoming", "switching saves leaked old hold");
+        Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _) && GameState.modData["other.mod"] == "incoming", "switching saves leaked old hold");
         f = new Fixture();
         f.SaveRoundtrip();
         Fixture.BeforeLoad();
         GameState.currentlyLoading = true;
         OffshoreHoldSave.Load();
-        Check(!GameState.modData.ContainsKey(OffshoreHoldSave.Key) && !PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "legacy null mod dictionary inherited prior marker");
+        Check(!GameState.modData.ContainsKey(OffshoreHoldSave.Key) && !OffshoreHold.TryGetHold(out _, out _, out _, out _), "legacy null mod dictionary inherited prior marker");
         f = new Fixture();
         saved = f.SaveRoundtrip();
         GameState.currentBoat = BoardedChild(f.body);
@@ -148,7 +148,7 @@ static class Checks
         boarded = f.SaveRoundtrip();
         Check(!boarded.ContainsKey(OffshoreHoldSave.Key), "released stale record persisted into next save");
         f.Load(boarded);
-        Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "released stale hold restored on subsequent load");
+        Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _), "released stale hold restored on subsequent load");
         f = new Fixture();
         saved = f.SaveRoundtrip();
         f.Load(saved);
@@ -172,19 +172,19 @@ static class Checks
         foreach (var bad in new[] { "garbage", "197|9|NaN|0|0|0", "-1|9|0|0|0|0", "999|9|0|0|0|0", "197|999|0|0|0|0" })
         {
             f.Load(new() { { OffshoreHoldSave.Key, bad } });
-            Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "unreadable/unresolved marker restored hold");
+            Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _), "unreadable/unresolved marker restored hold");
         }
 
         f = new Fixture();
         saved = f.SaveRoundtrip();
         f.body.purchase.purchased = false;
         f.Load(saved);
-        Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "unowned boat received restored hold");
+        Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _), "unowned boat received restored hold");
         f = new Fixture();
         saved = f.SaveRoundtrip();
         f.island.islandIndex = 17;
         f.Load(saved);
-        Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "wrong island identity received hold");
+        Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _), "wrong island identity received hold");
         f = new Fixture();
         saved = f.SaveRoundtrip();
         GameState.currentShipyard = new()
@@ -194,7 +194,7 @@ static class Checks
         var serviced = f.SaveRoundtrip();
         Check(!serviced.ContainsKey(OffshoreHoldSave.Key), "service admission persisted hold before next physics tick");
         f.Load(serviced);
-        Check(!PirateStationKeeper.TryGetHold(out _, out _, out _, out _), "reload restored hold after shipyard use");
+        Check(!OffshoreHold.TryGetHold(out _, out _, out _, out _), "reload restored hold after shipyard use");
         Console.WriteLine($"PASS {count} whole-source offshore save/restore checks. Native/Unity boundaries are doubles, no live game save or physics acceptance.");
     }
 }

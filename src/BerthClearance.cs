@@ -21,8 +21,7 @@ namespace NewBeginnings
 
         internal static Vector3 AdjustCrabBeach(ResolvedStart selected, Vector3 nativePosition)
         {
-            if (selected.Port.portIndex != 11 || !string.Equals(selected.Port.gameObject.name,
-                "port E 11 crab beach", StringComparison.OrdinalIgnoreCase)) return nativePosition;
+            if (!KnownSites.IsCrabBeach(selected.Port)) return nativePosition;
 
             var marker = selected.Recovery.boatPos;
             var own = ReadHull(selected.Body, nativePosition, marker.rotation);

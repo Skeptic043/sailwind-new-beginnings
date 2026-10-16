@@ -76,7 +76,7 @@ namespace NewBeginnings
         internal static void CancelStart()
         {
             StarterOwnership.Cancel();
-            PirateStationKeeper.RemoveActive();
+            OffshoreHold.RemoveActive();
             ++startGeneration;
             var cleanup = startCleanup; startCleanup = null;
             var snapshot = pendingSnapshot;
@@ -509,7 +509,7 @@ namespace NewBeginnings
             private readonly PurchasableBoat[] starters;
             private readonly Transform starterBoat, lastBoat, lastOwnedBoat;
             private readonly Port lastPort;
-            private PirateStationKeeper stationKeeper;
+            private OffshoreHold offshoreHold;
             private PickupableBoatMooringRope frontRope, backRope;
             private bool moved, rolledBack, changedNative;
 
@@ -570,7 +570,7 @@ namespace NewBeginnings
                             frontRope = null; backRope = null;
                         }
                     }
-                    if (s.Berth.OffshoreHeld) stationKeeper = PirateStationKeeper.Attach(s.Body, s.Berth.Frame);
+                    if (s.Berth.OffshoreHeld) offshoreHold = OffshoreHold.Attach(s.Body, s.Berth.Frame);
                 }
                 else
                 {
@@ -591,7 +591,7 @@ namespace NewBeginnings
                 var s = Selected;
                 var rotation = s.Body.rotation * anchorBoatRotation;
                 var joint = AccessTools.Field(typeof(RopeControllerAnchor), "joint")?.GetValue(s.Ropes.GetAnchorController()) as ConfigurableJoint;
-                if (!PirateStationKeeper.TryStowedPosition(s.Body, anchorBody, joint, rotation, out var position))
+                if (!TryStowedPosition(s.Body, anchorBody, joint, rotation, out var position))
                     throw new InvalidOperationException("The native anchor joint cannot provide a finite stowed pose.");
                 // A deployed anchor's original pose belongs only to rollback.
                 // Retracting at the physical joint endpoint avoids a zero-length
@@ -604,6 +604,18 @@ namespace NewBeginnings
                 anchorBody.isKinematic = false;
                 s.Body.isKinematic = false;
                 Physics.SyncTransforms();
+            }
+
+            private static bool TryStowedPosition(Rigidbody hull, Rigidbody anchor, ConfigurableJoint joint,
+                Quaternion rotation, out Vector3 position)
+            {
+                position = default(Vector3);
+                if (hull == null || anchor == null || joint == null || joint.GetComponent<Rigidbody>() != anchor ||
+                    joint.connectedBody != hull || !IsFinite(rotation)) return false;
+                var endpoint = hull.transform.TransformPoint(joint.connectedAnchor);
+                var pivot = rotation * Vector3.Scale(joint.anchor, anchor.transform.lossyScale);
+                position = endpoint - pivot;
+                return IsFinite(endpoint) && IsFinite(pivot) && IsFinite(position);
             }
 
             // Release temporary holds when setup cannot finish, so the hull
@@ -653,7 +665,7 @@ namespace NewBeginnings
             {
                 if (rolledBack) return;
                 rolledBack = true;
-                PirateStationKeeper.Remove(stationKeeper);
+                OffshoreHold.Remove(offshoreHold);
                 var s = Selected;
                 StarterOwnership.Cancel(s);
                 if (GameState.currentlyLoading) return;

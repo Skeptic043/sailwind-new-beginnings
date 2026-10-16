@@ -24,11 +24,9 @@ namespace NewBeginnings
         internal Shipyard Yard;
         internal int Region;
         internal bool IsModded, HasShipyard;
-        internal string HiddenKey;
-        internal bool IsSirenSong => SiteIdentity == null && Index == 18 && Port.name == "port M 18 Siren Song" &&
-            Island != null && Island.islandIndex == 21 && Island.name == "island 21 M (Siren Song)";
+        internal HiddenSite Hidden;
         // True when the location has no ordinary native recovery berth, so the planner surveys one.
-        internal bool NeedsPlannedBerth => Recovery == null || SiteIdentity != null || IsSirenSong;
+        internal bool NeedsPlannedBerth => Recovery == null || SiteIdentity != null || KnownSites.IsSirenSong(this);
         internal int Index => Port != null ? Port.portIndex : -1;
         internal string IdentityName => SiteIdentity ?? (Port != null ? Port.gameObject.name : Key);
     }
@@ -114,7 +112,7 @@ namespace NewBeginnings
                 { 187, Tuple.Create("BOAT CHRONIAN (187)(Clone)", BoatSize.Large, "Aelasyl", "Old Chronian") },
                 { 192, Tuple.Create("BOAT CAELANOR (192)(Clone)", BoatSize.Medium, "Caelanor", "Old Chronian") },
                 { 197, Tuple.Create("BOAT GALLUS (197)(Clone)", BoatSize.Small, "Gallus", "Old Chronian") },
-                { 207, Tuple.Create("BOAT LEOPARD (207)(Clone)", BoatSize.Large, "HMS Leopard", "HMS Leopard") },
+                { KnownSites.LeopardIndex, Tuple.Create(KnownSites.LeopardName, BoatSize.Large, "HMS Leopard", "HMS Leopard") },
                 { 222, Tuple.Create("BOAT SANTA MARIA (222)(Clone)", BoatSize.Medium, "Santa Maria", "Age of Exploration") },
                 { 275, Tuple.Create("FFL Paraw", BoatSize.Small, "Paraw", "Paraw") }
             };
@@ -187,8 +185,7 @@ namespace NewBeginnings
                 foreach (var port in Port.ports.Where(item => item != null))
                 {
                     var index = port.portIndex;
-                    if (index == 7 && string.Equals(port.gameObject.name,
-                        "port 7 (test port)", StringComparison.OrdinalIgnoreCase))
+                    if (KnownSites.IsTestPort(port))
                     {
                         result.Rejections.Add("Port 7 is a scene test port, not a playable destination.");
                         continue;
@@ -477,20 +474,17 @@ namespace NewBeginnings
 
         private static bool IsShipyardPort(PortChoice port) => port.HasShipyard;
 
-        private static bool IsChronos(PortChoice port) => port.Index == 21 && port.SiteIdentity == null &&
-            string.Equals(port.IdentityName, "port 21 M chronos", StringComparison.Ordinal);
-
-        private static bool IsSecretPort(PortChoice port) => IsChronos(port) ||
-            port.HiddenKey == "pirate" || port.HiddenKey == "saffron";
+        private static bool IsSecretPort(PortChoice port) => KnownSites.IsChronos(port) ||
+            port.Hidden != HiddenSite.None;
 
         private static bool InRandomPool(PortChoice port, SelectionSettings settings) =>
             IsSecretPort(port) || (port.IsModded ? settings.IncludeModPorts :
                 port.Pool.HasValue && settings.PortPools.Contains(port.Pool.Value));
 
         internal IEnumerable<PortChoice> VisiblePorts(SelectionSettings settings) => Ports.Where(item =>
-            item.HiddenKey != "pirate" || settings.EnablePirateIsland).Where(item =>
-            item.HiddenKey != "saffron" || settings.EnableSaffronIsland).Where(item =>
-            !IsChronos(item) || settings.PortPools.Contains(PortPool.Chronos));
+            item.Hidden != HiddenSite.Pirate || settings.EnablePirateIsland).Where(item =>
+            item.Hidden != HiddenSite.Saffron || settings.EnableSaffronIsland).Where(item =>
+            !KnownSites.IsChronos(item) || settings.PortPools.Contains(PortPool.Chronos));
 
         internal bool TryChoose(SelectionSettings settings,
             IndividualExclusions individualExclusions, System.Random random,

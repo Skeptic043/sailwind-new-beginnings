@@ -497,8 +497,7 @@ namespace NewBeginnings
                 return false;
             }
             var port = destination.Port;
-            if (portIndex == 7 && string.Equals(port.gameObject.name,
-                "port 7 (test port)", StringComparison.OrdinalIgnoreCase))
+            if (KnownSites.IsTestPort(port))
             {
                 reason = "The scene test port is not a playable start.";
                 return false;
@@ -689,11 +688,8 @@ namespace NewBeginnings
         }
 
         internal static bool IsLeopardStart(ResolvedStart selected) =>
-            selected?.Saveable != null && IsLeopardIdentity(selected.Saveable.sceneIndex,
+            selected?.Saveable != null && KnownSites.IsLeopard(selected.Saveable.sceneIndex,
                 selected.Saveable.name);
-
-        private static bool IsLeopardIdentity(int sceneIndex, string name) =>
-            sceneIndex == 207 && name == "BOAT LEOPARD (207)(Clone)";
 
         private static Vector3 AdjustLargeBoatBerth(ResolvedStart selected,
             Vector3 position, Quaternion rotation)

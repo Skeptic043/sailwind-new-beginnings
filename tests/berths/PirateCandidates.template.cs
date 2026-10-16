@@ -29,7 +29,8 @@ static class PirateCandidateChecks
     {
         internal RecoveryPort Recovery;
         internal int Index;
-        internal string HiddenKey = "pirate", DisplayName = "Pirate Island";
+        internal HiddenSite Hidden = HiddenSite.Pirate;
+        internal string DisplayName = "Pirate Island";
         internal Transform DockRoot = new(), Marker, ShoreMarker;
         internal IslandFrame Island;
         internal PortChoice()
@@ -236,7 +237,7 @@ static class PirateCandidateChecks
         int before = checks;
         var site = new PortChoice
         {
-            HiddenKey = "provider:test",
+            Hidden = HiddenSite.None,
             DisplayName = "Test harbour"
         };
         site.Island.transform = new Transform
@@ -302,7 +303,7 @@ static class PirateCandidateChecks
         Check(RunSurvey(site, new[] { a }, out plan, out reason) && plan.Mode == StartBerthMode.OffshoreHeld && plan.Back == null && Near(plan.ShorePosition, a.transform.position), "single cleat produced no hold landing at the cleat");
         var marked = new PortChoice
         {
-            HiddenKey = "provider:marked",
+            Hidden = HiddenSite.None,
             DisplayName = "Marked"
         };
         marked.Marker = new Transform
@@ -346,7 +347,7 @@ static class PirateCandidateChecks
                 Reset();
                 var site = new PortChoice
                 {
-                    HiddenKey = null,
+                    Hidden = HiddenSite.None,
                     DisplayName = "Fort Juniper"
                 };
                 site.DockRoot.position = new(1000, 0, -500);
@@ -430,7 +431,7 @@ static class PirateCandidateChecks
             Reset();
             var site = new PortChoice
             {
-                HiddenKey = null
+                Hidden = HiddenSite.None
             };
             site.DockRoot.position = new(1000, 0, -500);
             site.DockRoot.rotation = turn;
@@ -572,7 +573,7 @@ static class PirateCandidateChecks
                     var site = new PortChoice
                     {
                         Index = row.Index,
-                        HiddenKey = null
+                        Hidden = HiddenSite.None
                     };
                     site.DockRoot.position = new(1000, 0, -500);
                     site.DockRoot.rotation = turn;
@@ -732,11 +733,11 @@ static class PirateCandidateChecks
             },
             Recovery = new object ()
         };
-        Check(route.NeedsPlannedBerth && route.IsSirenSong, "native Siren recovery bypassed planned-berth route");
+        Check(route.NeedsPlannedBerth && KnownSites.IsSirenSong(route), "native Siren recovery bypassed planned-berth route");
         // Boat identity is deliberately absent from the classification: selected Cog
         // and every other starter use the same override, including native-berth candidates.
         route.SiteIdentity = "site:author|siren";
-        Check(!route.IsSirenSong && route.NeedsPlannedBerth, "native Siren override hijacked author-registered berth");
+        Check(!KnownSites.IsSirenSong(route) && route.NeedsPlannedBerth, "native Siren override hijacked author-registered berth");
         route.SiteIdentity = null;
         foreach (var changed in new[] { 0, 1, 2, 3 })
         {
@@ -752,7 +753,7 @@ static class PirateCandidateChecks
                 islandIndex = changed == 2 ? 20 : 21,
                 name = changed == 3 ? "Other Siren Song" : "island 21 M (Siren Song)"
             };
-            Check(!route.IsSirenSong && !route.NeedsPlannedBerth, "index/name alias triggered Siren override");
+            Check(!KnownSites.IsSirenSong(route) && !route.NeedsPlannedBerth, "index/name alias triggered Siren override");
             route.Port = oldPort;
             route.Island = oldIsland;
         }
@@ -814,7 +815,7 @@ static class PirateCandidateChecks
                 };
                 var site = new PortChoice
                 {
-                    HiddenKey = null
+                    Hidden = HiddenSite.None
                 };
                 site.DockRoot.position = new(1000, 0, -500);
                 site.DockRoot.rotation = turn;
@@ -896,7 +897,7 @@ static class PirateCandidateChecks
         landing.Front = front;
         landing.Back = back;
         var fixedPose = new Vector3(60.7f, 2, -77.8f);
-        Check(new BoatSize? [] { BoatSize.Medium, BoatSize.Large, null }.All(size => PirateRequiresOffshore(site, size)) && !PirateRequiresOffshore(site, BoatSize.Small) && !PirateRequiresOffshore(new PortChoice { HiddenKey = "saffron" }, BoatSize.Large), "mandatory offshore size/site policy changed");
+        Check(new BoatSize? [] { BoatSize.Medium, BoatSize.Large, null }.All(size => PirateRequiresOffshore(site, size)) && !PirateRequiresOffshore(site, BoatSize.Small) && !PirateRequiresOffshore(new PortChoice { Hidden = HiddenSite.Saffron }, BoatSize.Large), "mandatory offshore size/site policy changed");
         Reset();
         var plan = Choose(site, landing);
         Check(plan.Mode == StartBerthMode.OffshoreHeld && plan.OffshoreDiagnostics == null && Near(plan.Position, fixedPose) && clearCalls == 1 && departureCalls == 1, "verified fixed hold moved, warned or kept surveying");
@@ -932,7 +933,7 @@ static class PirateCandidateChecks
         Check(!TryFixedOffshoreHold(site, new Rigidbody(), new Hull(), float.NaN, PirateOffshoreCenter, Vector3.right, new Survey(true), landing, out plan, out var failure) && plan == null && failure.Contains("not finite"), "nonfinite hold was accepted");
         var saffron = new PortChoice
         {
-            HiddenKey = "saffron",
+            Hidden = HiddenSite.Saffron,
             DisplayName = "Saffron Island"
         };
         var saffronLanding = Make(saffron, new Vector3(200, 2, 170), Quaternion.identity, new Vector3(201, 3, 171));

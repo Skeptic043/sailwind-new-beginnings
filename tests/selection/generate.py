@@ -36,6 +36,7 @@ def replace_once(text, old, new):
 
 
 catalog = read('src/SelectionCatalog.cs')
+known = read('src/KnownSites.cs')
 plugin = read('src/Plugin.cs')
 menu = read('src/MenuUi.cs')
 options_ui = read('src/StartingOptionsUi.cs')
@@ -72,8 +73,12 @@ using System; using System.Collections.Generic; using System.Globalization; usin
 using BepInEx.Configuration;
 namespace NewBeginnings {
 internal enum BoatSize { Small = 1, Medium = 2, Large = 3 }
-''' + block(catalog, 'internal enum PortPool') + '''
-internal sealed class PortChoice { internal string IdentityName, Key, DisplayName, SiteIdentity, HiddenKey; internal int Index; internal PortPool? Pool; internal bool IsModded, HasShipyard; }
+''' + block(catalog, 'internal enum PortPool') + '\n' + block(known, 'internal enum HiddenSite') + '''
+internal static class KnownSites {
+''' + statement(known, 'internal const int GoldRockPort') + '\n' + statement(known, 'internal static bool IsChronos(') + '\n' + \
+    block(known, 'internal static string NativeYardName(') + '''
+}
+internal sealed class PortChoice { internal string IdentityName, Key, DisplayName, SiteIdentity; internal HiddenSite Hidden; internal int Index; internal PortPool? Pool; internal bool IsModded, HasShipyard; }
 internal sealed class BoatChoice { internal string IdentityName, DisplayName, OriginGroup; internal int Index; internal BoatSize? Size; }
 internal sealed class StartPair { internal PortChoice Port; internal BoatChoice Boat; internal bool UseShipyardBerth; }
 // Native berth discovery is tested by the placement harness, not this selection boundary.
@@ -119,7 +124,7 @@ generated += 'internal void SortPorts() { ' + block(catalog, 'result.Ports.Sort(
 generated += catalog[catalog.index('private static bool IsShipyardPort'):catalog.index('internal bool TryChoose')]
 generated += block(catalog, 'internal bool TryChoose') + '\n} }'
 yard = read('src/ShipyardStart.cs')
-generated = generated.replace('internal static class ShipyardStart {', 'internal static class ShipyardStart {' + block(yard, 'private static string NativeYardName(') + statement(yard, 'internal static bool HasNativeYard('))
+generated = generated.replace('internal static class ShipyardStart {', 'internal static class ShipyardStart {' + statement(yard, 'internal static bool HasNativeYard('))
 assert 'choice.HasShipyard = choice.Yard != null || ShipyardStart.HasNativeYard(choice);' in read('src/StartDestinations.cs')
 (here / 'Production.generated.cs').write_text(generated, encoding='utf-8')
 
@@ -160,7 +165,12 @@ lifetime_members = block(destinations, 'internal static bool BelongsToIsland(') 
     'private static bool OptionalCurrent(', 'internal static bool IsCurrent('])
 (here / 'Destination.generated.cs').write_text('''// Extracted actual destination-lifetime predicates.
 using System; using UnityEngine;
-namespace Lifetime { internal static partial class StartDestinations {
+namespace Lifetime {
+''' + block(known, 'internal enum HiddenSite') + '''
+internal static class KnownSites {
+''' + statement(known, 'internal static bool IsPirateHideout(') + '''
+}
+internal static partial class StartDestinations {
 ''' + lifetime_members + '\n} }\n', encoding='utf-8')
 
 print('Generated current selection, menu and destination boundaries')

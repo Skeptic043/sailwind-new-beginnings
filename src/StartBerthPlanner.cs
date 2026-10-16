@@ -90,7 +90,7 @@ namespace NewBeginnings
         {
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var accepted = TryPlanCore(destination, body, ropes, size, out plan, out reason);
-            if (accepted && destination.HiddenKey == "pirate")
+            if (accepted && destination.Hidden == HiddenSite.Pirate)
             {
                 var milliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0 /
                     System.Diagnostics.Stopwatch.Frequency;
@@ -104,7 +104,7 @@ namespace NewBeginnings
             $"Pirate berth survey accepted {mode} plan in {milliseconds:F1} ms.";
 
         private static bool PirateRequiresOffshore(PortChoice destination, BoatSize? size) =>
-            destination.HiddenKey == "pirate" && size != BoatSize.Small;
+            destination.Hidden == HiddenSite.Pirate && size != BoatSize.Small;
 
         private static bool TryPlanCore(PortChoice destination, Rigidbody body, BoatMooringRopes ropes, BoatSize? size,
             out StartBerthPlan plan, out string reason)
@@ -116,12 +116,12 @@ namespace NewBeginnings
             if (!StartDestinations.IsCurrent(destination) || Plugin.Instance == null)
                 return Fail("The starting location is no longer loaded.", out reason);
             if (!TryHull(body, ropes, out var hull, out reason) || !TryHeight(body, out var height, out reason)) return false;
-            if (destination.IsSirenSong)
+            if (KnownSites.IsSirenSong(destination))
                 return TrySirenSong(destination, body, ropes, hull, height, out plan, out reason);
-            if (destination.SiteIdentity == "site:oldchronian|fort-juniper" &&
+            if (KnownSites.IsFortJuniper(destination) &&
                 TryFortOuter(destination, body, ropes, hull, height, out plan, out reason)) return true;
-            var survey = new Survey(destination.HiddenKey == "pirate");
-            if (destination.HiddenKey == "saffron")
+            var survey = new Survey(destination.Hidden == HiddenSite.Pirate);
+            if (destination.Hidden == HiddenSite.Saffron)
             {
                 // Use the east beach for arrival and hold the boat nearby, bow north.
                 // An explicitly registered shore marker still takes precedence.
@@ -330,9 +330,9 @@ namespace NewBeginnings
             switch (destination.Index)
             {
                 // Inner/top face of the broad lower leg of Gold Rock's L-shaped yard dock.
-                case 0: frontName = "dock_spring_attachment (5)"; backName = "dock_spring_attachment (4)"; break;
-                case 9: frontName = "dock_mooring E (16)"; backName = "dock_mooring E (15)"; break;
-                case 22: frontName = "dock_mooring E (10)"; backName = "dock_mooring E (15)"; break;
+                case KnownSites.GoldRockPort: frontName = "dock_spring_attachment (5)"; backName = "dock_spring_attachment (4)"; break;
+                case KnownSites.DragonCliffsPort: frontName = "dock_mooring E (16)"; backName = "dock_mooring E (15)"; break;
+                case KnownSites.KiciaBayPort: frontName = "dock_mooring E (10)"; backName = "dock_mooring E (15)"; break;
                 default: return Fail("No measured native yard dock is defined here.", out reason);
             }
             var cleats = destination.Island.GetComponentsInChildren<GPButtonDockMooring>(true);
@@ -348,14 +348,14 @@ namespace NewBeginnings
             var center = marker.position;
             // Dragon Cliffs discharges beyond its service trigger. Keep the
             // starting boat inside that trigger, between the same two piers.
-            if (destination.Index == 9) center -= marker.forward * 8f;
+            if (destination.Index == KnownSites.DragonCliffsPort) center -= marker.forward * 8f;
             // Preserve the authored release channel and heading. Wide hulls
             // need their physical side, rather than their root, clear of the pier.
             var distance = Vector3.Dot(center - midpoint, outward);
             var offset = hull.Radius + 2f - distance;
             // Gold Rock starts alongside the player's dock, including when
             // the native release marker is farther into the yard channel.
-            center += outward * (destination.Index == 0 ? offset : Mathf.Max(0f, offset));
+            center += outward * (destination.Index == KnownSites.GoldRockPort ? offset : Mathf.Max(0f, offset));
             var position = center - marker.rotation * hull.Center;
             position.y = height;
             // This point remains on the dock regardless of the chosen hull.
@@ -363,11 +363,11 @@ namespace NewBeginnings
             var landing = midpoint - outward * 2f;
             // Dragon Cliffs' outer pier avoids the crane on the opposite pier.
             // Half a metre along its deck places the seed on a plank, not its seam.
-            if (destination.Index == 9) landing -= span.normalized * .5f;
+            if (destination.Index == KnownSites.DragonCliffsPort) landing -= span.normalized * .5f;
             var landingFront = front.transform; var landingBack = back.transform;
             // Kicia Bay shares the ordinary player's dock, while the boat
             // remains at the shipyard. Recovery's root is the shore marker.
-            if (destination.Index == 22 && StartDestinations.Loaded(destination.Recovery))
+            if (destination.Index == KnownSites.KiciaBayPort && StartDestinations.Loaded(destination.Recovery))
             {
                 landing = destination.Recovery.transform.position;
                 landingFront = destination.Recovery.mooringFront;
@@ -400,10 +400,10 @@ namespace NewBeginnings
             // The dock continuity test prevents treating separate shores as one quay.
             // Keep the first 64 supported pairs, nearest hull length first.
             foreach (var candidate in DockCandidates(SupportedDockPairs(pairs, survey, report).Take(64),
-                destination.HiddenKey == "pirate"))
+                destination.Hidden == HiddenSite.Pirate))
                 {
                     if (best.FirstPair == null) best.FirstPair = candidate.Pair;
-                    if (destination.HiddenKey == "pirate" && !shoreFailures.CanTry(candidate.Pair)) continue;
+                    if (destination.Hidden == HiddenSite.Pirate && !shoreFailures.CanTry(candidate.Pair)) continue;
                     if (survey.Exhausted) return TryDockFallback(destination, body, ropes, hull, height, cleats,
                         report.Describe(true), best, pairs, out plan, out reason);
                     var a = candidate.Pair.A; var b = candidate.Pair.B;
@@ -425,7 +425,7 @@ namespace NewBeginnings
                         position = destination.Marker.position;
                     }
                     position.y = height;
-                    if (destination.HiddenKey == "pirate" && report.Poses >= 24)
+                    if (destination.Hidden == HiddenSite.Pirate && report.Poses >= 24)
                         return TryDockFallback(destination, body, ropes, hull, height, cleats,
                             report.Describe(true), best, pairs, out plan, out reason);
                     ++report.Poses;
@@ -445,7 +445,7 @@ namespace NewBeginnings
                         out var shoreReason, a.transform, b.transform))
                     {
                         report.Reject(DockRejection.DryShore, shoreReason);
-                        if (destination.HiddenKey == "pirate")
+                        if (destination.Hidden == HiddenSite.Pirate)
                         {
                             shoreFailures.Reject(candidate.Pair);
                             if (shoreFailures.Exhausted)
@@ -488,7 +488,7 @@ namespace NewBeginnings
             GPButtonDockMooring[] cleats, string dockReason, BestDock best,
             IEnumerable<DockPair> pairs, out StartBerthPlan plan, out string reason)
         {
-            if (destination.HiddenKey != "pirate" || best.Stage >= 3)
+            if (destination.Hidden != HiddenSite.Pirate || best.Stage >= 3)
                 return TryBestEffort(destination, hull, height, best, best.FirstPair ?? pairs.FirstOrDefault(), cleats,
                     dockReason, out plan, out reason);
             // Same budget as a Medium or Large Pirate start, not what the dock survey left.

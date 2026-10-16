@@ -82,8 +82,7 @@ namespace NewBeginnings
             if (Port.ports == null) return false;
             var candidates = Port.ports.Where(port => port != null && port.enabled && Loaded(port) &&
                 port.GetComponentInParent<IslandHorizon>() == island &&
-                !(port.portIndex == 7 && string.Equals(port.gameObject.name, "port 7 (test port)",
-                    StringComparison.OrdinalIgnoreCase))).Distinct().ToArray();
+                !KnownSites.IsTestPort(port)).Distinct().ToArray();
             return candidates.Length == 1 && candidates[0] == selected &&
                 selected.portIndex >= 0 && selected.portIndex < Port.ports.Length &&
                 Port.ports[selected.portIndex] == selected;
