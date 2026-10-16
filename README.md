@@ -18,9 +18,9 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 Choose a port and boat, or randomize one or both, then press Continue to start a new game. Island and boat exclusions and the shipyard settings are in the `Spawn` tab under `Starting options`.
 
-Ports added by other mods are discovered automatically. When added ports are detected, `Mod ports` includes them in Random Port, or you can select one manually.
-
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
+
+Ports added by other mods are discovered automatically. When added ports are detected, `Mod ports` includes them in Random Port, or you can select one manually.
 
 <details>
 <summary>Spoilers: additional starting locations</summary>
@@ -31,7 +31,7 @@ Chronos, Pirate Island and Saffron Island can be enabled in the `Spawn` tab. Whe
 
 ## Starting supplies and mooring
 
-With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby. Larger supplies are placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
+With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby, with larger supplies placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 
 Starting mooring lines receive up to 1 metre of extra slack on every boat, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
 
@@ -39,13 +39,11 @@ Starting mooring lines receive up to 1 metre of extra slack on every boat, and l
 
 The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`. After launching once, settings can also be changed in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
-Most setup finishes shortly after starting, including mooring setup and the one-time hull repair. Offshore starting boats remain held until you board them, and unfinished holds are saved and restored. Board an offshore starter before uninstalling New Beginnings.
-
 ## Compatibility and limitations
 
-Large starting loadouts can take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear. Reduce your selection or choose a larger port if this happens.
+Large starting loadouts can take longer to place. Small ports may not have enough clear ground for all your crates and barrels, so supplies may fail to appear if you attempt to spawn with large amounts of items. Reduce your selection or choose a larger port if this happens.
 
-For the starting options menu, automatic mod equipment detection looks for small tools that can go into crates. It can find items from untested mods, but cannot guarantee automatic inclusion of every mod item. Please open an issue if you run into any problems with mod items. Equipment in the following mods is tested working and compatible:
+For the starting options menu, automatic mod equipment detection looks for small tools that can go into crates. It can find items from untested mods, but cannot guarantee automatic inclusion of every mod item. Equipment in the following mods is tested working and compatible:
 
 - [SailwindClimate](https://github.com/bryon82/SailwindClimate)
 - [Windicators](https://github.com/NANDbrew/Windicators)
@@ -65,7 +63,7 @@ Port and boat selection has been tested with [Scrambled Seas: NANDbrew Edition](
 - [Dinghies](https://github.com/alesparise/Dinghies-Sailwind-Mod)
 - [Age of Exploration](https://github.com/winterspices/AgeOfExploration)
 
-Boats from other mods that aren't on this list are sorted into Small, Medium or Large by hull size when possible, so they can come up in Random Boat. Any that can't be measured stay available for manual selection.
+Boats from other mods that aren't on this list are sorted into Small, Medium or Large by hull size when possible so they can come up in random boat selection. Any that can't be measured stay available for manual selection.
 
 Each original vanilla port has been tested with at least one large boat, but this does not mean every hull fits every port, particularly HMS Leopard. Large ships can take a moment to settle, and some ports don't have enough room for them. Use Island Exclusions to leave cramped ports out of random starts, exclude particular boats, or disable the Large size pool.
 

@@ -49,7 +49,7 @@ Use `BepInEx` and `UnityEngine` for the attribute and Unity types above. Call `O
 
 ## Options
 
-All options are optional. Omitted values leave automatic discovery unchanged.
+Omitted values leave automatic discovery unchanged.
 
 | Option | Purpose |
 | --- | --- |
