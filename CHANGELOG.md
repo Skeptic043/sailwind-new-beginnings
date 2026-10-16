@@ -1,230 +1,34 @@
 # Release notes
 
-## Version 1.3.15
-
-### Changed
-
-- Gold Rock City shipyard starts place the boat closer to the player's dock.
-
-## Version 1.3.14
-
-### Changed
-
-- Siren Song starts now use the end of the dock. Other boats are no longer moved aside during startup or after loading a save.
-
-## Version 1.3.13
-
-### Fixed
-
-- Fixed the Siren Song load check failing when an inactive boat had not initialized its purchase-state reference.
-
-## Version 1.3.12
-
-### Changed
-
-- Spawn labels use a smaller size between their original size and the previous update, keeping the centered layout.
-
-## Version 1.3.11
-
-### Changed
-
-- Spawn options use larger button labels and a centered layout.
-
-## Version 1.3.10
-
-### Fixed
-
-- Temporary offshore holds now release when you board the starting boat, including after loading a save.
-
-## Version 1.3.9
-
-### Changed
-
-- Starting supplies use a nearby fallback layout when the compact dock layout cannot fit the whole load.
-- Supplies are handed over to normal physics after placement without moving the whole group again when items tip or shift.
-
-## Version 1.3.8
-
-### Changed
-
-- Starting mooring lines now receive up to one metre of extra slack on every boat, reduced from three metres on most boats and five on Leopard.
-
-## Version 1.3.7
-
-### Fixed
-
-- Shipyard starts now choose the closest reachable native mooring pair for the boat's actual rope positions, preventing crossed lines at Fort Juniper.
-- Starter supplies now sample narrow and angled docks more closely without widening their placement area.
-
-## Version 1.3.6
-
-### Changed
-
-- Shipyard berth starts now connect the starter boat to nearby mooring cleats when its lines can reach. The existing hold remains available when a shipyard berth cannot be moored.
-- Fort Juniper now places the player and supplies on the same shipyard dock as the starter boat and closer to it.
-- Starter supply columns hold no more than three items, and remaining ground supplies stay within a slightly tighter area around the player.
-- On'na starts can now use its separate mooring posts. When the native ropes reach the closest pair, the starter boat is moored instead of held nearby.
-
-## Version 1.3.5
-
-### Changed
-
-- Kicia Bay shipyard starts now place the player and supplies at Kicia's ordinary landing on the neighboring dock. The boat remains at the shipyard berth.
-
-### Fixed
-
-- Starter supplies now use nearby supported positions when dock seams or fixed props prevent the usual compact layout, instead of withholding the complete group.
-
-## Version 1.3.4
-
-### Changed
-
-- Native regional supplies now establish the dockside layout before added equipment. Fitting crates can stack on the starting table or the larger regional food crate, and remaining ground positions favor the space nearest the player.
-
-### Fixed
-
-- Fort Juniper shipyard starts now use Old Chronian's authored release berth and yard-side ground. This replaces the guessed Dock1 placement that could intersect the dock's underwater mesh and launch large boats.
-- Native cheese and goat-cheese crates keep a level starting pose while the layout is planned, preventing their larger stack bases from being stranded after smaller added crates.
-
-## Version 1.3.3
-
-### Fixed
-
-- Suitable starter crates now begin in short stacks and settle under the game's physics. Large loadouts no longer require a separate patch of dock for every box.
-- A layout that cannot fit now stops after a bounded set of complete placement attempts instead of repeatedly searching the same dock for up to 30 seconds.
-- Large equipment selections now prepare faster instead of repeating the same lookup for every packed item.
-- Shipyard Ports Only now recognizes Gold Rock City, Dragon Cliffs, Fort Aestrin and Kicia Bay before their island scenery loads.
-- Gold Rock City, Dragon Cliffs and Kicia Bay now place the player and supplies on measured shipyard dock surfaces independently of boat size. Wide hulls receive enough room beside the dock while retaining the shipyard's release heading.
-- Fort Juniper uses the actual Old Chronian shipyard pier when Use shipyard berth is enabled. Its ordinary start still uses the wider lower-left dock.
-- Fort Aestrin prefers Better Ports' drydock shipyard when it is loaded, with the normal shipyard retained as the fallback.
-
-## Version 1.3.2
-
-### Changed
-
-- Island and boat exclusions can now be edited at any time. Shipyard ports only can also be changed without turning on Random Port first.
-- Exclusion pages sit higher so their Back and Done buttons remain on the parchment.
-
-### Fixed
-
-- Fort Juniper starts now place every boat alongside the open side of the lower-left dock instead of using the cramped inner harbour.
-- Starting supplies now use their authored collider geometry while inactive, preventing placement checks from treating crates and barrels as tiny points or checking stale positions.
-
-## Version 1.3.1
-
-### Changed
-
-- Region and boat-size checkboxes remain on the main screen. Starting options now has a Spawn tab for exclusions and shipyard settings, replacing the separate Spawn options menu.
-- Added a Secret islands toggle in the Spawn tab. It switches the hidden starting locations on or off together for manual and random selection, independently of geographic pools. Existing settings carry over.
-
-## Version 1.3.0
+## Version 1.4.0
 
 ### Added
 
-- Spawn options groups random port pools, boat sizes, shipyard settings and exclusions in a separate menu. Existing choices carry over.
-- Use shipyard berth optionally starts your boat at the selected shipyard's release berth, with you and your supplies ashore nearby. It applies to manual and random starts and is disabled by default.
-
-### Changed
-
-- The main menu keeps port and boat selection, random toggles, Spawn options and Starting options. Exclusion menus have separate Back and Done buttons to discard or save changes.
-
-<details>
-<summary>Spoiler: Saffron starting position</summary>
-
-- Moved the landing closer to the water and the boat closer to shore, keeping the boat facing north.
-
-</details>
-
-## Version 1.2.10
-
-### Changed
-
-- Al'Ankh, Emerald and Aestrin use wider buttons on the top row. FFL moves to the row below with Small Islands and Mod ports.
-- Mod-added starting locations appear together after the other ports in the selector and island exclusions.
-
-### Fixed
-
-- Reduced repeated catalog work when opening and refreshing the starting menu.
-
-## Version 1.2.9
-
-### Fixed
-
-- Mooring and other optional setup failures keep your selected boat, location and starting options instead of substituting a regional start.
-- A selected starter boat is still granted if its purchase prompt disappears during the new-game transition.
-- Offshore boats waiting for you to board resume their hold after saving and loading. This applies to holds saved with this version, including after Scrambled Seas moves the islands.
-
-### Changed
-
-- Removed a repeated supply-space check during startup. Supplies still use the existing placement checks.
-
-## Version 1.2.8
-
-### Changed
-
-- The start menu no longer hides boats it expects might not fit a location. If a selected start cannot be placed, the menu shows the reason when you press Continue.
-
-### Fixed
-
-- Any boat can now start at Siren Song. The Cog for sale moves to the free cleats at the end of the dock so your boat gets the normal berth. This also happens when you load a save with your boat in that berth.
-
-## Version 1.2.7
-
-### Fixed
-
-- Starting at an added or hidden location no longer freezes for several seconds while the berth, landing and supplies are checked.
-
-## Version 1.2.6
-
-### Changed
-
-- A selected start that runs into a placement problem now carries on and writes a warning to the log instead of returning to the main menu. The boat and player use the closest fit the checks found.
-- With Scrambled Seas, a start problem no longer requires restarting the game before another new game.
-
-### Fixed
-
-- Harbours with short piers, such as Fort Juniper, now find a berth for large boats.
-
-## Version 1.2.4
-
-### Added
-
-- Automatic starting-location discovery for modded ports, including Better Ports' Bottleneck Isle.
-- A Mod ports checkbox appears with the Random Port pool checkboxes when added locations are detected. It starts disabled and adds those locations regardless of the checked regions. Leave every other pool unchecked for mod ports only, or select an added location manually without enabling the checkbox.
-- A separate option for including Chronos's original berth in Random Port. It starts disabled and appears in the Configuration Manager spoiler reveal.
-- An optional [port-author API](PORT_AUTHORS.md) for specifying a preferred dock, berth or landing when automatic discovery needs more information.
+- Automatic starting-location discovery for modded ports.
+- A `Mod ports` checkbox as one of the options for Random Port pool checkboxes when added locations are detected.
+- A `Use shipyard berth` option that starts the game with the selected boat at the port's shipyard berth. It applies to manual and random starts and is disabled by default.
+- A `Spawn` tab in Starting options menu that contains boat/island exclusions, shipyard settings and a Secret islands toggle. Existing settings carry over.
+- Fort Juniper is an added starting location when [Old Chronian](https://github.com/Aquilarts/OldChronian) is installed. Fort Juniper also qualifies for Shipyard ports only spawning.
+- Bottleneck Isle is an added starting location when [Better Ports](https://github.com/winterspices/BetterPorts) is installed.
 
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
-- Fort Juniper is a separate starting location when Old Chronian is installed and qualifies for Shipyard ports only.
-- Pirate Island and Saffron Island are optional Small Islands starts. Both start disabled behind the Configuration Manager spoiler reveal and can be enabled separately for manual or random selection. Mod ports does not affect either island.
-- Pirate Island allows Small boats at its existing docks. Medium, Large and unclassified boats start farther offshore and are held in place until the player boards them.
-- At Saffron, the player and supplies start on dry land. The boat waits in open water off the east coast and is held in place until the player boards it.
+- Chronos is now included in Small Islands randomization if enabled, and can be enabled or disabled in the new `Spawn` tab.
+- Pirate Island and Saffron Island are now optional Small Islands starts when enabled in the `Spawn` tab.
+- Pirate Island uses its existing docks for Small boats when they can moor there. Larger boats that cannot moor wait offshore until the player boards them (make sure to drop the anchor when you do to prevent the ship floating away).
+- At Saffron, the player and supplies start on dry land near the water while the boat waits offshore until the player boards (make sure to drop the anchor when you do to prevent the ship floating away).
 
 </details>
 
 ### Changed
 
 - Shipyard ports only uses detected shipyards instead of a fixed list of vanilla ports.
-- Added locations without a normal starting berth check room for the boat, dry landing and supplies before granting the boat. If a suitable start cannot be found, the menu shows a reason.
-- A selected mod location remains selected when its provider is missing and is shown as unavailable until it returns or another location is chosen.
-- Pirate Island's offshore starts use a fixed open-water position southeast of the island, outside its enclosed inner lagoon, with the bow facing east. If the clearance checks cannot confirm that position, the start still proceeds and writes a warning to the log.
-- Start menu messages, such as an unavailable port and boat combination, now appear above the New Beginnings title.
-
-### Fixed
-
-- Docks that sit close to the waterline, such as Bottleneck Isle's, are no longer rejected while the precise ocean-height sample is still initializing.
-- Large harbours with many moorings, such as Fort Juniper, now consider berths along each pier instead of only mooring pairs that span water between separate piers.
-- Custom shore starts now reserve space for the final packed starter-supply footprint instead of counting packable items as both loose cargo and crate contents.
-- Addressed Pirate Island falling back to a regional start when Scrambled Seas handled the new-game transition before its scenery could load.
-- Addressed Pirate Island rejecting every dock while the precise ocean-height sample was still initializing.
-- Pirate Island's automatic dock starts now pass their selected moorings into the dry-ground check, so nearby shore can be validated before the precise ocean-height sample is ready.
-- Pirate Island placement now shares a strict search budget across docking and anchoring, checks distinct dock directions first and avoids repeating failed shore searches.
-- Pirate Island checks the widest supported dock offsets first so its bounded survey reaches open water before testing positions closer to shore.
-- Failed Pirate anchorage checks now report rejection counts and include the blocking collider when a collision check rejects the last candidate.
-- Native-anchor starts now use the boat's physical joint attachments, including the layout used by the Santa Maria and vanilla Mediterranean boats.
-- After Scrambled Seas has moved the world, a failed custom start now requires a game restart. This prevents repeated New Game clicks from moving the same world again.
+- Exclusions and shipyard settings can be edited from the Spawn tab without first enabling their related random option. Port controls, Spawn labels and menu messages have also been rearranged for readability.
+- Shipyard starts use port-specific berths and nearby landing areas at Gold Rock City, Dragon Cliffs, Fort Aestrin, Fort Juniper and Kicia Bay.
+- Starting supplies favor the space nearest the player and suitable crates can begin in short stacks up to 3 items high.
+- Starting mooring lines receive up to one metre of extra slack on every boat (down from 3).
+- Siren Song can now be used with any boat.
 
 ## Version 1.2.3
 
@@ -235,12 +39,12 @@
 ### Changed
 
 - Boats from mods that New Beginnings doesn't already know are now sorted into Small, Medium or Large by hull size when possible, so they join the matching Random Boat pool and the exclusion list instead of being manual selection only.
-- FFL Paraw is now labeled Paraw in the boat selector and exclusion list.
+- [FFL Paraw](https://github.com/alesparise/FFLParaw-Sailwind-Mod) is now labeled Paraw in the boat selector and exclusion list.
 
 ### Fixed
 
 - The log no longer shows a false "catalog has no usable start" warning at every launch.
-- Changes made in Configuration Manager now apply while the game is running instead of being overwritten by the new-game menu.
+- Changes made in [Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager) now apply while the game is running instead of being overwritten by the new-game menu.
 
 ## Version 1.2.2
 
@@ -281,7 +85,7 @@
 
 ### Fixed
 
-- Restored missing Kemy navigation tools in the equipment menu.
+- Restored missing [Kemy Navigation Tools](https://github.com/Kemylar/KemyNavigationTools) items in the equipment menu.
 - Addressed a crate-allocation error that could prevent selected equipment from being placed.
 
 ### Known issues
@@ -308,7 +112,7 @@ Starting Options:
 ### Fixed
 
 - Fixed an error that prevented starting a new game on Sailwind’s stable branch.
-- Fixed incompatibility with Save Slots Plus.
+- Fixed incompatibility with [Save Slots Plus](https://github.com/bryon82/SailwindSaveSlotsPlus).
 - Improved handling of incompatible boat entries so other valid starts remain available.
 
 ### Changed
