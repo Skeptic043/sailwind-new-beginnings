@@ -67,7 +67,7 @@ namespace NewBeginnings
         [HarmonyPatch(typeof(StartMenu), "EnableStartMenu")]
         private static class MenuPatch
         {
-            private static void Prefix() => Plugin.Instance?.CancelPlayerStartTracking();
+            private static void Prefix() => StartArrival.CancelTracking();
         }
     }
 }

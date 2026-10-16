@@ -103,8 +103,8 @@ namespace NewBeginnings
         {
             CleanupStart(StarterMooring.Cancel);
             CleanupStart(() => StarterBoatRepair.Cancel(reason));
-            CleanupStart(() => Plugin.Instance?.CancelPlayerStartTracking());
-            CleanupStart(() => Plugin.Instance?.ClearDocksideSurface());
+            CleanupStart(StartArrival.CancelTracking);
+            CleanupStart(StartArrival.ClearSite);
             CleanupStart(StarterCargo.Disarm);
             CleanupStart(StartingValues.Cancel);
             CleanupStart(StarterOwnership.Cancel);
@@ -625,7 +625,7 @@ namespace NewBeginnings
                     // probe reference, so an occupied-berth or Crab Beach offset of
                     // the hull does not turn the inland probe direction.
                     var probeBerth = s.NativeBerth == null && s.Recovery != null ? s.Recovery.boatPos.position : s.Berth.Position;
-                    var playerTarget = Plugin.Instance.MakeTemporaryStart(s, s.Berth.Rotation, s.Berth.ShorePosition, probeBerth);
+                    var playerTarget = StartArrival.MakeTarget(s, s.Berth.Rotation, s.Berth.ShorePosition, probeBerth);
                     target = playerTarget;
                     var replacement = (PurchasableBoat[])starters.Clone(); replacement[s.Region] = s.Boat;
                     changedNative = true;
@@ -634,7 +634,7 @@ namespace NewBeginnings
                     GameState.lastVisitedPort = s.Port;
                     StarterOwnership.Arm(s);
                     StartingValues.Arm(s);
-                    TryStartupSetup("track the player's landing", () => Plugin.Instance.BeginPlayerStartTracking(menu, playerTarget));
+                    TryStartupSetup("track the player's landing", () => StartArrival.BeginTracking(menu, playerTarget));
                     TryStartupSetup("prepare starter supplies", () => StarterCargo.Arm(s));
                     // Only lines this start connected receive slack. A preserved
                     // berth keeps its native lines as authored.

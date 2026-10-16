@@ -30,7 +30,7 @@ namespace NewBeginnings
             var cheese = Crate(.709837139f, 1.269517899f, 1.028908968f);
             cheese.Planned = Quaternion.Euler(0, 75.478f, 0);
             AddItem(cheese);
-            Check(Plugin.Instance.TryProbeDocksideCargoSurface(Vector3.zero, out var center, out _) && !HasSupportFootprint(cheese, center), "dock-edge fixture must support the center without supporting the whole crate");
+            Check(StartArrival.TryProbeCargoSurface(Vector3.zero, out var center, out _) && !HasSupportFootprint(cheese, center), "dock-edge fixture must support the center without supporting the whole crate");
             Obstacle(new(0, 1, 0), new(30, 2, 30));
             Check(TryChooseGround(Vector3.zero, Plugin.Instance.Ground, cheese, null, out var point, out _) && !HasCargoClearance(cheese, point, PlacementRotation(cheese), Plugin.Instance.Ground), "clearance preference withheld a center-supported crate");
             Check(TryChooseLooseGround(cheese, Vector3.zero, Vector3.zero, new(), out point, out _) && DockSurfaces.Edge(point).HasValue, "loose crate cannot use the center-supported dock edge");

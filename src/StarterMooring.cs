@@ -95,10 +95,10 @@ namespace NewBeginnings
                         // Ownership failure must not leave startup work alive.
                         // Native playing can precede the F prompt; time reading
                         // that prompt does not spend either startup deadline.
-                        if (!Plugin.Instance.WaitingForPlayerInput()) gameplayElapsed += elapsed;
+                        if (!StartArrival.WaitingForPlayerInput()) gameplayElapsed += elapsed;
                         if (!GameState.currentlyLoading) sawGameplay = true;
                     }
-                    else if (!Plugin.Instance.WaitingForPlayerInput())
+                    else if (!StartArrival.WaitingForPlayerInput())
                     {
                         preplayElapsed += elapsed;
                         if (preplayElapsed >= 90f)

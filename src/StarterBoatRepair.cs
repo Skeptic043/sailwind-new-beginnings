@@ -88,7 +88,7 @@ namespace NewBeginnings
                             if (GameState.playing) sawGameplay = true;
                             var purchased = selected.Boat.isPurchased();
                             if (purchased) sawOwnership = true;
-                            var awaitingInput = Plugin.Instance.WaitingForPlayerInput();
+                            var awaitingInput = StartArrival.WaitingForPlayerInput();
                             var ready = GameState.playing && !awaitingInput &&
                                 purchased && !selected.Body.isKinematic &&
                                 selected.Body.gameObject.activeInHierarchy;

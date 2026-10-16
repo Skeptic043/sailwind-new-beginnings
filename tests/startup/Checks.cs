@@ -1017,7 +1017,7 @@ static class Checks
     static void ArmEverySideSystem()
     {
         StarterCargo.Armed = StartingValues.Armed = LeopardStarterRig.Armed = StarterMooring.Armed = StarterBoatRepair.Armed = true;
-        Plugin.Instance.BeginPlayerStartTracking(null, null);
+        StartArrival.BeginTracking(null, null);
         Plugin.Instance.DocksideSet = true;
     }
 

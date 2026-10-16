@@ -79,7 +79,7 @@ namespace NewBeginnings
                 : documents != null ? documents.transform.position : yard.transform.position;
             if (destination.SiteIdentity == "site:oldchronian|fort-juniper" &&
                 StartBerthPlanner.TryFortShipyardShore(destination, marker.position, out var dockShore)) seed = dockShore;
-            var verified = Plugin.Instance.TryFindStartShore(destination, seed, seed,
+            var verified = ShoreProbe.TryFindStartShore(destination, seed, seed,
                 out var shore, out _, out var reason);
             if (!verified)
             {

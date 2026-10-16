@@ -817,18 +817,56 @@ namespace NewBeginnings
         internal static bool SceneryReady(PortChoice site) => site.Scenery && site.Current;
     }
 
+    // Fixture state for the shore probe and arrival doubles lives on the
+    // Plugin double, so each fixture's new Plugin resets it.
+    internal static class ShoreProbe
+    {
+        internal static bool TryFindStartShore(PortChoice d, UnityEngine.Vector3 seed, UnityEngine.Vector3 boat, out UnityEngine.Vector3 shore, out object surface, out string reason)
+        {
+            var fixture = Plugin.Instance;
+            fixture.LastShoreSeed = seed;
+            shore = seed + new UnityEngine.Vector3(2, 0, 0);
+            surface = null;
+            reason = fixture.ShoreFound ? null : "injected shore miss";
+            return fixture.ShoreFound;
+        }
+    }
+
+    internal static class StartArrival
+    {
+        internal static void CancelTracking()
+        {
+            var fixture = Plugin.Instance;
+            fixture.Cancellations++;
+            if (fixture.Tracking)
+                CancelRecord.Calls.Add("PlayerStartTracking");
+            fixture.Tracking = false;
+        }
+
+        internal static void ClearSite()
+        {
+            if (Plugin.Instance.DocksideSet)
+                CancelRecord.Calls.Add("DocksideSurface");
+            Plugin.Instance.DocksideSet = false;
+        }
+
+        internal static UnityEngine.Transform MakeTarget(ResolvedStart s, UnityEngine.Quaternion rotation, UnityEngine.Vector3 shore, UnityEngine.Vector3 berth)
+        {
+            Plugin.Instance.LastBerth = berth;
+            if (Plugin.Instance.FailTarget)
+                throw new InvalidOperationException("Injected player target failure");
+            var t = new UnityEngine.GameObject().transform;
+            t.SetPositionAndRotation(shore, rotation);
+            return t;
+        }
+
+        internal static void BeginTracking(StartMenu menu, UnityEngine.Transform target) => Plugin.Instance.Tracking = true;
+    }
+
     internal class Plugin
     {
         internal bool ShoreFound = true;
         internal UnityEngine.Vector3 LastShoreSeed;
-        internal bool TryFindStartShore(PortChoice d, UnityEngine.Vector3 seed, UnityEngine.Vector3 boat, out UnityEngine.Vector3 shore, out object surface, out string reason)
-        {
-            LastShoreSeed = seed;
-            shore = seed + new UnityEngine.Vector3(2, 0, 0);
-            surface = null;
-            reason = ShoreFound ? null : "injected shore miss";
-            return ShoreFound;
-        }
 
         internal const string Id = "fixture";
         internal void Report(string text)
@@ -841,35 +879,9 @@ namespace NewBeginnings
         internal readonly List<string> Errors = new();
         internal readonly List<string> Warnings = new();
         internal bool Tracking, DocksideSet;
-        internal void CancelPlayerStartTracking()
-        {
-            Cancellations++;
-            if (Tracking)
-                CancelRecord.Calls.Add("PlayerStartTracking");
-            Tracking = false;
-        }
-
-        internal void ClearDocksideSurface()
-        {
-            if (DocksideSet)
-                CancelRecord.Calls.Add("DocksideSurface");
-            DocksideSet = false;
-        }
-
         internal void Warn(string text) => Warnings.Add(text);
         internal void Error(string text, Exception ex) => Errors.Add(text);
         internal UnityEngine.Vector3 LastBerth;
-        internal UnityEngine.Transform MakeTemporaryStart(ResolvedStart s, UnityEngine.Quaternion rotation, UnityEngine.Vector3 shore, UnityEngine.Vector3 berth)
-        {
-            LastBerth = berth;
-            if (FailTarget)
-                throw new InvalidOperationException("Injected player target failure");
-            var t = new UnityEngine.GameObject().transform;
-            t.SetPositionAndRotation(shore, rotation);
-            return t;
-        }
-
-        internal void BeginPlayerStartTracking(StartMenu menu, UnityEngine.Transform target) => Tracking = true;
     }
 
     internal class MenuUi

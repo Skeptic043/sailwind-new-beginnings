@@ -90,29 +90,35 @@ static class PirateCandidateChecks
     }
 
     static readonly System.Reflection.FieldInfo RopeMaximum = typeof(PickupableBoatMooringRope).GetField("maxLength");
-    class ShoreProbe
+    // Shore preflight fixture state; each check replaces Plugin.Instance.
+    class PluginDouble
     {
         internal Transform Front, Back;
         internal Vector3 Shore = new(2, 4, 1), Seed, Berth;
         internal bool Fails;
         internal readonly List<string> Warnings = new();
         internal void Warn(string message) => Warnings.Add(message);
-        internal bool TryFindStartShore(PortChoice site, Vector3 seed, Vector3 berth, out Vector3 shore, out Collider support, out string reason, Transform front = null, Transform back = null)
+    }
+
+    static class ShoreProbe
+    {
+        internal static bool TryFindStartShore(PortChoice site, Vector3 seed, Vector3 berth, out Vector3 shore, out Collider support, out string reason, Transform front = null, Transform back = null)
         {
-            Front = front;
-            Back = back;
-            Seed = seed;
-            Berth = berth;
-            shore = Fails ? Vector3.zero : Shore;
+            var fixture = Plugin.Instance;
+            fixture.Front = front;
+            fixture.Back = back;
+            fixture.Seed = seed;
+            fixture.Berth = berth;
+            shore = fixture.Fails ? Vector3.zero : fixture.Shore;
             support = null;
-            reason = Fails ? "injected dry shore failure" : null;
-            return !Fails;
+            reason = fixture.Fails ? "injected dry shore failure" : null;
+            return !fixture.Fails;
         }
     }
 
     static class Plugin
     {
-        internal static ShoreProbe Instance = new();
+        internal static PluginDouble Instance = new();
     }
 
     class StartBerthPlan

@@ -162,13 +162,17 @@ namespace NewBeginnings
         internal static bool IsSelectionStillActive(StartMenu m, ResolvedStart s) => Active;
     }
 
+    internal static class StartArrival
+    {
+        internal static bool WaitingForPlayerInput() => Plugin.Instance.Waiting;
+    }
+
     internal class Plugin
     {
         internal static Plugin Instance = new Plugin();
         internal IEnumerator Run;
         internal int DebugLogs, Warnings;
         internal bool Waiting;
-        internal bool WaitingForPlayerInput() => Waiting;
         public void StartCoroutine(IEnumerator run)
         {
             Run = run;

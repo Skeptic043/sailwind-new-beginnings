@@ -128,7 +128,7 @@ namespace NewBeginnings
                 if (destination.Marker == null) return Fail("The Saffron starting marker is missing.", out reason);
                 var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position :
                     destination.Island.transform.TransformPoint(new Vector3(220f, 1.1f, 169.9f));
-                var landingVerified = Plugin.Instance.TryFindStartShore(destination, seed, seed, out var shore, out _, out var shoreReason);
+                var landingVerified = ShoreProbe.TryFindStartShore(destination, seed, seed, out var shore, out _, out var shoreReason);
                 if (!landingVerified) shore = seed;
                 if (!TryFixedOffshoreHold(destination, body, hull, height, SaffronOffshoreCenter, Vector3.forward,
                     survey, Make(destination, seed, Quaternion.identity, shore), out plan, out reason)) return false;
@@ -196,7 +196,7 @@ namespace NewBeginnings
                     distance = Vector3.Distance(position + rotation * hull.RopePositions[Array.IndexOf(hull.Ropes, frontRope)], front.transform.position) +
                         Vector3.Distance(position + rotation * hull.RopePositions[Array.IndexOf(hull.Ropes, backRope)], back.transform.position);
                 if (plan != null && distance >= bestDistance) continue;
-                var verified = Plugin.Instance.TryFindStartShore(destination, seed, position,
+                var verified = ShoreProbe.TryFindStartShore(destination, seed, position,
                     out var shore, out _, out _, front.transform, back.transform);
                 if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
                 plan = Make(destination, position, rotation, shore);
@@ -262,7 +262,7 @@ namespace NewBeginnings
             var position = midpoint + outward * (hull.Radius + 2f) - rotation * hull.Center;
             position.y = height;
             var seed = midpoint - outward * 2f;
-            var verified = Plugin.Instance.TryFindStartShore(destination, seed, position,
+            var verified = ShoreProbe.TryFindStartShore(destination, seed, position,
                 out var shore, out _, out _, front.transform, back.transform);
             if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
             plan = Make(destination, position, rotation, shore);
@@ -374,7 +374,7 @@ namespace NewBeginnings
                 landingBack = destination.Recovery.mooringBack;
             }
             var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : landing;
-            var verified = Plugin.Instance.TryFindStartShore(destination, seed, seed,
+            var verified = ShoreProbe.TryFindStartShore(destination, seed, seed,
                 out var shore, out _, out _, landingFront, landingBack);
             if (!verified && !DeckSupport(seed, new Survey(), out shore)) shore = seed;
             plan = Make(destination, position, marker.rotation, shore);
@@ -441,7 +441,7 @@ namespace NewBeginnings
                     { report.Reject(DockRejection.Departure, reason); continue; }
                     best.Offer(3, candidate.Pair, position, candidateRotation, midpoint, frontRope, backRope);
                     var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : midpoint;
-                    if (!Plugin.Instance.TryFindStartShore(destination, seed, position, out var shore, out _,
+                    if (!ShoreProbe.TryFindStartShore(destination, seed, position, out var shore, out _,
                         out var shoreReason, a.transform, b.transform))
                     {
                         report.Reject(DockRejection.DryShore, shoreReason);
@@ -513,7 +513,7 @@ namespace NewBeginnings
                 if (best.Stage < 3)
                 {
                     var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : best.Midpoint;
-                    verified = Plugin.Instance.TryFindStartShore(destination, seed, best.Position, out shore, out _, out _,
+                    verified = ShoreProbe.TryFindStartShore(destination, seed, best.Position, out shore, out _, out _,
                         a.transform, b.transform);
                 }
                 if (!verified) shore = DockLanding(a, b);
@@ -561,7 +561,7 @@ namespace NewBeginnings
                 if (destination.Marker == null)
                     return Fail(failure + " No dock cleat or starting marker is available.", out reason);
                 var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position : destination.Marker.position;
-                landingVerified = Plugin.Instance.TryFindStartShore(destination, seed, destination.Marker.position, out shore, out _, out _);
+                landingVerified = ShoreProbe.TryFindStartShore(destination, seed, destination.Marker.position, out shore, out _, out _);
                 if (!landingVerified)
                 {
                     if (destination.ShoreMarker == null)
@@ -659,7 +659,7 @@ namespace NewBeginnings
                     if (firstPair == null) firstPair = pair;
                     ++shoreAttempts;
                     var seed = (pair.A.transform.position + pair.B.transform.position) * .5f;
-                    if (!Plugin.Instance.TryFindStartShore(destination, seed, seed, out var shore, out _,
+                    if (!ShoreProbe.TryFindStartShore(destination, seed, seed, out var shore, out _,
                             out reason, pair.A.transform, pair.B.transform))
                     { landingFailure = reason; continue; }
                     // This is a landing proof only, never a candidate boat berth.
@@ -878,7 +878,7 @@ namespace NewBeginnings
             reason = null;
             var steps = Mathf.CeilToInt(Vector3.Distance(a.transform.position, b.transform.position) / 2f);
             var lowerCleat = Mathf.Min(a.transform.position.y, b.transform.position.y);
-            if (Plugin.Instance == null || !Plugin.Instance.TryStartDockSupportFloor(lowerCleat, out var floor))
+            if (!SeaLevel.TryStartDockSupportFloor(lowerCleat, out var floor))
                 return Fail("Sea level at the dock is unavailable.", out reason);
             for (var i = 0; i <= steps; ++i)
             {

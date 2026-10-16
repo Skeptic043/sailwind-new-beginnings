@@ -139,7 +139,7 @@ namespace NewBeginnings
             AuthoredRotations.Clear();
             AuthoredNames.Clear();
             BoatWalkRoots.Clear();
-            Plugin.Instance?.ClearDocksideCargoSurface();
+            StartArrival.ClearCargoSurface();
         }
 
         private static void FailAndDisarm(string reason)
@@ -412,7 +412,7 @@ namespace NewBeginnings
                     yield break;
                 }
                 if (nativeReady &&
-                    Plugin.Instance.TryGetDocksideCargoSurface(out var ground, out var groundCollider))
+                    StartArrival.TryGetCargoSurface(out var ground, out var groundCollider))
                 {
                     if (Camera.main == null ||
                         Vector3.Distance(Camera.main.transform.position, ground) > 500f)
@@ -434,7 +434,7 @@ namespace NewBeginnings
                     yield break;
                 }
                 else if (lastReason == null)
-                    lastReason = Plugin.Instance.CargoSurfaceStatus ?? "the loaded dockside ground has not resolved";
+                    lastReason = StartArrival.CargoSurfaceStatus ?? "the loaded dockside ground has not resolved";
                 placementStage = lastReason;
                 yield return null;
             }
@@ -784,7 +784,7 @@ namespace NewBeginnings
             Physics.SyncTransforms();
             // Adjacent dock planks can win a later raycast. Refresh a usable
             // hit, but keep the already resolved landing when this probe misses.
-            if (Plugin.Instance.TryProbeDocksideCargoSurface(ground,
+            if (StartArrival.TryProbeCargoSurface(ground,
                     out var liveGround, out var liveCollider) &&
                 IsVerifiedLandCollider(liveCollider))
             {
@@ -1060,7 +1060,7 @@ namespace NewBeginnings
                     bounds.max.z > other.min.z - .04f)) continue;
                 var surface = new Vector3(center.x - offset.x,
                     playerGround.y, center.z - offset.z);
-                var supported = Plugin.Instance.TryProbeDocksideCargoSurface(center,
+                var supported = StartArrival.TryProbeCargoSurface(center,
                     out var hit, out var collider) && IsVerifiedLandCollider(collider) &&
                     Mathf.Abs(hit.y - playerGround.y) <= .45f;
                 if (supported) surface.y = hit.y;
@@ -1225,7 +1225,7 @@ namespace NewBeginnings
                     Point = oar ? OarBaseGround(item, sample, selectedRotation) : sample,
                     Radius = radius
                 }, reserved)) continue;
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var point, out var collider) ||
+                if (!StartArrival.TryProbeCargoSurface(sample, out var point, out var collider) ||
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(point.y - groupGround.y) > 0.45f ||
                     Vector3.Distance(point, playerGround) > 4.25f ||
@@ -1284,7 +1284,7 @@ namespace NewBeginnings
                 Vector3.back * 0.2f
             })
             {
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(basePoint +
+                if (!StartArrival.TryProbeCargoSurface(basePoint +
                         sampleOffset, out var surface, out var collider) ||
                     !IsVerifiedLandCollider(collider) ||
                     Mathf.Abs(surface.y - pivotGround.y) > 0.45f)
@@ -1367,7 +1367,7 @@ namespace NewBeginnings
                 if (rejectedGrounds != null && rejectedGrounds.Any(point =>
                     new Vector2(sample.x - point.x, sample.z - point.z).magnitude < 0.9f))
                     continue;
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(sample, out var surface,
+                if (!StartArrival.TryProbeCargoSurface(sample, out var surface,
                     out var collider) || !IsVerifiedLandCollider(collider)) continue;
                 if (Mathf.Abs(surface.y - playerGround.y) > 0.45f ||
                     otherGroup.HasValue &&
@@ -1445,7 +1445,7 @@ namespace NewBeginnings
             var maxHeightDifference = IsNativeCup(support) ? 0.02f : 0.45f;
             foreach (var offset in offsets)
             {
-                if (!Plugin.Instance.TryProbeDocksideCargoSurface(center + offset,
+                if (!StartArrival.TryProbeCargoSurface(center + offset,
                     out var edge, out var edgeCollider) ||
                     !IsVerifiedLandCollider(edgeCollider) ||
                     Mathf.Abs(edge.y - center.y) > maxHeightDifference)
@@ -1467,7 +1467,7 @@ namespace NewBeginnings
             if (collider == null || !collider.gameObject.activeInHierarchy ||
                 !collider.gameObject.scene.isLoaded || collider.isTrigger ||
                 collider.attachedRigidbody != null ||
-                Plugin.IsUnsuitableStartSurface(collider) ||
+                ShoreProbe.IsUnsuitableStartSurface(collider) ||
                 collider.CompareTag("Boat") || collider.CompareTag("Player"))
                 return false;
             var transform = collider.transform;
