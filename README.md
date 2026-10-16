@@ -16,7 +16,7 @@ Install New Beginnings through r2modman or Thunderstore Mod Manager, then launch
 
 ## How it works
 
-Choose a port and boat, or randomize one or both, then press Continue to start a new game. Random Port and Random Boat show their pool options on the main screen. Island and boat exclusions and the shipyard settings are in the `Spawn` tab under `Starting options`.
+Choose a port and boat, or randomize one or both, then press Continue to start a new game. Island and boat exclusions and the shipyard settings are in the `Spawn` tab under `Starting options`.
 
 Ports added by other mods are discovered automatically. When added ports are detected, `Mod ports` includes them in Random Port, or you can select one manually.
 
@@ -25,7 +25,7 @@ The starting options menu allows you to adjust your money, reputation, and equip
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
-Chronos, Pirate Island and Saffron Island can be enabled in the `Spawn` tab. They remain available for manual selection and join Small Islands randomization when `Small Islands` is enabled.
+Chronos, Pirate Island and Saffron Island can be enabled in the `Spawn` tab. When enabled, they are available for manual selection and join `Small Islands` randomization.
 
 </details>
 
