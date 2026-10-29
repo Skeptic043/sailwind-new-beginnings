@@ -204,7 +204,9 @@ public class StarterSet : Component
 
 public class ItemRigidbody
 {
-    public int moved;
+    public int moved, resets;
+    public Vector3 resetPosition;
+    public List<Collider> subcolliders;
     public void ForceRigidbodyToWalkCol() => moved++;
 }
 
@@ -217,6 +219,12 @@ public class ShipItem : MonoBehaviour
     public Transform held;
     public ItemRigidbody body = new();
     public ItemRigidbody GetItemRigidbody() => body;
+    public void ResetRigidbody()
+    {
+        body.resets++;
+        body.resetPosition = transform.position;
+    }
+
     public virtual void OnBuy()
     {
     }
@@ -388,6 +396,7 @@ namespace UnityEngine
 
     public class Collider : Component
     {
+        public bool isTrigger;
     }
 
     public struct Scene

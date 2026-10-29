@@ -1,5 +1,11 @@
 # Release notes
 
+## Version 1.5.3
+
+### Fixed
+
+- Starter equipment crates no longer fly away when opened.
+
 ## Version 1.5.1
 
 ### Added

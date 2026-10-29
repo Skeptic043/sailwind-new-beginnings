@@ -145,12 +145,20 @@ static class EquipmentChecks
         Check(!AdditionalEquipment.TryPack(start, _ => { }, out _), "packing ran before native initialization");
         NativeInitialize(start);
         var prepared = new List<ShipItem>();
+        var bodyBox = new GameObject("solid body box").AddComponent<Collider>();
+        expectedPacked.First().GetItemRigidbody().subcolliders = new List<Collider> { bodyBox };
         Check(AdditionalEquipment.TryPack(start, prepared.Add, out var reason), "packing failed: " + reason);
+        Check(bodyBox.isTrigger, "packed item kept a solid body box inside its crate");
         Check(prepared.Count == expectedPacked.Length, "eligible items were omitted or prepared twice");
         foreach (var item in expectedPacked)
             Check(InventoryContains(item, carriers), "native membership or saved crate relationship missing");
         Check(extras.Where(item => item.big).All(item => !AdditionalEquipment.IsPacked(item)), "large supply packed");
         Check(AdditionalEquipment.TryPack(start, prepared.Add, out _) && prepared.Count == expectedPacked.Length, "completed packing inserted items again");
+        Check(expectedPacked.All(item => BodyFrozenAtCrate(item, carriers)), "packed body not frozen at its crate");
+        foreach (var carrier in carriers)
+            carrier.transform.position = carrier.transform.position + new Vector3(500f, 0f, 0f);
+        AdditionalEquipment.MovePacked(_ => { });
+        Check(expectedPacked.All(item => BodyFrozenAtCrate(item, carriers)), "packed body left behind when its crate moved");
         var withdrawn = expectedPacked.First();
         var crate = carriers.Single(carrier => carrier.GetComponent<CrateInventory>().containedItems.Contains(withdrawn));
         crate.GetComponent<CrateInventory>().WithdrawItem(withdrawn);
@@ -159,6 +167,13 @@ static class EquipmentChecks
         AdditionalEquipment.Reset();
         Check(items.All(item => !AdditionalEquipment.IsAdditional(item) && !AdditionalEquipment.IsPacked(item)), "reset retained startup ownership");
         Check(carriers.SelectMany(carrier => carrier.GetComponent<CrateInventory>().containedItems).SequenceEqual(contents), "reset changed native inventory");
+    }
+
+    static bool BodyFrozenAtCrate(ShipItem item, IEnumerable<ShipItem> carriers)
+    {
+        var crate = carriers.Single(carrier => carrier.GetComponent<CrateInventory>().containedItems.Contains(item));
+        var body = item.GetItemRigidbody();
+        return body.resets > 0 && (body.resetPosition - crate.transform.position).sqrMagnitude < 1e-6f;
     }
 
     internal static bool InventoryContains(ShipItem item, IEnumerable<ShipItem> carriers)
@@ -267,6 +282,8 @@ static class EquipmentChecks
         Check(boxes.Length == 10 && boxes.All(i => i.amount == 0 && i.GetComponent<SaveablePrefab>().prefabIndex == 104), "dedicated boxes not empty native104");
         var hooks = items.Where(i => i is ShipItemLampHook).ToArray();
         Check(hooks.Length == 120, "ten boxes not 120 real wall hooks");
+        Check(items.Where(i => !(i is ShipItemLampHook)).All(other => hooks.All(hook =>
+            (hook.transform.position - other.transform.position).sqrMagnitude > 9f)), "wall hooks spawned within reach of other supplies");
         Check(!AdditionalEquipment.TryPack(start, _ => { }, out _), "hooks packed before native ownership");
         var prepared = new List<ShipItem>();
         NativeInitialize(start);

@@ -47,6 +47,7 @@ namespace NewBeginnings
     {
         internal const string WallHooksKey = "bundle:wallhooks";
         private const int WallHooksPerBox = 12;
+        private const float HookRowOffset = -4.5f;
         private static readonly EquipmentEntry[] Definitions = {
             new EquipmentEntry(1, "1 crate salmon (E)", "ShipItemCrate", "Box of salmon"),
             new EquipmentEntry(10, "10 barrel water", "ShipItemBottle", "Barrel of water"),
@@ -132,6 +133,7 @@ namespace NewBeginnings
         private static readonly FieldInfo CrateId = AccessTools.Field(typeof(SaveablePrefab), "currentCrateId");
         private static readonly FieldInfo UiMeshes = CrateUiType == null ? null : AccessTools.Field(CrateUiType, "containerMeshes");
         private static readonly FieldInfo UiButtons = CrateUiType == null ? null : AccessTools.Field(CrateUiType, "buttons");
+        private static readonly FieldInfo BodyBoxes = AccessTools.Field(typeof(ItemRigidbody), "subcolliders");
 
         private static PrefabsDirectory Directory => PrefabsDirectory.instance ??
             Resources.FindObjectsOfTypeAll<PrefabsDirectory>().FirstOrDefault();
@@ -178,9 +180,12 @@ namespace NewBeginnings
             Extras.Add(box);
             WallHookBoxes.Add(box);
             var hookPrefab = WallHookPrefab(directory);
+            // A lantern or kettle hangs on any hook it touches during its first
+            // physics frames, even before packing. Keep hooks in their own row.
+            var hookOrigin = origin + new Vector3(0f, 0f, HookRowOffset);
             for (var index = 0; index < WallHooksPerBox; index++)
             {
-                var hook = Clone(hookPrefab, staging, origin, created.Count);
+                var hook = Clone(hookPrefab, staging, hookOrigin, WallHooks.Count);
                 created.Add(hook.gameObject);
                 Extras.Add(hook);
                 WallHooks.Add(hook, box);
@@ -376,7 +381,8 @@ namespace NewBeginnings
 
         private static int CarrierCapacity(GameObject prefab)
         {
-            if (prefab == null || Insert == null || Contents == null || CrateId == null || UiMeshes == null || UiButtons == null) return 0;
+            if (prefab == null || Insert == null || Contents == null || CrateId == null || UiMeshes == null || UiButtons == null ||
+                BodyBoxes == null) return 0;
             // Reuse the live UI instead of scanning every loaded object for
             // each packed item. Read its current arrays and this crate's mesh
             // each time so native capacity changes still take effect.
@@ -440,6 +446,7 @@ namespace NewBeginnings
                         throw new InvalidOperationException("wall-hook box has no free native inventory slot");
                     prepare(item);
                     item.transform.SetPositionAndRotation(crate.transform.position, crate.transform.rotation);
+                    PrepareLikeHeld(item);
                     Insert.Invoke(inventory, new object[] { item });
                     Packed.Add(item, crate);
                 }
@@ -457,6 +464,7 @@ namespace NewBeginnings
                     CompletePurchase(item);
                     prepare(item);
                     item.transform.SetPositionAndRotation(crate.transform.position, crate.transform.rotation);
+                    PrepareLikeHeld(item);
                     Insert.Invoke(crate.GetComponent(CrateType), new object[] { item });
                     Packed.Add(item, crate);
                 }
@@ -472,11 +480,24 @@ namespace NewBeginnings
             }
         }
 
+        // Native insertion stops updating the body, so it keeps the state it had.
+        // A player insert is held: frozen, with any extra body boxes (such as
+        // Radio's) as triggers. Solid boxes inside the crate would push it.
+        private static void PrepareLikeHeld(ShipItem item)
+        {
+            item.ResetRigidbody();
+            if (BodyBoxes.GetValue(item.GetItemRigidbody()) is List<Collider> boxes)
+                foreach (var box in boxes)
+                    if (box != null) box.isTrigger = true;
+        }
+
         internal static void MovePacked(Action<ShipItem> resetDistance)
         {
             foreach (var pair in Packed)
             {
                 pair.Key.transform.SetPositionAndRotation(pair.Value.transform.position, pair.Value.transform.rotation);
+                // Native crate updates move only the visible item off-boat.
+                pair.Key.ResetRigidbody();
                 pair.Key.GetItemRigidbody().ForceRigidbodyToWalkCol();
                 resetDistance(pair.Key);
             }
