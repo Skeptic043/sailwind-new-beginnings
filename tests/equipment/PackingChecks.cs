@@ -138,6 +138,10 @@ static class EquipmentChecks
         Check(carriers.Length == (expectedPacked.Length + 11) / 12, "insufficient or excess overflow carriers");
         Check(extras.All(item => !item.gameObject.activeSelf), "extras activated before native initialization");
         Check(carriers.All(item => item.amount == 0 && !item.gameObject.activeSelf), "carrier contents or activation changed");
+        // Other mods match Unity's instance names during Awake/OnLoad.
+        Check(extras.Concat(carriers).All(item => item.gameObject.name ==
+            PrefabsDirectory.instance.directory[item.GetComponent<SaveablePrefab>().prefabIndex].name + "(Clone)"),
+            "created item lost its Unity clone name");
         Check(extras.Single(item => item.GetComponent<SaveablePrefab>().prefabIndex == 104).amount == 20 && extras.Single(item => item.GetComponent<SaveablePrefab>().prefabIndex == 108).amount == 12, "selected supply boxes lost native contents");
         Check(!AdditionalEquipment.IsExtra(native) && !native.sold, "native roster identity or ownership changed");
         Append(start);

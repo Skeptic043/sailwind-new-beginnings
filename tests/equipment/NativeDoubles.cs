@@ -40,7 +40,7 @@ namespace UnityEngine
         {
             if (++cloneCalls == failCloneAt)
                 throw new Exception("injected clone failure");
-            var go = new GameObject(source.name);
+            var go = new GameObject(source.name + "(Clone)");
             go.activeSelf = source.activeSelf;
             go.transform.SetParent(parent, true);
             go.transform.localScale = source.transform.localScale;

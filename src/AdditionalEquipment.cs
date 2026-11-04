@@ -370,7 +370,6 @@ namespace NewBeginnings
         {
             var clone = UnityEngine.Object.Instantiate(prefab, staging, false);
             clone.SetActive(false);
-            clone.name = prefab.name;
             // Native trade templates serialize mission index zero. These new
             // player supplies have no delivery assignment; clear that state
             // before OnLoad reads PlayerMissions or initializes crate inventory.

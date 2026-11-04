@@ -79,10 +79,11 @@ internal static class SpoilerDrawerChecks
     {
         var pirate = plugin.Config[new ConfigDefinition("Spoilers", "EnablePirateIsland")];
         var saffron = plugin.Config[new ConfigDefinition("Spoilers", "EnableSaffronIsland")];
+        var bone = plugin.Config[new ConfigDefinition("Spoilers", "EnableBoneIsle")];
         var chronos = plugin.Config[new ConfigDefinition("Random Port Pools", "Chronos")];
         var anchor = plugin.Config[new ConfigDefinition("Advanced", "SpoilerOptions")];
         var metadata = anchor.Description.Tags.OfType<ConfigurationManagerAttributes>().Single();
-        check(pirate.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false && saffron.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false && chronos.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false, "spoiler config entries remain visible in Configuration Manager");
+        check(pirate.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false && saffron.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false && bone.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false && chronos.Description.Tags.OfType<ConfigurationManagerAttributes>().Single().Browsable == false, "spoiler config entries remain visible in Configuration Manager");
         check(metadata.CustomDrawer != null && metadata.HideSettingName == true && metadata.HideDefaultButton == true, "spoiler custom drawer metadata incomplete");
         Action<bool, bool> draw = (open, reveal) =>
         {
@@ -91,7 +92,7 @@ internal static class SpoilerDrawerChecks
             UnityEngine.GUILayout.Reveal = reveal;
             metadata.CustomDrawer(anchor);
         };
-        Func<bool> namesDrawn = () => UnityEngine.GUILayout.Drawn.Any(text => text.Contains("Pirate") || text.Contains("Saffron") || text.Contains("Chronos"));
+        Func<bool> namesDrawn = () => UnityEngine.GUILayout.Drawn.Any(text => text.Contains("Eleann") || text.Contains("Saffron") || text.Contains("Bone Isle") || text.Contains("Chronos"));
         draw(false, false);
         check(!namesDrawn() && !plugin.Settings.EnablePirateIsland && !plugin.Settings.EnableSaffronIsland, "collapsed drawer revealed names or enabled hidden locations");
         draw(true, false);
@@ -102,7 +103,7 @@ internal static class SpoilerDrawerChecks
         UnityEngine.GUILayout.Secret = true;
         draw(true, false);
         UnityEngine.GUILayout.Secret = null;
-        check(plugin.Settings.SecretIslandsEnabled && (bool)pirate.BoxedValue && (bool)saffron.BoxedValue && (bool)chronos.BoxedValue && plugin.ReloadEvents == reloads + 3, "group drawer did not apply all existing keys through event-driven reload");
+        check(plugin.Settings.SecretIslandsEnabled && (bool)pirate.BoxedValue && (bool)saffron.BoxedValue && (bool)bone.BoxedValue && (bool)chronos.BoxedValue && plugin.ReloadEvents == reloads + 4, "group drawer did not apply all existing keys through event-driven reload");
         pirate.BoxedValue = false;
         draw(true, false);
         check(!plugin.Settings.SecretIslandsEnabled && plugin.Settings.AnySecretIslandsEnabled && !(bool)pirate.BoxedValue && UnityEngine.GUILayout.Drawn.Contains("Secret islands (some enabled)"), "drawer overwrote externally changed mixed state");
@@ -113,7 +114,7 @@ internal static class SpoilerDrawerChecks
         UnityEngine.GUILayout.Secret = false;
         draw(true, false);
         UnityEngine.GUILayout.Secret = null;
-        check(!plugin.Settings.AnySecretIslandsEnabled && !(bool)pirate.BoxedValue && !(bool)saffron.BoxedValue && !(bool)chronos.BoxedValue, "group drawer left a secret enabled when switched off");
+        check(!plugin.Settings.AnySecretIslandsEnabled && !(bool)pirate.BoxedValue && !(bool)saffron.BoxedValue && !(bool)bone.BoxedValue && !(bool)chronos.BoxedValue, "group drawer left a secret enabled when switched off");
         draw(false, false);
         draw(true, false);
         check(!namesDrawn(), "reopening Spoilers skipped explicit spoiler reveal");

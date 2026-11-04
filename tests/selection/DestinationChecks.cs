@@ -127,7 +127,15 @@ namespace Lifetime
             pirateIsland.islandIndex = 32;
             pirateIsland.name = "another island";
             check(!StartDestinations.IsCurrent(pirate), "null-Port identity requires exact Pirate island name");
-            Console.WriteLine("PASS 17 actual-source destination-lifetime checks using shared API boundary doubles.");
+            var boneIsland = new CapturedIsland { islandIndex = 36, name = "island 36" };
+            var bone = new PortChoice { Island = boneIsland, DockRoot = boneIsland.transform, Hidden = HiddenSite.BoneIsle, Region = 2 };
+            check(StartDestinations.IsCurrent(bone), "correct Bone Isle destination works without a native Port");
+            bone.Hidden = HiddenSite.Pirate;
+            check(!StartDestinations.IsCurrent(bone), "Bone Isle island accepted as Eleann Island");
+            bone.Hidden = HiddenSite.BoneIsle;
+            boneIsland.name = "island 36 copy";
+            check(!StartDestinations.IsCurrent(bone), "null-Port identity requires exact Bone Isle island name");
+            Console.WriteLine("PASS 20 actual-source destination-lifetime checks using shared API boundary doubles.");
         }
     }
 }

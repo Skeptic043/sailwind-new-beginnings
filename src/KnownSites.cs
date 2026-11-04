@@ -4,7 +4,7 @@ using UnityEngine;
 namespace NewBeginnings
 {
     // Secret destinations, each enabled by its own spoiler setting.
-    internal enum HiddenSite { None, Pirate, Saffron }
+    internal enum HiddenSite { None, Pirate, Saffron, BoneIsle }
 
     // The specific game locations and boats this mod treats specially. Each
     // is matched by its scene index and complete object name, so a mod object
@@ -20,6 +20,7 @@ namespace NewBeginnings
 
         // Site keys are persisted in settings and exclusions.
         internal const string PirateHideoutKey = "vanilla:pirate-hideout";
+        internal const string BoneIsleKey = "vanilla:bone-isle";
         internal const string FortJuniperKey = "site:oldchronian|fort-juniper";
 
         internal static bool IsTestPort(Port port) => port != null && port.portIndex == 7 &&
@@ -33,6 +34,10 @@ namespace NewBeginnings
 
         internal static bool IsPirateHideout(IslandHorizon island) => island.islandIndex == 32 &&
             island.name == "island 32 A (hideout)";
+
+        // Bone Isle has no Port, recovery marker or dock cleats.
+        internal static bool IsBoneIsle(IslandHorizon island) => island.islandIndex == 36 &&
+            island.name == "island 36";
 
         internal static bool IsChronos(PortChoice site) => site.Index == 21 && site.SiteIdentity == null &&
             string.Equals(site.IdentityName, "port 21 M chronos", StringComparison.Ordinal);

@@ -1,5 +1,28 @@
 # Release notes
 
+## Version 1.5.8
+
+### Added
+
+<details>
+<summary>Spoiler: new starting location</summary>
+
+- Bone Isle joins the secret islands pool, enabled in the config
+
+</details>
+
+### Fixed
+
+- Starter items from New Beginnings can hang on hooks again with HooksHangMore
+- The Age of Exploration Asturias now shows its proper name
+
+<details>
+<summary>Spoiler: renamed starting location</summary>
+
+- Pirate Island now uses its proper name, Eleann Island
+
+</details>
+
 ## Version 1.5.3
 
 ### Fixed

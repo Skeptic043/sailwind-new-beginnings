@@ -106,7 +106,7 @@ namespace NewBeginnings
         // The Shattered Seas prefabs declare Clipper as Shroud Large (153) and
         // Sh'ba as Shroud Small (160); Sh'ba's cloned name is also live-logged.
         // Old Chronian identities come from its distributed prefabs and loader;
-        // Santa Maria's cloned name is live-logged. Other detected boats are
+        // Santa Maria's and Asturias's cloned names are live-logged. Other detected boats are
         // sized from their hull. Leopard's separate cutter remains manual-only.
         private const string UnknownBoatOrigin = "Other / unclassified";
         private static readonly Dictionary<int, Tuple<string, BoatSize, string, string>> ModBoats =
@@ -121,6 +121,7 @@ namespace NewBeginnings
                 { 197, Tuple.Create("BOAT GALLUS (197)(Clone)", BoatSize.Small, "Gallus", "Old Chronian") },
                 { KnownSites.LeopardIndex, Tuple.Create(KnownSites.LeopardName, BoatSize.Large, "HMS Leopard", "HMS Leopard") },
                 { 222, Tuple.Create("BOAT SANTA MARIA (222)(Clone)", BoatSize.Medium, "Santa Maria", "Age of Exploration") },
+                { 227, Tuple.Create("BOAT ASTURIAS (227)(Clone)", BoatSize.Large, "Asturias", "Age of Exploration") },
                 { 275, Tuple.Create("FFL Paraw", BoatSize.Small, "Paraw", "Paraw") }
             };
 
@@ -485,6 +486,7 @@ namespace NewBeginnings
         internal IEnumerable<PortChoice> VisiblePorts(SelectionSettings settings) => Ports.Where(item =>
             item.Hidden != HiddenSite.Pirate || settings.EnablePirateIsland).Where(item =>
             item.Hidden != HiddenSite.Saffron || settings.EnableSaffronIsland).Where(item =>
+            item.Hidden != HiddenSite.BoneIsle || settings.EnableBoneIsle).Where(item =>
             !KnownSites.IsChronos(item) || settings.EnableChronos);
 
         internal bool TryChoose(SelectionSettings settings,
@@ -579,6 +581,7 @@ namespace NewBeginnings
         internal bool IncludeModPorts { get; set; }
         internal bool EnablePirateIsland { get; set; }
         internal bool EnableSaffronIsland { get; set; }
+        internal bool EnableBoneIsle { get; set; }
         internal bool EnableChronos { get; set; }
         internal int BoatSceneIndex { get; set; }
         // Geographic pools only. Spoiler settings filter individual locations.
@@ -587,8 +590,8 @@ namespace NewBeginnings
         internal readonly HashSet<BoatSize> BoatSizes = new HashSet<BoatSize>
             { BoatSize.Small, BoatSize.Medium, BoatSize.Large };
 
-        internal bool SecretIslandsEnabled => EnablePirateIsland && EnableSaffronIsland && EnableChronos;
-        internal bool AnySecretIslandsEnabled => EnablePirateIsland || EnableSaffronIsland || EnableChronos;
+        internal bool SecretIslandsEnabled => EnablePirateIsland && EnableSaffronIsland && EnableBoneIsle && EnableChronos;
+        internal bool AnySecretIslandsEnabled => EnablePirateIsland || EnableSaffronIsland || EnableBoneIsle || EnableChronos;
 
         // A random start needs at least one geographic pool or mod-port source.
         // Spoiler flags filter locations within those sources.
@@ -602,7 +605,7 @@ namespace NewBeginnings
 
         internal void SetSecretIslands(bool enabled)
         {
-            EnablePirateIsland = EnableSaffronIsland = EnableChronos = enabled;
+            EnablePirateIsland = EnableSaffronIsland = EnableBoneIsle = EnableChronos = enabled;
             if (!HasRandomPortSource) PortPools.Add(PortPool.AlAnkh);
         }
 

@@ -25,7 +25,7 @@ Ports added by other mods are discovered automatically. When added ports are det
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
-Chronos, Pirate Island and Saffron Island can be enabled in the `Spawn` tab. When enabled, they are available for manual selection and join `Small Islands` randomization.
+Bone Isle, Chronos, Eleann Island and Saffron Island can be enabled in the `Spawn` tab. When enabled, they are available for manual selection and join `Small Islands` randomization.
 
 </details>
 

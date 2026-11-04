@@ -1187,8 +1187,7 @@ namespace NewBeginnings
         }
 
         private static bool IsNativeOar(ShipItem item) =>
-            AuthoredName(item).EndsWith(" oar",
-                StringComparison.OrdinalIgnoreCase);
+            item != null && item.GetComponent<SaveablePrefab>()?.prefabIndex == 168;
 
         private static float LooseFootprintRadius(ShipItem item) =>
             IsNativeOar(item) ? 0.4f : FootprintRadius(item);

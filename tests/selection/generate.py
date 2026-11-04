@@ -174,6 +174,7 @@ namespace Lifetime {
 ''' + block(known, 'internal enum HiddenSite') + '''
 internal static class KnownSites {
 ''' + statement(known, 'internal static bool IsPirateHideout(') + '''
+''' + statement(known, 'internal static bool IsBoneIsle(') + '''
 }
 internal static partial class StartDestinations {
 ''' + lifetime_members + '\n} }\n', encoding='utf-8')

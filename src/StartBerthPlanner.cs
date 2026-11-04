@@ -114,20 +114,13 @@ namespace NewBeginnings
             if (destination.Hidden == HiddenSite.Saffron)
             {
                 // Use the east beach for arrival and hold the boat nearby, bow north.
-                // An explicitly registered shore marker still takes precedence.
                 if (destination.Marker == null) return Fail("The Saffron starting marker is missing.", out reason);
-                var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position :
-                    destination.Island.transform.TransformPoint(new Vector3(220f, 1.1f, 169.9f));
-                var landingVerified = ShoreProbe.TryFindStartShore(destination, seed, seed, out var shore, out _, out var shoreReason);
-                if (!landingVerified) shore = seed;
-                if (!TryFixedOffshoreHold(destination, body, hull, height, SaffronOffshoreCenter, Vector3.forward,
-                    survey, Make(destination, seed, Quaternion.identity, shore), out plan, out reason)) return false;
-                if (!landingVerified)
-                {
-                    Note(plan, "Best-effort landing: Saffron's dry landing was not verified, so the player starts at the selected beach position. " + shoreReason);
-                }
-                return true;
+                return TryFixedBeachStart(destination, body, hull, height, survey, SaffronLanding,
+                    SaffronOffshoreCenter, Vector3.forward, out plan, out reason);
             }
+            if (destination.Hidden == HiddenSite.BoneIsle)
+                return TryFixedBeachStart(destination, body, hull, height, survey, BoneIsleLanding,
+                    BoneIsleOffshoreCenter, BoneIsleForward, out plan, out reason);
 
             var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
                 .Where(item => ValidCleat(destination, item, body, ropes)).Distinct().ToArray();
@@ -658,7 +651,7 @@ namespace NewBeginnings
                     if (TryFixedOffshoreHold(destination, body, hull, height, PirateOffshoreCenter, Vector3.right,
                             survey, landing, out plan, out var anchorReason))
                     { reason = null; return true; }
-                    return Fail("Pirate requires an offshore start for this boat. " + anchorReason, out reason);
+                    return Fail("Eleann Island requires an offshore start for this boat. " + anchorReason, out reason);
                 }
                 if (firstPair == null && pairs.Length > 0) firstPair = pairs[0];
             }
@@ -666,7 +659,7 @@ namespace NewBeginnings
             var front = firstPair != null ? firstPair.A : cleats.Length > 0 ? cleats[0] : null;
             var back = firstPair != null ? firstPair.B : null;
             if (front == null)
-                return Fail("Pirate requires an offshore start for this boat, but no dock cleat supplies a landing.", out reason);
+                return Fail("Eleann Island requires an offshore start for this boat, but no dock cleat supplies a landing.", out reason);
             var deck = DockLanding(front, back);
             var dockLanding = Make(destination, deck, Quaternion.identity, deck);
             if (back != null)
@@ -675,8 +668,8 @@ namespace NewBeginnings
             }
             if (!TryFixedOffshoreHold(destination, body, hull, height, PirateOffshoreCenter, Vector3.right,
                     survey, dockLanding, out plan, out var holdReason))
-                return Fail("Pirate requires an offshore start for this boat. " + holdReason, out reason);
-            Note(plan, "Best-effort landing: Pirate's dry landing was not verified (" + landingFailure + "), so the player lands on the dock deck.");
+                return Fail("Eleann Island requires an offshore start for this boat. " + holdReason, out reason);
+            Note(plan, "Best-effort landing: Eleann Island's dry landing was not verified (" + landingFailure + "), so the player lands on the dock deck.");
             reason = null;
             return true;
         }
@@ -694,8 +687,31 @@ namespace NewBeginnings
         // installed terrain. Pirate's lies in deep water southeast of its
         // enclosed inner lagoon with the bow east. Saffron's lies off the east
         // coast, about 22.5 m from the beach at this latitude, with the bow north.
+        // Bone Isle's lies about 8 m deep off its east beach, with the bow
+        // south-southwest. Each landing is the beach point the player starts on.
         private static readonly Vector3 PirateOffshoreCenter = new Vector3(60.7f, 0f, -77.8f);
         private static readonly Vector3 SaffronOffshoreCenter = new Vector3(250f, 0f, 169.9f);
+        private static readonly Vector3 SaffronLanding = new Vector3(220f, 1.1f, 169.9f);
+        private static readonly Vector3 BoneIsleOffshoreCenter = new Vector3(502f, 0f, 310f);
+        private static readonly Vector3 BoneIsleForward = new Vector3(-.3827f, 0f, -.9239f);
+        private static readonly Vector3 BoneIsleLanding = new Vector3(470f, .8f, 310f);
+
+        // A secret island without usable docks: land the player on the chosen
+        // beach and hold the boat at its fixed position. An explicitly
+        // registered shore marker still takes precedence over the beach point.
+        private static bool TryFixedBeachStart(PortChoice destination, Rigidbody body, Hull hull, float height, Survey survey,
+            Vector3 localLanding, Vector3 localCenter, Vector3 localForward, out StartBerthPlan plan, out string reason)
+        {
+            var seed = destination.ShoreMarker != null ? destination.ShoreMarker.position :
+                destination.Island.transform.TransformPoint(localLanding);
+            var landingVerified = ShoreProbe.TryFindStartShore(destination, seed, seed, out var shore, out _, out var shoreReason);
+            if (!landingVerified) shore = seed;
+            if (!TryFixedOffshoreHold(destination, body, hull, height, localCenter, localForward,
+                survey, Make(destination, seed, Quaternion.identity, shore), out plan, out reason)) return false;
+            if (!landingVerified)
+                Note(plan, "Best-effort landing: " + destination.DisplayName + "'s dry landing was not verified, so the player starts at the selected beach position. " + shoreReason);
+            return true;
+        }
 
         private static bool TryFixedOffshoreHold(PortChoice destination, Rigidbody body, Hull hull, float height,
             Vector3 localCenter, Vector3 localForward, Survey survey,

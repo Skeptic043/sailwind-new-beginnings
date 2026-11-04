@@ -30,7 +30,7 @@ static class PirateCandidateChecks
         internal RecoveryPort Recovery;
         internal int Index;
         internal HiddenSite Hidden = HiddenSite.Pirate;
-        internal string DisplayName = "Pirate Island";
+        internal string DisplayName = "Eleann Island";
         internal Transform DockRoot = new(), Marker, ShoreMarker;
         internal IslandFrame Island;
         internal PortChoice()
@@ -942,6 +942,24 @@ static class PirateCandidateChecks
         Reset();
         clear = _ => false;
         Check(TryFixedOffshoreHold(saffron, new Rigidbody(), new Hull(), 2, SaffronOffshoreCenter, Vector3.forward, new Survey(true), saffronLanding, out plan, out saffronReason) && plan.OffshoreDiagnostics.StartsWith("Saffron Island offshore hold") && plan.OffshoreDiagnostics.Contains("hull clearance unverified"), "Saffron hold cancelled or reported another location");
+        // Saffron shares the fixed beach start: its east beach is the landing
+        // seed unless an author shore marker is registered.
+        Reset();
+        Plugin.Instance.Fails = true;
+        Check(TryFixedBeachStart(saffron, new Rigidbody(), new Hull(), 2, new Survey(), SaffronLanding, SaffronOffshoreCenter, Vector3.forward, out plan, out var saffronBeach) && Near(plan.Position, new Vector3(250f, 2, 169.9f)) && Near(plan.ShorePosition, new Vector3(220f, 1.1f, 169.9f)) && plan.OffshoreDiagnostics.StartsWith("Best-effort landing: Saffron Island's dry landing"), "Saffron beach start lost its landing seed or best-effort note");
+        saffron.ShoreMarker = new Transform { position = new Vector3(230, 2, 160) };
+        Reset();
+        Check(TryFixedBeachStart(saffron, new Rigidbody(), new Hull(), 2, new Survey(), SaffronLanding, SaffronOffshoreCenter, Vector3.forward, out plan, out saffronBeach) && Near(Plugin.Instance.Seed, saffron.ShoreMarker.position) && plan.ShorePosition == Plugin.Instance.Shore, "author shore marker lost priority over the fixed beach landing");
+        saffron.ShoreMarker = null;
+        // Bone Isle has no docks: the chosen beach is the landing and the
+        // boat holds at its chosen open-water pose, bow south-southwest.
+        var boneIsle = new PortChoice { Hidden = HiddenSite.BoneIsle, DisplayName = "Bone Isle" };
+        var ssw = new Vector3(-.3827f, 0, -.9239f);
+        Reset();
+        Check(TryFixedBeachStart(boneIsle, new Rigidbody(), new Hull(), 2, new Survey(), BoneIsleLanding, BoneIsleOffshoreCenter, BoneIsleForward, out plan, out var boneReason) && boneReason == null && plan.Mode == StartBerthMode.OffshoreHeld && plan.Front == null && Near(plan.Position, new Vector3(502, 2, 310)) && Near(plan.Frame.rotation * plan.LocalRotation * Vector3.forward, ssw) && Near(Plugin.Instance.Seed, new Vector3(470, .8f, 310)) && plan.ShorePosition == Plugin.Instance.Shore && string.IsNullOrEmpty(plan.OffshoreDiagnostics), "Bone Isle start lost its boat pose, bow or verified beach landing");
+        Reset();
+        Plugin.Instance.Fails = true;
+        Check(TryFixedBeachStart(boneIsle, new Rigidbody(), new Hull(), 2, new Survey(), BoneIsleLanding, BoneIsleOffshoreCenter, BoneIsleForward, out plan, out boneReason) && Near(plan.ShorePosition, new Vector3(470, .8f, 310)) && plan.OffshoreDiagnostics.StartsWith("Best-effort landing: Bone Isle's dry landing"), "unverified Bone Isle landing did not start at the chosen beach point");
         front.transform.position = new(0, 1, 0);
         back.transform.position = new(4, 1, 0);
         Reset();

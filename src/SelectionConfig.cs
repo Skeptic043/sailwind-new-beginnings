@@ -13,6 +13,7 @@ namespace NewBeginnings
         private readonly ConfigEntry<bool> includeModPorts;
         private readonly ConfigEntry<bool> enablePirateIsland;
         private readonly ConfigEntry<bool> enableSaffronIsland;
+        private readonly ConfigEntry<bool> enableBoneIsle;
         private readonly ConfigEntry<bool> alAnkh;
         private readonly ConfigEntry<bool> emerald;
         private readonly ConfigEntry<bool> aestrin;
@@ -54,10 +55,12 @@ namespace NewBeginnings
                 Hidden("Enable this hidden location for manual starts and for random starts when Small Islands is checked."));
             enableSaffronIsland = file.Bind("Spoilers", "EnableSaffronIsland", false,
                 Hidden("Enable this hidden location for manual starts and for random starts when Small Islands is checked."));
+            enableBoneIsle = file.Bind("Spoilers", "EnableBoneIsle", false,
+                Hidden("Enable this hidden location for manual starts and for random starts when Small Islands is checked."));
             // Same key as before, so existing choices carry over. Shown only in the spoiler drawer.
             chronos = file.Bind("Random Port Pools", "Chronos", false,
                 Hidden("Enable this hidden location for manual starts and for random starts when Small Islands is checked. Its separate mod location follows IncludeModPorts."));
-            var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland, chronos);
+            var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland, enableBoneIsle, chronos);
             file.Bind("Advanced", "SpoilerOptions", "",
                 new ConfigDescription("Reveal optional hidden starting locations.", null,
                     new ConfigurationManagerAttributes { CustomDrawer = spoilerMenu.Draw, Category = "Advanced",
@@ -107,6 +110,7 @@ namespace NewBeginnings
             Settings.IncludeModPorts = includeModPorts.Value;
             Settings.EnablePirateIsland = enablePirateIsland.Value;
             Settings.EnableSaffronIsland = enableSaffronIsland.Value;
+            Settings.EnableBoneIsle = enableBoneIsle.Value;
             Settings.EnableChronos = chronos.Value;
             Settings.BoatSceneIndex = lastBoat.Value;
             Settings.RandomBoat = randomBoat.Value;
@@ -149,6 +153,7 @@ namespace NewBeginnings
             includeModPorts.Value = Settings.IncludeModPorts;
             enablePirateIsland.Value = Settings.EnablePirateIsland;
             enableSaffronIsland.Value = Settings.EnableSaffronIsland;
+            enableBoneIsle.Value = Settings.EnableBoneIsle;
             chronos.Value = Settings.EnableChronos;
             alAnkh.Value = Settings.PortPools.Contains(PortPool.AlAnkh);
             emerald.Value = Settings.PortPools.Contains(PortPool.Emerald);

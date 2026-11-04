@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    // Holds every offshore start (Pirate, Saffron, Siren Song, Fort Juniper,
+    // Holds every offshore start (Pirate, Saffron, Bone Isle, Siren Song, Fort Juniper,
     // shipyard and best-effort holds) in its island frame. Ownership can be
     // granted while the player is still ashore; boarding, rather than
     // purchase, hands the hull to physics.

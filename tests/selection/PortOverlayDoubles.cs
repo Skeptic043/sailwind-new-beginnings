@@ -129,7 +129,7 @@ public class Shipyard : UnityEngine.Component
 
 namespace NewBeginnings
 {
-    internal enum HiddenSite { None, Pirate, Saffron }
+    internal enum HiddenSite { None, Pirate, Saffron, BoneIsle }
 
     internal sealed class SelectionCatalog
     {
@@ -144,6 +144,8 @@ namespace NewBeginnings
         internal const string FortJuniperKey = "site:oldchronian|fort-juniper";
         internal static bool IsSaffronPort(Port port) => port != null && port.portIndex == 33 && port.name == "port A 33 (flower)";
         internal static bool IsPirateHideout(IslandHorizon island) => island.islandIndex == 32 && island.name == "island 32 A (hideout)";
+        internal const string BoneIsleKey = "vanilla:bone-isle";
+        internal static bool IsBoneIsle(IslandHorizon island) => island.islandIndex == 36 && island.name == "island 36";
         internal static bool IsChronos(PortChoice site) => site.Index == 21 && site.SiteIdentity == null &&
             string.Equals(site.IdentityName, "port 21 M chronos", StringComparison.Ordinal);
         internal static bool IsSirenSong(PortChoice site) => site.SiteIdentity == null && site.Index == 18 &&

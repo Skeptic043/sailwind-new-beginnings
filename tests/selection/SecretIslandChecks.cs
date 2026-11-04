@@ -13,7 +13,7 @@ internal static class SecretIslandChecks
         p.Settings.SetSecretIslands(true);
         p.MenuSave();
         p = Plugin.Start(path);
-        check(p.Settings.SecretIslandsEnabled, "group choice did not persist through three existing keys");
+        check(p.Settings.SecretIslandsEnabled, "group choice did not persist through every secret key");
         p.Settings.PortPools.Clear();
         p.MenuSave();
         p = Plugin.Start(path);
@@ -23,11 +23,12 @@ internal static class SecretIslandChecks
         check(!p.Settings.SecretIslandsEnabled && p.Settings.AnySecretIslandsEnabled && p.Settings.EnableSaffronIsland, "external individual choice lost mixed state");
         p.MenuSave();
         p = Plugin.Start(path);
-        check(!p.Settings.EnablePirateIsland && p.Settings.EnableSaffronIsland && p.Settings.EnableChronos, "mixed secret keys overwritten on reload");
+        check(!p.Settings.EnablePirateIsland && p.Settings.EnableSaffronIsland && p.Settings.EnableBoneIsle && p.Settings.EnableChronos, "mixed secret keys overwritten on reload");
         p.Settings.PortPools.Clear();
         p.Settings.PortPools.Add(PortPool.AlAnkh);
         p.Settings.EnableChronos = false;
         p.Settings.EnableSaffronIsland = false;
+        p.Settings.EnableBoneIsle = false;
         p.Settings.EnablePirateIsland = true;
         check(!p.Settings.SetPortPool(PortPool.AlAnkh, false), "spoiler filter counted as a random source");
         p.Settings.PortPools.Clear();
@@ -74,6 +75,14 @@ internal static class SecretIslandChecks
             Hidden = HiddenSite.Saffron,
             Pool = PortPool.SmallIslands
         };
+        var bone = new PortChoice
+        {
+            Index = -1,
+            IdentityName = "bone",
+            Key = "bone",
+            Hidden = HiddenSite.BoneIsle,
+            Pool = PortPool.SmallIslands
+        };
         var fort = new PortChoice
         {
             Index = 21,
@@ -82,7 +91,7 @@ internal static class SecretIslandChecks
             SiteIdentity = "fort",
             IsModded = true
         };
-        c.Ports.AddRange(new[] { chronos, pirate, saffron, fort });
+        c.Ports.AddRange(new[] { chronos, pirate, saffron, bone, fort });
         c.Boats.Add(new BoatChoice { Index = 10, IdentityName = "boat", Size = BoatSize.Small });
         var s = new SelectionSettings
         {
@@ -90,7 +99,7 @@ internal static class SecretIslandChecks
         };
         var e = new IndividualExclusions();
         check(c.VisiblePorts(s).SequenceEqual(new[] { fort }), "secret gate used geographic pool or hid Fort");
-        foreach (var port in new[] { chronos, pirate, saffron })
+        foreach (var port in new[] { chronos, pirate, saffron, bone })
         {
             s.DestinationKey = port.Key;
             check(!c.TryChoose(s, e, new Random(1), out _, out _), "disabled secret allowed manual selection");
@@ -110,11 +119,11 @@ internal static class SecretIslandChecks
         var seen = new HashSet<PortChoice>();
         for (var seed = 0; seed < 90; seed++)
         {
-            check(c.TryChoose(s, e, new Random(seed), out chosen, out _) && new[] { chronos, pirate, saffron }.Contains(chosen.Port), "group failed independent random eligibility");
+            check(c.TryChoose(s, e, new Random(seed), out chosen, out _) && new[] { chronos, pirate, saffron, bone }.Contains(chosen.Port), "group failed independent random eligibility");
             seen.Add(chosen.Port);
         }
 
-        check(seen.SetEquals(new[] { chronos, pirate, saffron }), "actual random choice stopped sampling all enabled secrets");
+        check(seen.SetEquals(new[] { chronos, pirate, saffron, bone }), "actual random choice stopped sampling all enabled secrets");
         s.RandomPort = false;
         foreach (var port in seen)
         {
@@ -125,6 +134,7 @@ internal static class SecretIslandChecks
         s.RandomPort = true;
         e.SetPortExcluded(chronos, true);
         e.SetPortExcluded(saffron, true);
+        e.SetPortExcluded(bone, true);
         check(c.TryChoose(s, e, new Random(1), out chosen, out _) && chosen.Port == pirate, "secret group bypassed individual exclusions");
         e.SetPortExcluded(pirate, true);
         check(!c.TryChoose(s, e, new Random(1), out _, out _), "all excluded secrets remained selectable");
@@ -144,7 +154,7 @@ internal static class SecretIslandChecks
         LastPortSourceRule(check);
     }
 
-    // Every combination of geographic pools, mod ports and the three spoiler
+    // Every combination of geographic pools, mod ports and the four spoiler
     // filters: only geographic pools and mod ports count as random sources.
     private static void LastPortSourceRule(Action<bool, string> check)
     {
@@ -155,12 +165,12 @@ internal static class SecretIslandChecks
         check(empty.SecretIslandsEnabled && empty.PortPools.SetEquals(new[] { PortPool.AlAnkh }),
             "grouped spoiler toggle left random selection without a source");
         string poolFailure = null, modFailure = null, secretFailure = null;
-        for (var mask = 0; mask < 1 << 9; mask++)
+        for (var mask = 0; mask < 1 << 10; mask++)
         {
             Func<SelectionSettings> make = () =>
             {
                 var s = new SelectionSettings { IncludeModPorts = (mask & 32) != 0, EnablePirateIsland = (mask & 64) != 0,
-                    EnableSaffronIsland = (mask & 128) != 0, EnableChronos = (mask & 256) != 0 };
+                    EnableSaffronIsland = (mask & 128) != 0, EnableChronos = (mask & 256) != 0, EnableBoneIsle = (mask & 512) != 0 };
                 s.PortPools.Clear();
                 for (var i = 0; i < geographic.Length; i++)
                     if ((mask & (1 << i)) != 0) s.PortPools.Add(geographic[i]);

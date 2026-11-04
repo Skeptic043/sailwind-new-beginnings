@@ -7,14 +7,14 @@ namespace NewBeginnings
     internal sealed class SpoilerSettingsMenu
     {
         private readonly SelectionSettings settings;
-        private readonly ConfigEntry<bool> pirate, saffron, chronos;
+        private readonly ConfigEntry<bool> pirate, saffron, boneIsle, chronos;
         private bool expanded, revealed;
         private GUIStyle noteStyle;
 
         internal SpoilerSettingsMenu(SelectionSettings settings, ConfigEntry<bool> pirate, ConfigEntry<bool> saffron,
-            ConfigEntry<bool> chronos)
+            ConfigEntry<bool> boneIsle, ConfigEntry<bool> chronos)
         {
-            this.settings = settings; this.pirate = pirate; this.saffron = saffron; this.chronos = chronos;
+            this.settings = settings; this.pirate = pirate; this.saffron = saffron; this.boneIsle = boneIsle; this.chronos = chronos;
         }
 
         internal void Draw(ConfigEntryBase entry)
@@ -31,7 +31,7 @@ namespace NewBeginnings
                     revealed = GUILayout.Button("Reveal spoiler locations");
                 }
                 if (!revealed) return;
-                GUILayout.Label("Secret islands include Chronos, Pirate Island and Saffron Island. Enabled locations are available for manual starts. Random starts also require Small Islands.",
+                GUILayout.Label("Secret islands include Bone Isle, Chronos, Eleann Island and Saffron Island. Enabled locations are available for manual starts. Random starts also require Small Islands.",
                     noteStyle, GUILayout.ExpandWidth(true));
                 var enabled = settings.SecretIslandsEnabled;
                 var next = GUILayout.Toggle(enabled, settings.AnySecretIslandsEnabled && !enabled
@@ -40,6 +40,7 @@ namespace NewBeginnings
                 {
                     pirate.Value = next;
                     saffron.Value = next;
+                    boneIsle.Value = next;
                     chronos.Value = next;
                 }
             }

@@ -38,7 +38,8 @@ namespace NewBeginnings
         }
 
         internal static bool IsCurrent(PortChoice site) => site != null && Loaded(site.Island) &&
-            (site.Port == null ? site.Hidden == HiddenSite.Pirate && KnownSites.IsPirateHideout(site.Island) : ValidPort(site.Port) &&
+            (site.Port == null ? site.Hidden == HiddenSite.Pirate && KnownSites.IsPirateHideout(site.Island) ||
+                site.Hidden == HiddenSite.BoneIsle && KnownSites.IsBoneIsle(site.Island) : ValidPort(site.Port) &&
                 site.Port.GetComponentInParent<IslandHorizon>() == site.Island && (int)site.Port.region == site.Region) &&
             Loaded(site.DockRoot) && site.DockRoot.GetComponentInParent<IslandHorizon>() == site.Island &&
             OptionalCurrent(site.Marker, site.Island) && OptionalCurrent(site.ShoreMarker, site.Island) &&
@@ -106,7 +107,12 @@ namespace NewBeginnings
                 KnownSites.IsPirateHideout(item)))
                 catalog.Ports.Add(new PortChoice { Key = KnownSites.PirateHideoutKey, SiteIdentity = KnownSites.PirateHideoutKey,
                     Island = island, DockRoot = island.transform, Region = 0, Pool = PortPool.SmallIslands,
-                    Hidden = HiddenSite.Pirate, DisplayName = "Pirate Island" });
+                    Hidden = HiddenSite.Pirate, DisplayName = "Eleann Island" });
+            foreach (var island in Resources.FindObjectsOfTypeAll<IslandHorizon>().Where(item => Loaded(item) &&
+                KnownSites.IsBoneIsle(item)))
+                catalog.Ports.Add(new PortChoice { Key = KnownSites.BoneIsleKey, SiteIdentity = KnownSites.BoneIsleKey,
+                    Island = island, DockRoot = island.transform, Region = 2, Pool = PortPool.SmallIslands,
+                    Hidden = HiddenSite.BoneIsle, DisplayName = "Bone Isle" });
 
             var chronos = catalog.Ports.FirstOrDefault(KnownSites.IsChronos);
             if (chronos != null)
