@@ -11,7 +11,7 @@ Install New Beginnings through [Sailwind Mod Synchronizer](https://github.com/fo
 ### Manual installation
 
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) in your Sailwind game folder, following its installation instructions.
-2. Download and extract the New Beginnings ZIP. Copy its `BepInEx/plugins/NewBeginnings` folder into `BepInEx/plugins` in your Sailwind folder.
+2. Download and extract the [New Beginnings ZIP](https://github.com/Skeptic043/sailwind-new-beginnings/releases/latest). Copy its `BepInEx/plugins/NewBeginnings` folder into `BepInEx/plugins` in your Sailwind folder.
 3. Launch Sailwind normally.
 
 ## How it works
@@ -84,8 +84,6 @@ HMS Leopard is especially large and can struggle at ports that work for other la
 
 AI was used to write all of the code in this project. The original concept, design direction, testing, debugging, and release decisions are my own. If you prefer not to use mods developed with AI assistance, I understand and respect that choice.
 
-## Issues and links
+## Links
 
-[Report an issue](https://github.com/Skeptic043/sailwind-new-beginnings/issues) with your mod version and `BepInEx/LogOutput.log`.
-
-[Source code](https://github.com/Skeptic043/sailwind-new-beginnings) · [Release notes](CHANGELOG.md) · [MIT License](LICENSE) · [Support on Ko-fi](https://ko-fi.com/skeptic043) · skeptic043
+[Report an issue](https://github.com/Skeptic043/sailwind-new-beginnings/issues) · [Source code](https://github.com/Skeptic043/sailwind-new-beginnings) · [Release notes](https://github.com/Skeptic043/sailwind-new-beginnings/blob/main/CHANGELOG.md) · [Build instructions](https://github.com/Skeptic043/sailwind-new-beginnings/blob/main/BUILDING.md) · [License](https://github.com/Skeptic043/sailwind-new-beginnings/blob/main/LICENSE) · [Support on Ko-fi](https://ko-fi.com/skeptic043) · skeptic043

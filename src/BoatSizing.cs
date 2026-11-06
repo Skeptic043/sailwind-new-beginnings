@@ -7,7 +7,9 @@ namespace NewBeginnings
     internal static class BoatSizing
     {
         // World metres, copied from Ship Shuffle's measured-hull policy so both
-        // mods sort an unlisted boat alike. Both dimensions must fit a class.
+        // mods sort an unlisted boat alike (Skeptic043/ship-shuffle
+        // src/BoatSizing.cs at 5a9b68d, which owns the thresholds; change both
+        // together). Both dimensions must fit a class.
         // A measured Large hull also keeps the existing extra berth distance.
         // Returns null for unusable geometry; the boat then stays manual-only.
         internal static BoatSize? FromHull(float length, float radius)
