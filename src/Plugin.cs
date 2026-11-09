@@ -6,13 +6,14 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.5.8")]
+    [BepInPlugin(Id, "New Beginnings", "1.5.9")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Id = "com.skeptic043.sailwind.newbeginnings";
         private Harmony harmony;
+        internal Harmony Harmony => harmony;
         private SelectionConfig selection;
         private StartingOptionsConfig startingOptions;
         private readonly System.Random random = new System.Random();

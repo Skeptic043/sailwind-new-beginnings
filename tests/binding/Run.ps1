@@ -87,6 +87,13 @@ try {
     }
 
     if (-not $DetourSmoke) {
+        # Patched at runtime only while a starter furl is pending, so it is not a discovered patch class.
+        $rig = $assembly.GetType('NewBeginnings.LeopardStarterRig', $true)
+        $winchUpdate = $rig.GetField('WinchUpdate', $static).GetValue($null)
+        $winchPrefix = $rig.GetField('WinchInputPrefix', $static).GetValue($null)
+        if ($null -eq $winchUpdate -or $null -eq $winchPrefix) { throw 'Leopard starter winch hook target or prefix did not resolve.' }
+        [void]$harmony.Patch($winchUpdate, [HarmonyLib.HarmonyMethod]::new($winchPrefix))
+        Write-Output 'IL GENERATION PASS: runtime Leopard starter winch Update hook.'
         [GenerationOnlyPatcher]::VerifyInvalidPrefixRejected($harmony)
         Write-Output 'CONTROL PASS: Harmony rejected an invalid prefix argument through the generation-only backend.'
     }

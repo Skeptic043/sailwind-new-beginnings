@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.9
+
+### Changed
+
+- New Beginnings no longer checks winches every frame for an entire session
+
+## Changed
+
+- Stopped checking every winch on every frame for the whole session, which was only needed for a few seconds after a Leopard start
+
 ## 1.5.8
 
 ### Added
