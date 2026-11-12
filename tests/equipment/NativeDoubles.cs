@@ -241,6 +241,8 @@ public class ShipItemLampHook : ShipItem
 
 public class ShipItemBottle : ShipItem
 {
+    public float capacity = 10f;
+    public float GetCapacity() => capacity;
 }
 
 public class ShipItemStoveFuel : ShipItem
@@ -450,7 +452,8 @@ public enum TransactionCategory
     retailWater,
     retailAlco,
     toolsAndSupplies,
-    furniture
+    furniture,
+    otherItems
 }
 
 namespace BepInEx.Bootstrap

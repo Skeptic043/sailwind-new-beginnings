@@ -74,6 +74,9 @@ namespace NewBeginnings
         // its menu is never attached and Sailwind's normal new game runs.
         internal static bool CanSelect => nativeTweenSeamReady && PlayerObserverField != null &&
             PlayerControllerField != null && ScrambledSeasIntegration.CanSelect;
+        // The one switch for New Beginnings' new-game flow: supported here and
+        // wanted by the player. Everything after BeginPatch acts only on its pending start.
+        internal static bool Active => CanSelect && Plugin.Instance?.Settings.ReplaceNewGameMenu == true;
 
         private static void ClearAcceptedButtonChoice()
         {
@@ -96,7 +99,7 @@ namespace NewBeginnings
                 { MenuUi.ActiveFor(__instance)?.ShowBlockedStart(blocked); return false; }
                 ClearAcceptedButtonChoice();
                 var plugin = Plugin.Instance;
-                if (plugin == null || !CanSelect) return true;
+                if (plugin == null || !Active) return true;
                 MenuUi activeUi = null;
                 try
                 {
@@ -172,7 +175,7 @@ namespace NewBeginnings
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
                 var plugin = Plugin.Instance;
-                if (plugin == null || !CanSelect) return true;
+                if (plugin == null || !Active) return true;
 
                 object previousRegion = null;
                 var regionUpdated = false;

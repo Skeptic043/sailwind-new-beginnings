@@ -50,6 +50,7 @@ namespace NewBeginnings
         private SelectionCatalog catalog;
         private GameObject buttonTemplate;
         private TextMesh titleTemplate;
+        private TextMesh buttonFont;
         private Transform panel;
         private Transform confirm;
         private Transform back;
@@ -95,6 +96,9 @@ namespace NewBeginnings
         private bool titleWasActive;
         private int editorPage;
         private bool built;
+        private NativeMenuState nativeMenu;
+        // Null until first applied; then whether this panel currently replaces Sailwind's.
+        private bool? replacing;
         private bool seasLayout;
         private float nextDiscoveryRefresh;
         private int registrationRevision = -1;
@@ -160,7 +164,9 @@ namespace NewBeginnings
                 buttonTemplate = confirm.gameObject;
                 nativeConfirm = confirmButton;
                 titleTemplate = title.GetComponent<TextMesh>();
-                UseNativeButtonFont(titleTemplate, confirm.Find("text")?.GetComponent<TextMesh>());
+                buttonFont = confirm.Find("text")?.GetComponent<TextMesh>();
+                if (buttonFont == null)
+                    throw new InvalidOperationException("Sailwind's native button font was not found.");
                 this.confirm = confirm;
                 back = choiceRoot.Find("button back");
                 panel = choiceRoot.Find("bg");
@@ -172,8 +178,33 @@ namespace NewBeginnings
                 startingOptions = StartingOptionsUi.Create(this, choiceRoot);
                 built = true;
             }
-            HideNativeRegionChoice();
-            RefreshCatalog();
+            // Sailwind's own panel is left untouched until it opens (OnEnable),
+            // after StartMenu.Start and Save Slots Plus have laid it out.
+        }
+
+        // Applies ReplaceNewGameMenu and returns it. On records Sailwind's panel
+        // as it is now, before our layout changes it, and shows our controls for
+        // the caller's usual refresh. Off closes our editors, hides our controls
+        // and puts that record back.
+        private bool UpdateReplacement()
+        {
+            var replace = FixedStart.Active;
+            if (replacing == replace) return replace;
+            replacing = replace;
+            if (replace)
+                nativeMenu = NativeMenuState.Capture(transform, confirm, back, nativeConfirm, titleTemplate);
+            else
+            {
+                if (editing) CloseEditor();
+                startingOptions?.Close(false);
+            }
+            foreach (var control in mainControls) control.SetActive(replace);
+            if (!replace)
+            {
+                nativeMenu?.Restore();
+                nativeMenu = null;
+            }
+            return replace;
         }
 
         private void OnEnable()
@@ -188,7 +219,7 @@ namespace NewBeginnings
                 plugin.SettingsReloaded += OnSettingsReloaded;
                 reloadSource = plugin;
             }
-            if (built && settings != null)
+            if (built && settings != null && UpdateReplacement())
             {
                 HideNativeRegionChoice();
                 RefreshCatalog();
@@ -204,17 +235,20 @@ namespace NewBeginnings
         }
 
         // Settings changed outside the menu: an open panel reloads from the saved values and discards its pending edits.
+        // Turning replacement off closes the editor with that saved copy.
         private void OnSettingsReloaded()
         {
             if (!built || settings == null) return;
             if (editing && individualExclusions != null) editorDraft = individualExclusions.Copy();
+            if (!UpdateReplacement()) return;
+            HideNativeRegionChoice();
             startingOptions?.ApplyExternalChange();
             RefreshCatalog();
         }
 
         private void Update()
         {
-            if (!built) return;
+            if (!built || replacing != true) return;
             // Optional providers can initialize after the menu opens. Keep the
             // catalog live only while this panel is active, without saving settings.
             if (registrationRevision != StartPorts.Revision || Time.realtimeSinceStartup >= nextDiscoveryRefresh)
@@ -330,7 +364,7 @@ namespace NewBeginnings
                 ? ChoiceUiField?.GetValue(startMenu) as GameObject : null;
             if (choice == null || !choice.activeInHierarchy) return null;
             var ui = choice.GetComponent<MenuUi>();
-            return ui != null && ui.built && ui.isActiveAndEnabled ? ui : null;
+            return ui != null && ui.built && ui.replacing == true && ui.isActiveAndEnabled ? ui : null;
         }
 
         internal void ShowBlockedStart(string reason)
@@ -404,6 +438,7 @@ namespace NewBeginnings
             }
             if (titleTemplate != null)
             {
+                UseNativeButtonFont(titleTemplate, buttonFont);
                 titleTemplate.text = "New Beginnings";
                 var position = titleTemplate.transform.localPosition;
                 titleTemplate.transform.localPosition = new Vector3(
@@ -760,6 +795,7 @@ namespace NewBeginnings
             visual.transform.localRotation = titleTemplate.transform.localRotation;
             visual.transform.localScale = Vector3.one * scale;
             var text = visual.GetComponent<TextMesh>();
+            UseNativeButtonFont(text, buttonFont);
             text.text = value;
             text.anchor = TextAnchor.MiddleCenter;
             text.alignment = TextAlignment.Center;

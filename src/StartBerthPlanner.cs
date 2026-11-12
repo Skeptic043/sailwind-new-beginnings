@@ -121,6 +121,9 @@ namespace NewBeginnings
             if (destination.Hidden == HiddenSite.BoneIsle)
                 return TryFixedBeachStart(destination, body, hull, height, survey, BoneIsleLanding,
                     BoneIsleOffshoreCenter, BoneIsleForward, out plan, out reason);
+            if (destination.SiteIdentity == KnownSites.OracleKey)
+                return TryFixedBeachStart(destination, body, hull, height, survey, OracleLanding,
+                    OracleOffshoreCenter, Vector3.left, out plan, out reason);
 
             var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
                 .Where(item => ValidCleat(destination, item, body, ropes)).Distinct().ToArray();
@@ -688,15 +691,19 @@ namespace NewBeginnings
         // enclosed inner lagoon with the bow east. Saffron's lies off the east
         // coast, about 22.5 m from the beach at this latitude, with the bow north.
         // Bone Isle's lies about 8 m deep off its east beach, with the bow
-        // south-southwest. Each landing is the beach point the player starts on.
+        // south-southwest. Oracle's lies about 8 m deep, 36 m off the south
+        // beach by the lantern, with the bow west toward open water. Each
+        // landing is the beach point the player starts on.
         private static readonly Vector3 PirateOffshoreCenter = new Vector3(60.7f, 0f, -77.8f);
         private static readonly Vector3 SaffronOffshoreCenter = new Vector3(250f, 0f, 169.9f);
         private static readonly Vector3 SaffronLanding = new Vector3(220f, 1.1f, 169.9f);
         private static readonly Vector3 BoneIsleOffshoreCenter = new Vector3(502f, 0f, 310f);
         private static readonly Vector3 BoneIsleForward = new Vector3(-.3827f, 0f, -.9239f);
         private static readonly Vector3 BoneIsleLanding = new Vector3(470f, .8f, 310f);
+        private static readonly Vector3 OracleOffshoreCenter = new Vector3(140f, 0f, 64f);
+        private static readonly Vector3 OracleLanding = new Vector3(156f, .7f, 100f);
 
-        // A secret island without usable docks: land the player on the chosen
+        // An island without usable docks: land the player on the chosen
         // beach and hold the boat at its fixed position. An explicitly
         // registered shore marker still takes precedence over the beach point.
         private static bool TryFixedBeachStart(PortChoice destination, Rigidbody body, Hull hull, float height, Survey survey,

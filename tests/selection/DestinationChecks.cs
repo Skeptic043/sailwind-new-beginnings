@@ -20,6 +20,7 @@ namespace Lifetime
         internal CapturedIsland Island;
         internal int Region;
         internal HiddenSite Hidden;
+        internal string SiteIdentity;
         internal UnityEngine.Transform DockRoot, Marker, ShoreMarker, SceneryRoot;
         internal GPButtonDockMooring PreferredFront, PreferredBack;
         internal Shipyard Yard;
@@ -135,7 +136,15 @@ namespace Lifetime
             bone.Hidden = HiddenSite.BoneIsle;
             boneIsland.name = "island 36 copy";
             check(!StartDestinations.IsCurrent(bone), "null-Port identity requires exact Bone Isle island name");
-            Console.WriteLine("PASS 20 actual-source destination-lifetime checks using shared API boundary doubles.");
+            var oracleIsland = new CapturedIsland { islandIndex = 23, name = "island 23 M oracle" };
+            var oracle = new PortChoice { Island = oracleIsland, DockRoot = oracleIsland.transform, SiteIdentity = KnownSites.OracleKey, Region = 2 };
+            check(StartDestinations.IsCurrent(oracle), "correct Oracle Island destination works without a native Port or spoiler kind");
+            oracle.SiteIdentity = null;
+            check(!StartDestinations.IsCurrent(oracle), "Oracle island accepted without its site identity");
+            oracle.SiteIdentity = KnownSites.OracleKey;
+            oracleIsland.name = "island 23 M oracle copy";
+            check(!StartDestinations.IsCurrent(oracle), "null-Port identity requires exact Oracle island name");
+            Console.WriteLine("PASS 23 actual-source destination-lifetime checks using shared API boundary doubles.");
         }
     }
 }

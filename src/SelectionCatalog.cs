@@ -572,6 +572,8 @@ namespace NewBeginnings
 
     internal sealed class SelectionSettings
     {
+        // Off leaves Sailwind's own new-game menu and start untouched.
+        internal bool ReplaceNewGameMenu { get; set; } = true;
         internal bool RandomPort { get; set; }
         internal bool ShipyardPortsOnly { get; set; }
         internal bool UseShipyardBerth { get; set; }

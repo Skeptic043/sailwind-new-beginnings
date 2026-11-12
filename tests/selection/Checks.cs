@@ -77,6 +77,7 @@ internal static class Checks
                 DestinationSelection,
                 RegistrationAliasContinuity,
                 ShipyardBerthSetting,
+                ReplaceNewGameMenuSetting,
                 NativeYardPoolEligibility,
                 ChronosPoolReload,
                 SpoilerDrawer,
@@ -231,6 +232,24 @@ internal static class Checks
             ShipyardStart.CanUse = oldAvailability;
             FixedStart.Viable = oldViable;
         }
+    }
+
+    private static void ReplaceNewGameMenuSetting()
+    {
+        var path = NewPath("replace-menu");
+        var p = Plugin.Start(path);
+        Check(p.Settings.ReplaceNewGameMenu && (bool)Get(p, "General", "ReplaceNewGameMenu"), "menu replacement must default on");
+        p.Settings.RandomPort = true;
+        p.Settings.DestinationKey = "native:9";
+        p.MenuSave();
+        Cm(p, "General", "ReplaceNewGameMenu", false);
+        Check(!p.Settings.ReplaceNewGameMenu, "Configuration Manager change must turn menu replacement off live");
+        Check(p.Settings.RandomPort && p.Settings.DestinationKey == "native:9", "turning menu replacement off changed saved selections");
+        p.MenuSave();
+        Check(!(bool)Get(p, "General", "ReplaceNewGameMenu"), "a menu save rewrote the replacement setting");
+        Cm(p, "General", "ReplaceNewGameMenu", true);
+        p = Plugin.Start(path);
+        Check(p.Settings.ReplaceNewGameMenu && p.Settings.RandomPort && p.Settings.DestinationKey == "native:9", "selections did not survive an off/on cycle");
     }
 
     private static void NativeYardPoolEligibility()

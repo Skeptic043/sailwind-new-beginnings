@@ -45,7 +45,7 @@ static class EquipmentStateChecks
         foreach (var afterMembership in new[] { false, true })
         {
             var start = EquipmentChecks.Setup();
-            var selection = AdditionalEquipment.GetCatalog().Single(entry => entry.Index == 40);
+            var selection = AdditionalEquipment.GetCatalog().Single(entry => entry.Key == "native:40:40 empty bottle");
             start.Options.EquipmentQuantities[selection.Key] = 3;
             check(AdditionalEquipment.Append(start, EquipmentChecks.Children(start)), "failure fixture append failed");
             EquipmentChecks.NativeInitialize(start);

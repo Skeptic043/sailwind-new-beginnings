@@ -147,6 +147,8 @@ static class ModChecks
         tool.GetComponent<SaveablePrefab>().instanceId = 0;
         tool.GetComponent<ShipItem>().category = TransactionCategory.furniture;
         check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "generic furniture offered");
+        tool.GetComponent<ShipItem>().category = TransactionCategory.otherItems;
+        check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "native item type in other items offered");
         tool.GetComponent<ShipItem>().category = TransactionCategory.toolsAndSupplies;
         tool.AddComponent<Good>();
         check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "trade good offered as tool");
@@ -346,6 +348,18 @@ static class ModChecks
         AdditionalEquipment.Reset();
         tool.GetComponent<ShipItem>().category = TransactionCategory.furniture;
         check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "custom item bypassed generic category gate");
+        // A plugin's runtime-built item: cloned from a native scroll (other
+        // items) and kept inactive under a DontDestroyOnLoad holder.
+        tool.GetComponent<ShipItem>().category = TransactionCategory.otherItems;
+        var holder = new GameObject("runtime holder");
+        holder.SetActive(false);
+        tool.transform.SetParent(holder.transform, false);
+        tool.scene = new Scene { valid = true };
+        check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 1, "runtime-built custom item in an inactive holder omitted");
+        holder.SetActive(true);
+        check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "active scene instance offered as template");
+        tool.transform.SetParent(null, false);
+        tool.scene = new Scene();
         tool.GetComponent<ShipItem>().category = TransactionCategory.toolsAndSupplies;
         var customOwner = BepInEx.Bootstrap.Chainloader.PluginInfos["test.tools"].Instance;
         BepInEx.Bootstrap.Chainloader.PluginInfos.Clear();

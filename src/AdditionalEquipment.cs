@@ -19,14 +19,18 @@ namespace NewBeginnings
         internal readonly bool AllowScaledPacking;
         internal readonly string SourceName = "";
         internal readonly string SourceId = "";
+        // Bottles only: true fills with water, false empties, null keeps the authored contents.
+        internal readonly bool? Water;
 
-        internal EquipmentEntry(int index, string prefabName, string itemType, string displayName, string key = null)
+        internal EquipmentEntry(int index, string prefabName, string itemType, string displayName, string key = null,
+            bool? water = null)
         {
             Index = index;
             PrefabName = prefabName;
             ItemType = itemType;
             DisplayName = displayName;
             Key = key ?? "native:" + index + ":" + prefabName;
+            Water = water;
         }
 
         internal EquipmentEntry(int index, string prefabName, string itemType, string displayName,
@@ -46,6 +50,8 @@ namespace NewBeginnings
     internal static class AdditionalEquipment
     {
         internal const string WallHooksKey = "bundle:wallhooks";
+        internal const string LargeWaterBottleKey = "fill:40:water";
+        internal const string SmallEmptyBottleKey = "fill:55:empty";
         private const int WallHooksPerBox = 12;
         private const float HookRowOffset = -4.5f;
         private static readonly EquipmentEntry[] Definitions = {
@@ -53,7 +59,11 @@ namespace NewBeginnings
             new EquipmentEntry(10, "10 barrel water", "ShipItemBottle", "Barrel of water"),
             new EquipmentEntry(11, "11 barrel rum", "ShipItemBottle", "Barrel of rum"),
             new EquipmentEntry(52, "52 cheese", "ShipItemFood", "Single cheese"),
-            new EquipmentEntry(40, "40 empty bottle", "ShipItemBottle", "Empty bottle"),
+            // Each bottle size comes empty or full of water; the native key keeps its authored contents.
+            new EquipmentEntry(40, "40 empty bottle", "ShipItemBottle", "Bottle (large, empty)"),
+            new EquipmentEntry(40, "40 empty bottle", "ShipItemBottle", "Bottle (large, water)", LargeWaterBottleKey, water: true),
+            new EquipmentEntry(55, "55 water bottle", "ShipItemBottle", "Bottle (small, water)"),
+            new EquipmentEntry(55, "55 water bottle", "ShipItemBottle", "Bottle (small, empty)", SmallEmptyBottleKey, water: false),
             new EquipmentEntry(70, "70 bucket", "ShipItemBottle", "Bucket"),
             new EquipmentEntry(108, "108 crate of firewood", "ShipItemCrate", "Crate of firewood"),
             new EquipmentEntry(80, "80 compass A", "ShipItemCompass", "Compass (Al'Ankh)"),
@@ -311,6 +321,7 @@ namespace NewBeginnings
                         continue;
                     }
                     var item = Clone(Resolve(directory, choice), staging.transform, origin, created.Count);
+                    if (choice.Water.HasValue) SetWater((ShipItemBottle)item, choice.Water.Value);
                     created.Add(item.gameObject);
                     Extras.Add(item);
                     if (choice.AllowScaledPacking) ScaledPackingTools.Add(item);
@@ -376,6 +387,14 @@ namespace NewBeginnings
             clone.GetComponent<Good>()?.RegisterAsMissionless();
             clone.transform.SetPositionAndRotation(origin + new Vector3(ordinal % 8 * 0.5f, 2f + ordinal / 8 * 0.5f, 1.5f), Quaternion.identity);
             return clone.GetComponent<ShipItem>();
+        }
+
+        // Set on the inactive clone, before native activation reads the contents.
+        // Liquid index 1 is water; health is the number of units held.
+        private static void SetWater(ShipItemBottle bottle, bool full)
+        {
+            bottle.amount = full ? 1f : 0f;
+            bottle.health = full ? bottle.GetCapacity() : 0f;
         }
 
         private static int CarrierCapacity(GameObject prefab)

@@ -200,5 +200,27 @@ internal static class SecretIslandChecks
         check(poolFailure == null, "geographic pool toggle broke the last-source rule: " + poolFailure);
         check(modFailure == null, "mod ports toggle broke the last-source rule: " + modFailure);
         check(secretFailure == null, "disabling secret islands left no random port source or restored geography needlessly: " + secretFailure);
+        OrdinaryPortlessIsland(check);
+    }
+
+    // Oracle Island: portless like Bone Isle, but an ordinary Aestrin
+    // location that needs no spoiler setting.
+    static void OrdinaryPortlessIsland(Action<bool, string> check)
+    {
+        var oracle = new PortChoice { Index = -1, IdentityName = "vanilla:oracle", Key = "vanilla:oracle",
+            SiteIdentity = "vanilla:oracle", Pool = PortPool.Aestrin };
+        var c = new SelectionCatalog();
+        c.Ports.Add(oracle);
+        c.Boats.Add(new BoatChoice { Index = 10, IdentityName = "boat", Size = BoatSize.Small });
+        var s = new SelectionSettings { BoatSceneIndex = 10, DestinationKey = oracle.Key };
+        var e = new IndividualExclusions();
+        check(!s.AnySecretIslandsEnabled && c.VisiblePorts(s).Contains(oracle), "Oracle Island hidden behind spoiler settings");
+        check(c.TryChoose(s, e, new Random(1), out var chosen, out _) && chosen.Port == oracle, "Oracle Island unavailable manually");
+        s.RandomPort = true;
+        s.PortPools.Clear();
+        s.PortPools.Add(PortPool.SmallIslands);
+        check(!c.TryChoose(s, e, new Random(1), out _, out _), "Oracle Island chosen from Small Islands instead of Aestrin");
+        s.PortPools.Add(PortPool.Aestrin);
+        check(c.TryChoose(s, e, new Random(1), out chosen, out _) && chosen.Port == oracle, "Oracle Island not eligible in the Aestrin pool");
     }
 }

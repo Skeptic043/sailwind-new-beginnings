@@ -74,51 +74,82 @@ namespace NewBeginnings
             for (var index = NativeDirectoryLength; index < directory.directory.Length; index++)
             {
                 var prefab = directory.directory[index];
-                if (!IsTemplate(prefab, index, out var item) || !HasVisibleMesh(prefab) ||
-                    ExcludedName(prefab.name) || ExcludedName(item.name) || HasConsumableComponent(prefab)) continue;
-                var owners = Owners(prefab, providers).Distinct().ToArray();
-                if (owners.Any(provider => provider.Id == FurnitureProvider) || IsFurniture(prefab, providers)) continue;
-                var itemAssembly = item.GetType().Assembly;
-                if (itemAssembly != typeof(ShipItem).Assembly &&
-                    (item.category != TransactionCategory.toolsAndSupplies ||
-                     owners.Length != 1 || owners[0].Assembly != itemAssembly)) continue;
-                Provider owner = null;
-                var knownEquipment = false;
-                foreach (var provider in providers)
-                {
-                    bool known;
-                    try { known = KnownEquipment(provider, prefab); }
-                    catch (Exception) { continue; }
-                    if (!known) continue;
-                    if (owner != null) { owner = null; break; }
-                    owner = provider;
-                    knownEquipment = true;
-                }
-                if (!knownEquipment)
-                {
-                    if (item.category != TransactionCategory.toolsAndSupplies || owners.Length > 1) continue;
-                    owner = owners.Length == 1 ? owners[0] : Unattributed;
-                }
-                if (owner == null || owner.Id == FurnitureProvider) continue;
-                // Exact Kemy tool references may use authored scale. The compass
-                // and inclinometer opt into native crate scale/withdrawal; the
-                // native-big binnacle stays loose. Other mods keep the original gate.
-                var looseNavigation = knownEquipment && owner.Id == NavigationProvider &&
-                    itemAssembly == typeof(ShipItem).Assembly && owners.Length <= 1 &&
-                    (owners.Length == 0 || owners[0] == owner) && ValidScale(prefab.transform.localScale);
-                if (!AdditionalEquipment.CanPack(item, allowScaledPacking: false) && !looseNavigation) continue;
-                var scaledPacking = looseNavigation && !item.big &&
-                    (MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "compassPrefab", prefab) ||
-                     MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "inclinometerPrefab", prefab));
-                var title = string.IsNullOrWhiteSpace(item.name) ? CanonicalName(prefab.name) : item.name;
-                found.Add(new EquipmentEntry(index, prefab.name, item.GetType().FullName,
-                    DisplayName(owner.Id, title, CanonicalName(prefab.name)), owner.Id, owner.Name, scaledPacking));
+                var entry = Classify(prefab, index, providers, out var rejection);
+                if (entry != null) found.Add(entry);
+                else if (rejection != null)
+                    Plugin.Instance?.DebugLog($"Mod equipment skipped {index} {prefab.name}: {rejection}.");
             }
             return found.GroupBy(entry => entry.Key, StringComparer.Ordinal)
                 .Where(group => group.Count() == 1).Select(group => group.Single())
                 .OrderBy(entry => entry.SourceName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
         }
+
+        // One directory entry: the offered equipment, or null with the reason
+        // it was skipped (null reason for an empty slot).
+        private static EquipmentEntry Classify(GameObject prefab, int index, Provider[] providers, out string rejection)
+        {
+            rejection = null;
+            if (prefab == null) return null;
+            if (!IsTemplate(prefab, index, out var item)) return Reject("not an unowned item template", out rejection);
+            if (!HasVisibleMesh(prefab)) return Reject("no visible mesh", out rejection);
+            if (ExcludedName(prefab.name) || ExcludedName(item.name)) return Reject("excluded by name", out rejection);
+            if (HasConsumableComponent(prefab)) return Reject("food, drink, container or cooking item", out rejection);
+            var owners = Owners(prefab, providers).Distinct().ToArray();
+            if (owners.Any(provider => provider.Id == FurnitureProvider) || IsFurniture(prefab, providers))
+                return Reject("furniture", out rejection);
+            var itemAssembly = item.GetType().Assembly;
+            var modItemType = itemAssembly != typeof(ShipItem).Assembly;
+            if (modItemType && !EquipmentCategory(item, true)) return Reject("shop category " + item.category, out rejection);
+            if (modItemType && (owners.Length != 1 || owners[0].Assembly != itemAssembly))
+                return Reject("item type not owned by exactly one plugin", out rejection);
+            Provider owner = null;
+            var knownEquipment = false;
+            foreach (var provider in providers)
+            {
+                bool known;
+                try { known = KnownEquipment(provider, prefab); }
+                catch (Exception) { continue; }
+                if (!known) continue;
+                if (owner != null) { owner = null; break; }
+                owner = provider;
+                knownEquipment = true;
+            }
+            if (!knownEquipment)
+            {
+                if (!EquipmentCategory(item, modItemType)) return Reject("shop category " + item.category, out rejection);
+                if (owners.Length > 1) return Reject("more than one possible owner", out rejection);
+                owner = owners.Length == 1 ? owners[0] : Unattributed;
+            }
+            if (owner == null || owner.Id == FurnitureProvider) return Reject("ambiguous known-equipment owner", out rejection);
+            // Exact Kemy tool references may use authored scale. The compass
+            // and inclinometer opt into native crate scale/withdrawal; the
+            // native-big binnacle stays loose. Other mods keep the original gate.
+            var looseNavigation = knownEquipment && owner.Id == NavigationProvider &&
+                !modItemType && owners.Length <= 1 &&
+                (owners.Length == 0 || owners[0] == owner) && ValidScale(prefab.transform.localScale);
+            if (!AdditionalEquipment.CanPack(item, allowScaledPacking: false) && !looseNavigation)
+                return Reject("too big or scaled to pack in a crate", out rejection);
+            var scaledPacking = looseNavigation && !item.big &&
+                (MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "compassPrefab", prefab) ||
+                 MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "inclinometerPrefab", prefab));
+            var title = string.IsNullOrWhiteSpace(item.name) ? CanonicalName(prefab.name) : item.name;
+            return new EquipmentEntry(index, prefab.name, item.GetType().FullName,
+                DisplayName(owner.Id, title, CanonicalName(prefab.name)), owner.Id, owner.Name, scaledPacking);
+        }
+
+        private static EquipmentEntry Reject(string reason, out string rejection)
+        {
+            rejection = reason;
+            return null;
+        }
+
+        // Tools and supplies. A plugin's own item type may also be "other
+        // items": items it builds at runtime from a native scroll keep that
+        // scroll's category (the Realistic Skies fork's instruments).
+        private static bool EquipmentCategory(ShipItem item, bool modItemType) =>
+            item.category == TransactionCategory.toolsAndSupplies ||
+            modItemType && item.category == TransactionCategory.otherItems;
 
         // The authored variant name distinguishes same-name gauges, compasses
         // and telltales without exposing a mutable save index. Known mod items
@@ -198,9 +229,11 @@ namespace NewBeginnings
         private static bool IsTemplate(GameObject prefab, int index, out ShipItem item)
         {
             item = null;
-            // Registered asset templates only. A shop instance can carry state
-            // and live controllers even when its native sold flag is still false.
-            if (prefab == null || prefab.scene.IsValid()) return false;
+            // Registered templates only: an asset, or an object a mod keeps
+            // inactive in a holder (the Realistic Skies fork builds its items
+            // that way). An active scene object such as a shop instance can
+            // carry state and live controllers even while its sold flag is false.
+            if (prefab == null || prefab.scene.IsValid() && prefab.activeInHierarchy) return false;
             item = prefab.GetComponent<ShipItem>();
             var saveable = prefab.GetComponent<SaveablePrefab>();
             return item != null &&

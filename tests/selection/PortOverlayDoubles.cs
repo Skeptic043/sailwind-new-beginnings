@@ -146,6 +146,8 @@ namespace NewBeginnings
         internal static bool IsPirateHideout(IslandHorizon island) => island.islandIndex == 32 && island.name == "island 32 A (hideout)";
         internal const string BoneIsleKey = "vanilla:bone-isle";
         internal static bool IsBoneIsle(IslandHorizon island) => island.islandIndex == 36 && island.name == "island 36";
+        internal const string OracleKey = "vanilla:oracle";
+        internal static bool IsOracle(IslandHorizon island) => island.islandIndex == 23 && island.name == "island 23 M oracle";
         internal static bool IsChronos(PortChoice site) => site.Index == 21 && site.SiteIdentity == null &&
             string.Equals(site.IdentityName, "port 21 M chronos", StringComparison.Ordinal);
         internal static bool IsSirenSong(PortChoice site) => site.SiteIdentity == null && site.Index == 18 &&

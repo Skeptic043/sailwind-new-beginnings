@@ -107,6 +107,7 @@ static class EquipmentChecks
             OpeningAndPickupReleaseOwnership();
             RemovedSuppliesStayExcluded();
             WallBundleChecks();
+            BottleContents();
             CapacityChecks();
             EquipmentStateChecks.Run(Check);
             KemyPackingChecks.Run(Check);
@@ -196,17 +197,37 @@ static class EquipmentChecks
         Check(AdditionalEquipment.TryPack(start, _ => { }, out _), "limited button packing failed");
         Check(Children(start).Where(AdditionalEquipment.IsCarrier).All(carrier => carrier.GetComponent<CrateInventory>().containedItems.Count <= 8), "button ceiling exceeded");
         start = Setup(crateUi: false);
-        start.Options.EquipmentQuantities[Definitions.Single(entry => entry.Index == 40).Key] = 1;
+        start.Options.EquipmentQuantities[Definitions.Single(entry => entry.Key == "native:40:40 empty bottle").Key] = 1;
         Append(start);
         NativeInitialize(start);
         Check(Children(start).Count == 2 && !Children(start).Any(AdditionalEquipment.IsCarrier), "missing capacity dropped items or created unusable carriers");
         Check(AdditionalEquipment.TryPack(start, _ => { }, out _), "loose fallback stalled");
     }
 
+    // Each bottle size is offered empty and full of water.
+    static void BottleContents()
+    {
+        var start = Setup();
+        var small = (ShipItemBottle)PrefabsDirectory.instance.directory[55].GetComponent<ShipItem>();
+        small.capacity = 5;
+        small.amount = 1;
+        small.health = 5;
+        var bottles = Definitions.Where(entry => entry.Index == 40 || entry.Index == 55).ToArray();
+        Check(bottles.Select(entry => entry.DisplayName).OrderBy(name => name).SequenceEqual(new[] { "Bottle (large, empty)", "Bottle (large, water)", "Bottle (small, empty)", "Bottle (small, water)" }), "bottle options are not empty and water for each size");
+        foreach (var entry in bottles)
+            start.Options.EquipmentQuantities[entry.Key] = 1;
+        Check(AdditionalEquipment.TryValidateSelection(start.Options.EquipmentQuantities.Keys, out _), "bottle selections rejected");
+        Append(start);
+        var made = Children(start).Where(AdditionalEquipment.IsExtra).Cast<ShipItemBottle>().ToArray();
+        string State(ShipItemBottle bottle) => bottle.capacity + ":" + bottle.amount + ":" + bottle.health;
+        Check(made.Select(State).OrderBy(value => value).SequenceEqual(new[] { "10:0:0", "10:1:10", "5:0:0", "5:1:5" }), "bottles did not spawn empty and full of water for each size: " + string.Join(", ", made.Select(State)));
+        Check(small.amount == 1 && small.health == 5, "filling a starter bottle changed the native template");
+    }
+
     static void OptionalCreationRollback()
     {
         var start = Setup();
-        var entry = Definitions.Single(candidate => candidate.Index == 40);
+        var entry = Definitions.Single(candidate => candidate.Key == "native:40:40 empty bottle");
         start.Options.EquipmentQuantities[entry.Key] = 1;
         PrefabsDirectory.instance.directory[entry.Index].name = "different item";
         Check(!AdditionalEquipment.TryValidateSelection(start.Options.EquipmentQuantities.Keys, out _), "spoofed native index accepted");

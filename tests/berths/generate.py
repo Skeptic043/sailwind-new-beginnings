@@ -55,6 +55,8 @@ for marker in [
     'private static readonly Vector3 BoneIsleOffshoreCenter',
     'private static readonly Vector3 BoneIsleForward',
     'private static readonly Vector3 BoneIsleLanding',
+    'private static readonly Vector3 OracleOffshoreCenter',
+    'private static readonly Vector3 OracleLanding',
     'private static bool Finite(float',
     'private static bool Finite(Vector3',
     'internal static bool RopeFits(',

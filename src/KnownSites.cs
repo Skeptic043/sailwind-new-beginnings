@@ -21,6 +21,7 @@ namespace NewBeginnings
         // Site keys are persisted in settings and exclusions.
         internal const string PirateHideoutKey = "vanilla:pirate-hideout";
         internal const string BoneIsleKey = "vanilla:bone-isle";
+        internal const string OracleKey = "vanilla:oracle";
         internal const string FortJuniperKey = "site:oldchronian|fort-juniper";
 
         internal static bool IsTestPort(Port port) => port != null && port.portIndex == 7 &&
@@ -38,6 +39,10 @@ namespace NewBeginnings
         // Bone Isle has no Port, recovery marker or dock cleats.
         internal static bool IsBoneIsle(IslandHorizon island) => island.islandIndex == 36 &&
             island.name == "island 36";
+
+        // Oracle Island has no Port either; an ordinary Aestrin start beside the abbey.
+        internal static bool IsOracle(IslandHorizon island) => island.islandIndex == 23 &&
+            island.name == "island 23 M oracle";
 
         internal static bool IsChronos(PortChoice site) => site.Index == 21 && site.SiteIdentity == null &&
             string.Equals(site.IdentityName, "port 21 M chronos", StringComparison.Ordinal);

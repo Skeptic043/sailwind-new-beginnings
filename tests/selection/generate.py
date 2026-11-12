@@ -88,7 +88,7 @@ internal sealed class BoatChoice { internal string IdentityName, DisplayName, Or
 internal sealed class StartPair { internal PortChoice Port; internal BoatChoice Boat; internal bool UseShipyardBerth; }
 // Native berth discovery is tested by the placement harness, not this selection boundary.
 internal static class ShipyardStart { internal static Func<PortChoice,bool> CanUse = port => false; internal static bool Available(PortChoice port) => CanUse(port); }
-internal static class FixedStart { internal static bool BlockStart; internal static bool TryGetStartBlock(out string reason){reason=BlockStart?"Starting blocked for fixture":null;return BlockStart;} internal static Func<PortChoice,BoatChoice,bool> Viable=(p,b)=>true; internal static bool IsPairViable(PortChoice p,BoatChoice b)=>Viable(p,b); }
+internal static class FixedStart { internal static bool Active = true; internal static bool BlockStart; internal static bool TryGetStartBlock(out string reason){reason=BlockStart?"Starting blocked for fixture":null;return BlockStart;} internal static Func<PortChoice,BoatChoice,bool> Viable=(p,b)=>true; internal static bool IsPairViable(PortChoice p,BoatChoice b)=>Viable(p,b); }
 internal static class AdditionalEquipment {
 internal static EquipmentEntry[] GetCatalog() => new EquipmentEntry[0];
 internal static bool TryValidateSelection(IEnumerable<string> keys,out string reason){reason=null;return true;}
@@ -112,6 +112,7 @@ internal sealed class MenuUiDouble {
 internal bool built = true; internal SelectionSettings settings; internal bool editing;
 internal IndividualExclusions individualExclusions, editorDraft; internal StartingOptionsUiDouble startingOptions; internal int Refreshes;
 private void RefreshCatalog() => Refreshes++;
+private bool UpdateReplacement() => true; private void HideNativeRegionChoice() { }
 internal void Reloaded() => OnSettingsReloaded();
 internal void OpenEditor() { editorDraft = individualExclusions.Copy(); editing = true; }
 internal void Done() { editing = false; individualExclusions.ReplaceWith(editorDraft); editorDraft = null; Plugin.Instance.MenuSave(); }
@@ -145,7 +146,7 @@ ui_members += menu[menu.index('private bool IsSelectedPort'):menu.index('private
 ui_members += '\n'.join(block(menu, marker) for marker in [
     'internal bool CanStart(', 'internal void ShowCatalogUnavailable(', 'private void RefreshDisplay()', 'private void CyclePort(', 'private void TogglePortPool(',
     'private void ToggleModPorts()', 'private void ToggleSecretIslands()', 'private void ToggleShipyardPortsOnly()',
-    'internal void ShowStartingOptions(', 'private void OpenEditor(', 'private void CloseEditor(',
+    'internal void ShowStartingOptions(', 'private bool UpdateReplacement()', 'private void OpenEditor(', 'private void CloseEditor(',
     'private void ToggleEditorRow(', 'private void ShowEditorTab(', 'private void RefreshEditor()', 'private void OnSettingsReloaded()',
     'private void Changed()', 'private void OnDisable()', 'internal static void SetEnabled(',
     'private static void SetButtonVisible(', 'private static string Trim('])
@@ -175,6 +176,8 @@ namespace Lifetime {
 internal static class KnownSites {
 ''' + statement(known, 'internal static bool IsPirateHideout(') + '''
 ''' + statement(known, 'internal static bool IsBoneIsle(') + '''
+''' + statement(known, 'internal static bool IsOracle(') + '''
+''' + statement(known, 'internal const string OracleKey') + '''
 }
 internal static partial class StartDestinations {
 ''' + lifetime_members + '\n} }\n', encoding='utf-8')

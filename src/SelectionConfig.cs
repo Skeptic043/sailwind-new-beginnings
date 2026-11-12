@@ -5,6 +5,7 @@ namespace NewBeginnings
     internal sealed class SelectionConfig
     {
         private readonly ConfigFile file;
+        private readonly ConfigEntry<bool> replaceNewGameMenu;
         private readonly ConfigEntry<int> lastPort;
         private readonly ConfigEntry<string> lastDestination;
         private readonly ConfigEntry<bool> randomPort;
@@ -39,6 +40,8 @@ namespace NewBeginnings
         internal SelectionConfig(ConfigFile file)
         {
             this.file = file;
+            replaceNewGameMenu = file.Bind("General", "ReplaceNewGameMenu", true,
+                "Use New Beginnings' port and boat selection for new games. Turn off to use Sailwind's regular new-game menu; your New Beginnings choices are kept.");
             lastPort = file.Bind("Selection", "LastSelectedPort", 2,
                 "Last manually selected port index. Default: Neverdin.");
             lastDestination = file.Bind("Selection", "LastSelectedDestination", "",
@@ -102,6 +105,8 @@ namespace NewBeginnings
         internal void Read()
         {
             warnings.Begin();
+            // Read only: the menu never changes this entry, so Save leaves it alone.
+            Settings.ReplaceNewGameMenu = replaceNewGameMenu.Value;
             Settings.PortIndex = lastPort.Value;
             Settings.DestinationKey = lastDestination.Value ?? "";
             Settings.RandomPort = randomPort.Value;

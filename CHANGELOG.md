@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.11
+
+### Added
+
+- Oracle Island as a starting location in Aestrin
+- Small and large bottles were added to the equipment menu, with options to spawn empty or full of water
+- `ReplaceNewGameMenu` config option to use Sailwind's regular new-game menu
+
+### Fixed
+
+- More mod items should be automatically detected for use in the equipment menu
+
 ## 1.5.9
 
 ### Changed

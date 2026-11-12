@@ -960,6 +960,14 @@ static class PirateCandidateChecks
         Reset();
         Plugin.Instance.Fails = true;
         Check(TryFixedBeachStart(boneIsle, new Rigidbody(), new Hull(), 2, new Survey(), BoneIsleLanding, BoneIsleOffshoreCenter, BoneIsleForward, out plan, out boneReason) && Near(plan.ShorePosition, new Vector3(470, .8f, 310)) && plan.OffshoreDiagnostics.StartsWith("Best-effort landing: Bone Isle's dry landing"), "unverified Bone Isle landing did not start at the chosen beach point");
+        // Oracle Island has no docks either: the south beach by the lantern is
+        // the landing and the boat holds offshore, bow west toward open water.
+        var oracle = new PortChoice { Hidden = HiddenSite.None, DisplayName = "Oracle Island" };
+        Reset();
+        Check(TryFixedBeachStart(oracle, new Rigidbody(), new Hull(), 2, new Survey(), OracleLanding, OracleOffshoreCenter, Vector3.left, out plan, out var oracleReason) && oracleReason == null && plan.Mode == StartBerthMode.OffshoreHeld && plan.Front == null && Near(plan.Position, new Vector3(140, 2, 64)) && Near(plan.Frame.rotation * plan.LocalRotation * Vector3.forward, Vector3.left) && Near(Plugin.Instance.Seed, new Vector3(156, .7f, 100)) && plan.ShorePosition == Plugin.Instance.Shore && string.IsNullOrEmpty(plan.OffshoreDiagnostics), "Oracle Island start lost its boat pose, bow or verified beach landing");
+        Reset();
+        Plugin.Instance.Fails = true;
+        Check(TryFixedBeachStart(oracle, new Rigidbody(), new Hull(), 2, new Survey(), OracleLanding, OracleOffshoreCenter, Vector3.left, out plan, out oracleReason) && Near(plan.ShorePosition, new Vector3(156, .7f, 100)) && plan.OffshoreDiagnostics.StartsWith("Best-effort landing: Oracle Island's dry landing"), "unverified Oracle Island landing did not start at the chosen beach point");
         front.transform.position = new(0, 1, 0);
         back.transform.position = new(4, 1, 0);
         Reset();

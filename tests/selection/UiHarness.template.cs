@@ -104,6 +104,23 @@ class UiHarness
     TextMesh titleTemplate = new();
     PanelHarness startingOptions = new();
     readonly List<GameObject> mainControls = new();
+    // The recorded objects are covered in game; here only when the record is taken and put back.
+    class NativeMenuState
+    {
+        internal static int Captures, Restores;
+        internal static NativeMenuState Capture(Transform root, Transform confirm, Transform back, object nativeConfirm, TextMesh title)
+        {
+            Captures++;
+            return new NativeMenuState();
+        }
+
+        internal void Restore() => Restores++;
+    }
+
+    NativeMenuState nativeMenu;
+    Transform transform = new();
+    object nativeConfirm;
+    bool? replacing;
     bool catalogUnavailable, built = true;
     string catalogUnavailableReason;
     void RefreshCatalog()
@@ -166,8 +183,43 @@ class UiHarness
     }
 
     // PRODUCTION_MEMBERS
+    private static void ReplacementToggle(Action<bool, string> check)
+    {
+        try
+        {
+            NativeMenuState.Captures = NativeMenuState.Restores = 0;
+            var ui = new UiHarness();
+            ui.settings.RandomPort = true;
+            check(ui.UpdateReplacement() && NativeMenuState.Captures == 1, "opening with replacement on must record the native panel first");
+            check(ui.UpdateReplacement() && NativeMenuState.Captures == 1, "an unchanged on setting recorded the native panel again");
+            ui.startingOptions.Open();
+            ui.startingOptions.ShowTab(3);
+            ui.OpenEditor(false);
+            check(ui.editing, "fixture did not open the exclusion editor");
+            ui.editorDraft.SetPortExcluded(new PortChoice { Key = "pending", IdentityName = "pending" }, true);
+            FixedStart.Active = false;
+            ui.OnSettingsReloaded();
+            check(!ui.startingOptions.IsOpen && !ui.editing, "turning replacement off must close open New Beginnings editors");
+            check(!ui.individualExclusions.IsPortExcluded(new PortChoice { Key = "pending", IdentityName = "pending" }), "turning replacement off saved a pending exclusion edit");
+            check(ui.mainControls.All(control => !control.active) && NativeMenuState.Restores == 1, "turning replacement off must hide our controls and restore the native panel");
+            check(!ui.UpdateReplacement() && NativeMenuState.Restores == 1, "an unchanged off setting restored the native panel again");
+            check(ui.settings.RandomPort, "turning replacement off changed selections");
+            FixedStart.Active = true;
+            check(ui.UpdateReplacement() && ui.mainControls.All(control => control.active), "turning replacement on must show our controls again");
+            check(NativeMenuState.Captures == 2 && NativeMenuState.Restores == 1, "turning replacement back on must record the native panel as it is now");
+            var closed = new UiHarness();
+            FixedStart.Active = false;
+            check(!closed.UpdateReplacement() && NativeMenuState.Restores == 1, "a panel first opened with replacement off restored a record it never took");
+        }
+        finally
+        {
+            FixedStart.Active = true;
+        }
+    }
+
     internal static void Run(Action<bool, string> check)
     {
+        ReplacementToggle(check);
         SubmenuNavigation(check);
         ConfigureBeforeRandom(check);
         var ordered = new UiHarness();

@@ -34,6 +34,7 @@ namespace UnityEngine
         public static Vector3 up => new(0, 1, 0);
         public static Vector3 forward => new(0, 0, 1);
         public static Vector3 right => new(1, 0, 0);
+        public static Vector3 left => new(-1, 0, 0);
         public float sqrMagnitude => x * x + y * y + z * z;
         public float magnitude => MathF.Sqrt(sqrMagnitude);
         public Vector3 normalized => magnitude > 0 ? this / magnitude : zero;
