@@ -665,6 +665,8 @@ namespace NewBeginnings
 
     internal class StartingOptionsSettings
     {
+        internal bool StandardSupplies { get; set; } = true;
+        internal Dictionary<string, int> EquipmentQuantities { get; } = new(StringComparer.Ordinal);
     }
 
     internal class OffshoreHold
@@ -693,7 +695,37 @@ namespace NewBeginnings
         Moored,
         OffshoreHeld,
         ShipyardHeld,
-        Preserved
+        Preserved,
+        AtSea
+    }
+
+    internal enum ScenarioPlace { Port, NearLand, FarAtSea }
+
+    internal sealed class Scenario
+    {
+        internal ScenarioPlace Place;
+        internal float Alcohol;
+        internal bool FillWithRum;
+        internal bool AtSea => Place != ScenarioPlace.Port;
+    }
+
+    // The at-sea path is outside these lifecycle scenarios.
+    internal static class AtSeaStart
+    {
+        internal static bool TryPlan(ResolvedStart s, ScenarioPlace place, out StartBerthPlan plan, out string reason)
+        { plan = null; reason = "not modelled"; return false; }
+        internal sealed class DeckSurvey { internal UnityEngine.Vector3 Player; }
+        internal static DeckSurvey SurveyDeck(ResolvedStart s) => null;
+        internal static UnityEngine.Transform MakePlayerTarget(ResolvedStart s, UnityEngine.Vector3 player) => null;
+        internal static void Stow(ResolvedStart s, Dictionary<string, int> cargo, DeckSurvey deck, bool rum) { }
+        internal static Port NearestRecoveryPort(UnityEngine.Vector3 position, IEnumerable<RecoveryPort> ports) => null;
+        internal static Action Snapshot(ResolvedStart s) => () => { };
+    }
+
+    internal static class ScenarioAlcohol
+    {
+        internal static void Arm(float alcohol) { }
+        internal static void Cancel() { }
     }
 
     internal class StartBerthPlan
@@ -774,6 +806,7 @@ namespace NewBeginnings
         internal BoatSize? Size;
         internal StartingOptionsSettings Options;
         internal StartMenu Menu;
+        internal Scenario Scenario;
     }
 
     internal static class StartBerthPlanner
@@ -979,6 +1012,7 @@ namespace NewBeginnings
         private static StartPair pending;
         private static StartMenu pendingMenu;
         private static StartingOptionsSettings pendingOptions;
+        private static Scenario pendingScenario;
         internal static bool RequestedYard;
         internal static bool ThrowLargeBoatBerth;
         private static UnityEngine.Vector3 AdjustLargeBoatBerth(ResolvedStart s, UnityEngine.Vector3 p, UnityEngine.Quaternion q) => ThrowLargeBoatBerth ? throw new InvalidOperationException("Injected large-boat failure") : p + new UnityEngine.Vector3(0, 0, 1);
@@ -1010,7 +1044,7 @@ namespace NewBeginnings
             return observer != null && actor != null;
         }
 
-        private static bool TryResolve(PortChoice destination, int boat, BoatSize? size, out ResolvedStart selected, out string reason, bool useShipyardBerth = false)
+        private static bool TryResolve(PortChoice destination, int boat, BoatSize? size, out ResolvedStart selected, out string reason, bool useShipyardBerth = false, bool atSea = false)
         {
             RequestedYard = useShipyardBerth;
             selected = ResolveFails ? null : Fixture;

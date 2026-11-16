@@ -11,11 +11,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $pwsh = (Get-Process -Id $PID).Path
 $failed = [Collections.Generic.List[string]]::new()
-foreach ($suite in @('equipment', 'cargo', 'startup', 'holds', 'selection', 'berths', 'moorings')) {
+foreach ($suite in @('equipment', 'cargo', 'startup', 'holds', 'selection', 'berths', 'moorings', 'scenarios')) {
     Write-Host "`n=== $suite ==="
     try {
         $arguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot "tests/$suite/Run.ps1"))
-        if ($suite -in @('equipment', 'cargo', 'startup', 'selection', 'berths')) {
+        if ($suite -in @('equipment', 'cargo', 'startup', 'selection', 'berths', 'scenarios')) {
             $arguments += @('-PythonPath', $PythonPath)
         }
         if ($suite -eq 'selection') { $arguments += @('-ReferenceDir', $ReferenceDir) }

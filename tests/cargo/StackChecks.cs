@@ -250,6 +250,20 @@ namespace NewBeginnings
                 for (int b = a + 1; b < loose.Length; b++)
                     Check(!At(loose[a]).Intersects(At(loose[b])), "best-effort actual cargo bounds initially overlap");
             Check(loose.All(i => new Vector2(At(i).center.x, At(i).center.z).magnitude < 4.25f), "forced unsupported cargo unnecessarily spread far from the landed player");
+            var fallbackColumns = loose.Skip(1).GroupBy(c => GroundOf(c).ToString()).ToArray();
+            Check(fallbackColumns.Length == 6 && fallbackColumns.All(g => g.Count() <= 3), "best-effort crates were not stacked into columns: " + fallbackColumns.Length + " ground positions");
+            Check(fallbackColumns.All(g => g.OrderBy(c => At(c).min.y).Skip(1).Zip(g.OrderBy(c => At(c).min.y), Above).All(x => x)), "best-effort column crates are not resting on the crate below");
+            // A best-effort base reports the collider it was probed on, which becomes its
+            // column support for later stacking, and no support where nothing was found.
+            Reset();
+            var plank = new GameObject().Add<Collider>();
+            Plugin.Instance.ProbeCollider = plank;
+            var baseCrate = Crate();
+            BestEffortGround(baseCrate, PlacementRotation(baseCrate), Vector3.zero, new List<CargoMove>(), out var probedSupport);
+            Check(probedSupport == plank, "best-effort base lost the collider it was probed on");
+            Plugin.Instance.Surface = _ => null;
+            BestEffortGround(baseCrate, PlacementRotation(baseCrate), Vector3.zero, new List<CargoMove>(), out probedSupport);
+            Check(probedSupport == null, "unsupported best-effort base reported a support collider");
             Console.WriteLine($"Forced no-slot fixture:145 original identities,17 loose/128 packed, all moved once and caches reset; max loose distance {loose.Max(i => new Vector2(At(i).center.x, At(i).center.z).magnitude):F2}m, no initial cargo overlap or post-settle retry.");
             // A later wide item cannot fit the strict plan. Retain its valid first barrel
             // position and append the missing real item beyond the preferred radius.

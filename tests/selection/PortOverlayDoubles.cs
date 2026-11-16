@@ -148,6 +148,12 @@ namespace NewBeginnings
         internal static bool IsBoneIsle(IslandHorizon island) => island.islandIndex == 36 && island.name == "island 36";
         internal const string OracleKey = "vanilla:oracle";
         internal static bool IsOracle(IslandHorizon island) => island.islandIndex == 23 && island.name == "island 23 M oracle";
+        internal const string ClearMindKey = "vanilla:clear-mind";
+        internal static bool IsClearMind(IslandHorizon island) => island.islandIndex == 5 && island.name == "island 5 A (clear mind)";
+        internal const string LionsFangKey = "vanilla:lions-fang";
+        internal static bool IsLionsFang(IslandHorizon island) => island.islandIndex == 6 && island.name == "island 6 A  (lion fang)";
+        internal const string PonderingPeakKey = "vanilla:pondering-peak";
+        internal static bool IsPonderingPeak(IslandHorizon island) => island.islandIndex == 39 && island.name == "island 39 E (onsen)";
         internal static bool IsChronos(PortChoice site) => site.Index == 21 && site.SiteIdentity == null &&
             string.Equals(site.IdentityName, "port 21 M chronos", StringComparison.Ordinal);
         internal static bool IsSirenSong(PortChoice site) => site.SiteIdentity == null && site.Index == 18 &&

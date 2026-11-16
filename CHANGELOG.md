@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.6.4
+
+### Added
+
+- `Scenarios` in the new-game menu with five preset starts: Shipwrecked, Fisherman's Luck, Poor Drunk, Adrift and Drunk at Sea (Shipwrecked scenario credit to hydro on Discord, Adrift scenario credit to @DogEggz01 and @FluffyJesus)
+- Each scenario has individual customization settings
+- `Random loadout` in the `Equipment` tab to roll random equipment within a selected budget
+- `No shipyard ports` option in the `Spawn` tab
+- `Clear exclusions` button in the island and boat exclusion lists
+- `Sailwind menu` and `New Beginnings` buttons to switch between Sailwind's normal new-game menu and New Beginnings menu
+- Isle of Clear Mind and Lion's Fang as starting locations in the small islands
+- Pondering Peak as a starting location in the Emerald Archipelago (how did I miss this one for so long...?)
+
+### Changed
+
+- Oracle Island is now in the `Small Islands` pool (Small islands won the poll on Discord about where Oracle belongs)
+
+### Fixed
+
+- Starter supplies that do not fit near the player now stack rather than spreading out one crate at a time
+
+### Known Issues
+
+- Scenario spawns at sea with the Jong are known to spawn the player underwater. Practice your swimming :)
+
 ## 1.5.11
 
 ### Added

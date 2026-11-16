@@ -12,6 +12,14 @@ namespace NewBeginnings
         internal bool StandardSupplies { get; set; } = true;
         internal Dictionary<string, int> EquipmentQuantities { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
         internal long EquipmentTotal => System.Linq.Enumerable.Sum(EquipmentQuantities.Values, value => (long)value);
+        // Random loadout replaces the chosen equipment and standard supplies
+        // with a roll from the catalog, made once when the game starts.
+        internal bool RandomLoadout { get; set; }
+        internal int RandomBudget { get; set; } = DefaultRandomBudget;
+        internal bool RandomModItems { get; set; }
+        internal bool RandomMultiples { get; set; } = true;
+        internal HashSet<string> RandomExclusions { get; } = new HashSet<string>(StringComparer.Ordinal);
+        internal const int DefaultRandomBudget = 1000, MaximumRandomBudget = 100000;
 
         internal void NormalizeEquipment()
         {
@@ -52,6 +60,12 @@ namespace NewBeginnings
             StandardSupplies = other.StandardSupplies;
             EquipmentQuantities.Clear();
             foreach (var pair in other.EquipmentQuantities) EquipmentQuantities.Add(pair.Key, pair.Value);
+            RandomLoadout = other.RandomLoadout;
+            RandomBudget = other.RandomBudget;
+            RandomModItems = other.RandomModItems;
+            RandomMultiples = other.RandomMultiples;
+            RandomExclusions.Clear();
+            RandomExclusions.UnionWith(other.RandomExclusions);
         }
 
         internal bool TryValidate(out string reason)
@@ -62,6 +76,8 @@ namespace NewBeginnings
                 reason = "Starting currency multiplier must be between 0 and 100.";
             else if (StartingReputation < 0 || StartingReputation > 10)
                 reason = "Starting faction reputation must be between 0 and 10.";
+            else if (RandomBudget < 0 || RandomBudget > MaximumRandomBudget)
+                reason = "Random loadout budget must be between 0 and " + MaximumRandomBudget + ".";
             foreach (var amount in CurrencyOverrides)
                 if (amount.HasValue && amount.Value < 0)
                     reason = "Currency overrides must be whole numbers from 0 to 2147483647, or blank.";

@@ -19,7 +19,7 @@ namespace NewBeginnings
 
         internal void Draw(ConfigEntryBase entry)
         {
-            if (Plugin.Instance == null || !ReferenceEquals(Plugin.Instance.Settings, settings)) return;
+            if (Plugin.Instance == null || !ReferenceEquals(Plugin.Instance.MainSettings, settings)) return;
             if (noteStyle == null) noteStyle = new GUIStyle(GUI.skin.label) { wordWrap = true };
             using (new GUILayout.VerticalScope(GUILayout.ExpandWidth(true), GUILayout.MinWidth(0)))
             {

@@ -109,6 +109,7 @@ namespace NewBeginnings
             CleanupStart(StartingValues.Cancel);
             CleanupStart(StarterOwnership.Cancel);
             CleanupStart(LeopardStarterRig.Cancel);
+            CleanupStart(ScenarioAlcohol.Cancel);
         }
 
         // Loading a save never arms startup work. Cancel an interrupted
@@ -244,9 +245,9 @@ namespace NewBeginnings
         {
             sequence = null;
             if (pending == null || !ReferenceEquals(menu, pendingMenu)) return false;
-            var pair = pending; var options = pendingOptions; var snapshot = pendingSnapshot;
-            pending = null; pendingMenu = null; pendingOptions = null; pendingSnapshot = null;
-            sequence = PrepareStart(menu, pair, options, snapshot, continuation);
+            var pair = pending; var options = pendingOptions; var snapshot = pendingSnapshot; var scenario = pendingScenario;
+            pending = null; pendingMenu = null; pendingOptions = null; pendingScenario = null; pendingSnapshot = null;
+            sequence = PrepareStart(menu, pair, options, scenario, snapshot, continuation);
             return true;
         }
 
@@ -257,7 +258,7 @@ namespace NewBeginnings
         // cancellation (a saved-game load, another new game or plugin
         // teardown) unwinds the selected start.
         private static IEnumerator PrepareStart(StartMenu menu, StartPair pair,
-            StartingOptionsSettings options, StartSnapshot snapshot,
+            StartingOptionsSettings options, Scenario scenario, StartSnapshot snapshot,
             Func<Transform, IEnumerator> continuation)
         {
             var generation = startGeneration;
@@ -293,10 +294,13 @@ namespace NewBeginnings
                 }
                 else
                 {
-                    snapshot.Approach(pair.Port);
+                    // An at-sea start never visits its island: the boat is
+                    // placed in open water and the player joins it there.
+                    var atSea = scenario?.AtSea == true;
+                    if (!atSea) snapshot.Approach(pair.Port);
                     var deadline = Time.realtimeSinceStartup + 30f;
                     var readyFrame = -1;
-                    while (generation == startGeneration && menu != null && !GameState.currentlyLoading &&
+                    while (!atSea && generation == startGeneration && menu != null && !GameState.currentlyLoading &&
                         StartDestinations.IsCurrent(pair.Port) && Time.realtimeSinceStartup < deadline)
                     {
                         if (StartDestinations.SceneryReady(pair.Port))
@@ -308,11 +312,11 @@ namespace NewBeginnings
                         yield return null;
                     }
                     if (generation != startGeneration || menu == null || GameState.currentlyLoading) yield break;
-                    if (readyFrame < 0 || Time.realtimeSinceStartup >= deadline)
+                    if (!atSea && (readyFrame < 0 || Time.realtimeSinceStartup >= deadline))
                         Plugin.Instance?.Warn("The selected island scenery did not report ready" + SinceSelection() +
                             ". Preparing the start anyway.");
-                    else Plugin.Instance?.DebugLog("Starting-location scenery ready" + SinceSelection() + ".");
-                    placement = TryPrepareStart(menu, pair, options);
+                    else if (!atSea) Plugin.Instance?.DebugLog("Starting-location scenery ready" + SinceSelection() + ".");
+                    placement = TryPrepareStart(menu, pair, options, scenario);
                     if (placement == null) yield break;
                     if (placement != null)
                     {
@@ -404,14 +408,22 @@ namespace NewBeginnings
 
         // Returns null only when no placement could be produced. A problem that
         // still leaves a usable placement is logged and placement continues.
-        private static StartPlacement TryPrepareStart(StartMenu menu, StartPair pair, StartingOptionsSettings options)
+        private static StartPlacement TryPrepareStart(StartMenu menu, StartPair pair, StartingOptionsSettings options, Scenario scenario)
         {
             StartPlacement placement = null;
             try
             {
-                if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason, pair.UseShipyardBerth))
+                var atSea = scenario?.AtSea == true;
+                if (!TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out var selected, out var reason, pair.UseShipyardBerth, atSea))
                     return NoPlacement("The selected start could not be planned: " + reason);
-                if (selected.Berth == null)
+                selected.Scenario = scenario;
+                if (atSea)
+                {
+                    if (!AtSeaStart.TryPlan(selected, scenario.Place, out var seaPlan, out reason))
+                        return NoPlacement("The at-sea start could not be planned: " + reason);
+                    selected.Berth = seaPlan;
+                }
+                else if (selected.Berth == null)
                 {
                     // An ordinary port, or a selected yard that disappeared
                     // during scenery loading. Use the berth chosen by the
@@ -504,6 +516,7 @@ namespace NewBeginnings
             private OffshoreHold offshoreHold;
             private PickupableBoatMooringRope frontRope, backRope;
             private bool moved, rolledBack, changedNative;
+            private Action restoreCargo;
 
             internal StartPlacement(ResolvedStart selected, StartMenu menu)
             {
@@ -545,7 +558,14 @@ namespace NewBeginnings
                 s.Body.transform.SetPositionAndRotation(s.Berth.Position, s.Berth.Rotation);
                 s.Body.position = s.Berth.Position; s.Body.rotation = s.Berth.Rotation;
                 s.Body.velocity = Vector3.zero; s.Body.angularVelocity = Vector3.zero;
-                if (s.Berth.OffshoreHeld)
+                if (s.Berth.Mode == StartBerthMode.AtSea)
+                {
+                    // Free in open water. Native BoatHorizon keeps the hull
+                    // still until play begins and its deck cargo has spawned.
+                    StowOffshoreAnchor();
+                    s.Body.isKinematic = true;
+                }
+                else if (s.Berth.OffshoreHeld)
                 {
                     StowOffshoreAnchor();
                     if (s.Berth.Mode == StartBerthMode.ShipyardHeld &&
@@ -623,6 +643,7 @@ namespace NewBeginnings
                 try
                 {
                     var s = Selected;
+                    if (s.Berth.Mode == StartBerthMode.AtSea) return CommitAtSea(out target, out reason);
                     if (!StartDestinations.IsCurrent(s.Destination)) { reason = "the starting location is no longer loaded"; return false; }
                     if (!NativeRecoveryReady(out var recovery)) Plugin.Instance?.Warn(recovery + " The start continues.");
                     // A relocated ordinary port keeps Sailwind's own berth marker as the
@@ -648,9 +669,45 @@ namespace NewBeginnings
                     }
                     TryStartupSetup("schedule starter hull repair", () => StarterBoatRepair.Arm(menu, s));
                     TryStartupSetup("prepare the starter rig", () => LeopardStarterRig.Arm(menu, s));
+                    ScenarioAlcohol.Arm(s.Scenario?.Alcohol ?? 0f);
                     return true;
                 }
                 catch (Exception exception) { reason = "Starting-location handoff failed: " + exception.Message; return false; }
+            }
+
+            // The player stands on deck; the native embark trigger takes them
+            // aboard once the start sequence has placed them. Supplies go into
+            // the boat's own saved-item cache instead of onto a shore.
+            private bool CommitAtSea(out Transform target, out string reason)
+            {
+                target = null; reason = null;
+                var s = Selected;
+                var deck = AtSeaStart.SurveyDeck(s);
+                if (deck == null) { reason = "the boat has no walkable deck to stand on"; return false; }
+                target = AtSeaStart.MakePlayerTarget(s, deck.Player);
+                var replacement = (PurchasableBoat[])starters.Clone(); replacement[s.Region] = s.Boat;
+                changedNative = true;
+                StartingBoatsField.SetValue(menu, replacement); s.StarterSet.starterBoat = s.Saveable.transform;
+                GameState.lastBoat = s.Saveable.transform; GameState.lastOwnedBoat = s.Saveable.transform;
+                var ports = RecoveryPortsField.GetValue(null) as System.Collections.Generic.List<RecoveryPort>;
+                GameState.lastVisitedPort = AtSeaStart.NearestRecoveryPort(s.Body.position, ports) ?? s.Port;
+                if (GameState.lastVisitedPort == null)
+                    Plugin.Instance?.Warn("No native recovery port was found for this at-sea start; shipwreck recovery may have nowhere to go.");
+                StarterOwnership.Arm(s);
+                StartingValues.Arm(s);
+                var cargo = new System.Collections.Generic.Dictionary<string, int>(s.Options.EquipmentQuantities, StringComparer.Ordinal);
+                // The native starter set is suppressed through the empty
+                // chosen-only roster; the deck cargo replaces it.
+                s.Options.StandardSupplies = false;
+                s.Options.EquipmentQuantities.Clear();
+                TryStartupSetup("suppress shore supplies", () => StarterCargo.Arm(s));
+                restoreCargo = AtSeaStart.Snapshot(s);
+                TryStartupSetup("stow deck cargo", () => AtSeaStart.Stow(s, cargo, deck, s.Scenario?.FillWithRum == true));
+                TryStartupSetup("schedule starter hull repair", () => StarterBoatRepair.Arm(menu, s));
+                TryStartupSetup("prepare the starter rig", () => LeopardStarterRig.Arm(menu, s));
+                ScenarioAlcohol.Arm(s.Scenario?.Alcohol ?? 0f);
+                Plugin.Instance?.Report($"At-sea start: player on deck at boat-local {deck.Player}, recovery port {GameState.lastVisitedPort?.name}.");
+                return true;
             }
 
             internal void Rollback()
@@ -660,6 +717,9 @@ namespace NewBeginnings
                 OffshoreHold.Remove(offshoreHold);
                 var s = Selected;
                 StarterOwnership.Cancel(s);
+                // Before the loading check: a save load is the case that would
+                // otherwise append its own records to this start's cargo.
+                CleanupStart(() => restoreCargo?.Invoke());
                 if (GameState.currentlyLoading) return;
                 if (changedNative)
                 {

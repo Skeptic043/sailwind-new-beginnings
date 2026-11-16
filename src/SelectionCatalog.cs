@@ -508,8 +508,10 @@ namespace NewBeginnings
             }
             var ports = settings.RandomPort
                 ? VisiblePorts(settings).Where(item => InRandomPool(item, settings) &&
+                    (!settings.PortlessOnly || item.Port == null) &&
                     (settings.ShipyardPortsOnly ? IsShipyardPort(item) :
-                     individualExclusions == null || !individualExclusions.IsPortExcluded(item))).ToArray()
+                     !(settings.NoShipyardPorts && IsShipyardPort(item)) &&
+                     (individualExclusions == null || !individualExclusions.IsPortExcluded(item)))).ToArray()
                 : VisiblePorts(settings).Where(item => string.IsNullOrEmpty(settings.DestinationKey)
                     ? item.SiteIdentity == null && item.Index == settings.PortIndex
                     : item.MatchesKey(settings.DestinationKey)).ToArray();
@@ -519,8 +521,12 @@ namespace NewBeginnings
                 : Boats.Where(item => item.Index == settings.BoatSceneIndex).ToArray();
             if (ports.Length == 0)
             {
-                reason = settings.RandomPort && settings.ShipyardPortsOnly
+                reason = settings.RandomPort && settings.PortlessOnly
+                    ? "No island without a port matches the enabled pools and exclusions."
+                    : settings.RandomPort && settings.ShipyardPortsOnly
                     ? "No shipyard starting locations match the enabled pools."
+                    : settings.RandomPort && settings.NoShipyardPorts
+                    ? "No non-shipyard starting locations match the enabled pools and exclusions."
                     : settings.RandomPort && VisiblePorts(settings).Any(item => InRandomPool(item, settings))
                     ? "Every island in the checked pools is individually excluded from random starts."
                     : settings.RandomPort ? "No starting locations match the enabled pools."
@@ -575,8 +581,22 @@ namespace NewBeginnings
         // Off leaves Sailwind's own new-game menu and start untouched.
         internal bool ReplaceNewGameMenu { get; set; } = true;
         internal bool RandomPort { get; set; }
-        internal bool ShipyardPortsOnly { get; set; }
+        // The two shipyard filters are opposites: turning one on turns the
+        // other off, so at most one applies.
+        private bool shipyardPortsOnly, noShipyardPorts;
+        internal bool ShipyardPortsOnly
+        {
+            get => shipyardPortsOnly;
+            set { shipyardPortsOnly = value; if (value) noShipyardPorts = false; }
+        }
+        internal bool NoShipyardPorts
+        {
+            get => noShipyardPorts;
+            set { noShipyardPorts = value; if (value) shipyardPortsOnly = false; }
+        }
         internal bool UseShipyardBerth { get; set; }
+        // Set by a scenario, never saved: Random Port picks only sites without a Port.
+        internal bool PortlessOnly { get; set; }
         internal bool RandomBoat { get; set; }
         internal int PortIndex { get; set; }
         internal string DestinationKey { get; set; }

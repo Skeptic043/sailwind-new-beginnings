@@ -59,9 +59,9 @@ read_amounts = block(options_ui, 'private bool ReadAmounts()')
 amount_text = statement(options_ui, 'private static string AmountText(')
 
 if mutant == 'no-guard':
-    plugin_members = replace_once(plugin_members, 'if (configWrites == 0) ReloadSettings();', 'ReloadSettings();')
+    plugin_members = replace_once(plugin_members, 'if (configWrites != 0) return;', '')
 elif mutant == 'no-reload':
-    plugin_members = replace_once(plugin_members, 'if (configWrites == 0) ReloadSettings();', '')
+    plugin_members = replace_once(plugin_members, 'args.ChangedSetting));\n            ReloadSettings();','args.ChangedSetting));')
 elif mutant == 'no-panel-reload':
     # Pre-follow-up stale-draft behavior: an open panel keeps its pending draft.
     menu_reload = replace_once(menu_reload, 'editorDraft = individualExclusions.Copy();', ';')
@@ -80,7 +80,7 @@ internal static class KnownSites {
     block(known, 'internal static string NativeYardName(') + '''
 }
 internal sealed class PortChoice {
-internal string IdentityName, Key, DisplayName, SiteIdentity, LegacySiteKey; internal HiddenSite Hidden; internal int Index; internal PortPool? Pool; internal bool IsModded, HasShipyard, HasAuthoredYardScope;
+internal Port Port; internal string IdentityName, Key, DisplayName, SiteIdentity, LegacySiteKey; internal HiddenSite Hidden; internal int Index; internal PortPool? Pool; internal bool IsModded, HasShipyard, HasAuthoredYardScope;
 internal bool MatchesKey(string saved) => !string.IsNullOrEmpty(saved) && (string.Equals(Key, saved, StringComparison.Ordinal) || string.Equals(LegacySiteKey, saved, StringComparison.Ordinal));
 internal bool MatchesIdentity(string saved) => !string.IsNullOrEmpty(saved) && (string.Equals(IdentityName, saved, StringComparison.OrdinalIgnoreCase) || string.Equals(LegacySiteKey, saved, StringComparison.OrdinalIgnoreCase));
 }
@@ -109,7 +109,7 @@ internal void Back() { IsOpen = false; draft = null; }
 ''' + options_reload + '\n' + read_amounts + '\n' + amount_text + '''
 }
 internal sealed class MenuUiDouble {
-internal bool built = true; internal SelectionSettings settings; internal bool editing;
+internal bool built = true; internal SelectionSettings settings; internal bool editing; internal bool? lastReplaceSetting;
 internal IndividualExclusions individualExclusions, editorDraft; internal StartingOptionsUiDouble startingOptions; internal int Refreshes;
 private void RefreshCatalog() => Refreshes++;
 private bool UpdateReplacement() => true; private void HideNativeRegionChoice() { }
@@ -145,9 +145,9 @@ ui_members += statement(menu, 'private BoatChoice[] EditorBoats()') + '\n'
 ui_members += menu[menu.index('private bool IsSelectedPort'):menu.index('private void CycleBoat')]
 ui_members += '\n'.join(block(menu, marker) for marker in [
     'internal bool CanStart(', 'internal void ShowCatalogUnavailable(', 'private void RefreshDisplay()', 'private void CyclePort(', 'private void TogglePortPool(',
-    'private void ToggleModPorts()', 'private void ToggleSecretIslands()', 'private void ToggleShipyardPortsOnly()',
+    'private void ToggleModPorts()', 'private void ToggleSecretIslands()', 'private void ToggleShipyardPortsOnly()', 'private void ToggleNoShipyardPorts()',
     'internal void ShowStartingOptions(', 'private bool UpdateReplacement()', 'private void OpenEditor(', 'private void CloseEditor(',
-    'private void ToggleEditorRow(', 'private void ShowEditorTab(', 'private void RefreshEditor()', 'private void OnSettingsReloaded()',
+    'private void ToggleEditorRow(', 'private void ClearEditorExclusions()', 'private void ShowEditorTab(', 'private void RefreshEditor()', 'private void OnSettingsReloaded()',
     'private void Changed()', 'private void OnDisable()', 'internal static void SetEnabled(',
     'private static void SetButtonVisible(', 'private static string Trim('])
 panel_members = statement(options_ui, 'internal bool SpawnTabOpen =>') + '\n'
@@ -178,6 +178,12 @@ internal static class KnownSites {
 ''' + statement(known, 'internal static bool IsBoneIsle(') + '''
 ''' + statement(known, 'internal static bool IsOracle(') + '''
 ''' + statement(known, 'internal const string OracleKey') + '''
+''' + statement(known, 'internal static bool IsClearMind(') + '''
+''' + statement(known, 'internal const string ClearMindKey') + '''
+''' + statement(known, 'internal static bool IsLionsFang(') + '''
+''' + statement(known, 'internal const string LionsFangKey') + '''
+''' + statement(known, 'internal static bool IsPonderingPeak(') + '''
+''' + statement(known, 'internal const string PonderingPeakKey') + '''
 }
 internal static partial class StartDestinations {
 ''' + lifetime_members + '\n} }\n', encoding='utf-8')

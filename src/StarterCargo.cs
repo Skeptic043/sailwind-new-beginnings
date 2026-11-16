@@ -265,6 +265,15 @@ namespace NewBeginnings
                     var appended = AdditionalEquipment.Append(armed, excludeStandard ? new ShipItem[0] : survivors);
                     if (excludeStandard && (!appended || !SuppressStandardSupplies(__instance)))
                         Plugin.Instance?.Warn("Chosen-only supplies could not be initialized. The original starter supplies were preserved; this start does not match the requested loadout.");
+                    // An at-sea start stows its own cargo aboard; only the
+                    // native shore set needed suppressing here.
+                    if (armed.Berth?.Mode == StartBerthMode.AtSea && standardSuppliesSuppressed)
+                    {
+                        Plugin.Instance?.DebugLog("At-sea start: native shore supplies suppressed.");
+                        placementStage = null;
+                        Disarm();
+                        return;
+                    }
                     foreach (var item in CollectItems(__instance.transform))
                         Capture(item);
                     wrapperObserved = true;
@@ -806,6 +815,7 @@ namespace NewBeginnings
             List<CargoMove> moves = null;
             List<CrateColumn> columns = null;
             var bestMoves = new List<CargoMove>();
+            var bestColumns = new List<CrateColumn>();
             var completeLayout = false;
             // A clear nearest anchor can strand the table or later supplies.
             // Try a few complete layouts before moving anything, in this call
@@ -900,14 +910,7 @@ namespace NewBeginnings
                         column = NewCrateColumn(item, itemGround, columnRotation, box, groundCollider);
                         columns.Add(column);
                     }
-                    if (column != null)
-                    {
-                        TryCargoBounds(item, itemRotation, out var bounds);
-                        column.Top = itemGround.y + .04f + bounds.size.y;
-                        column.Width = bounds.size.x;
-                        column.Depth = bounds.size.z;
-                        column.Items.Add(item);
-                    }
+                    if (column != null) AddToColumn(column, item, itemGround, itemRotation);
                     var destination = PutBottomOnSurface(item, itemGround,
                         itemRotation);
                     moves.Add(new CargoMove
@@ -916,7 +919,7 @@ namespace NewBeginnings
                         Rotation = itemRotation
                     });
                 }
-                if (moves.Count > bestMoves.Count) bestMoves = moves;
+                if (moves.Count > bestMoves.Count) { bestMoves = moves; bestColumns = columns; }
                 if (moves.Count != items.Length) continue;
                 completeLayout = true;
                 break;
@@ -926,14 +929,25 @@ namespace NewBeginnings
                 // A crowded dock must not leave every sold item at its distant
                 // native start, where Sailwind's distance cleanup can delete it.
                 // Keep the useful part of the compact plan and put the rest in
-                // separate nearby spaces. Ground and clearance are preferences
-                // here; native physics owns imperfect dock edges afterward.
+                // separate nearby spaces, stacking crates there as the compact
+                // plan does. Ground and clearance are preferences here; native
+                // physics owns imperfect dock edges afterward.
                 Plugin.Instance?.DebugLog("Completing dockside supplies with best-effort positions: " + reason);
                 moves = bestMoves;
+                columns = bestColumns;
                 foreach (var item in items.Where(item => !moves.Any(move => ReferenceEquals(move.Item, item))))
                 {
-                    var rotation = PlacementRotation(item);
-                    var surface = BestEffortGround(item, rotation, ground, moves);
+                    if (!TryStackCrate(item, columns, out var column, out var surface, out var rotation))
+                    {
+                        rotation = PlacementRotation(item);
+                        surface = BestEffortGround(item, rotation, ground, moves, out var support);
+                        if (TryStackBounds(item, rotation, out var box))
+                        {
+                            column = NewCrateColumn(item, surface, rotation, box, support);
+                            columns.Add(column);
+                        }
+                    }
+                    if (column != null) AddToColumn(column, item, surface, rotation);
                     moves.Add(new CargoMove
                     {
                         Item = item, Body = item.GetItemRigidbody(),
@@ -1006,8 +1020,9 @@ namespace NewBeginnings
         }
 
         private static Vector3 BestEffortGround(ShipItem item, Quaternion rotation,
-            Vector3 playerGround, List<CargoMove> moves)
+            Vector3 playerGround, List<CargoMove> moves, out Collider support)
         {
+            support = null;
             var source = PlanningBounds(item, rotation);
             var offset = source.center - item.transform.position;
             var occupied = moves.Select(move =>
@@ -1064,6 +1079,7 @@ namespace NewBeginnings
                 if (score >= bestScore) continue;
                 bestScore = score;
                 selected = surface;
+                support = supported ? collider : null;
             }
             return selected;
         }
@@ -1158,6 +1174,15 @@ namespace NewBeginnings
             Ground = ground, Center = ground + bounds.center - item.transform.position,
             Rotation = rotation, Width = bounds.size.x, Depth = bounds.size.z, Support = support
         };
+
+        private static void AddToColumn(CrateColumn column, ShipItem item, Vector3 ground, Quaternion rotation)
+        {
+            TryCargoBounds(item, rotation, out var bounds);
+            column.Top = ground.y + .04f + bounds.size.y;
+            column.Width = bounds.size.x;
+            column.Depth = bounds.size.z;
+            column.Items.Add(item);
+        }
 
         private static bool TryStackCrate(ShipItem item, List<CrateColumn> columns,
             out CrateColumn selectedColumn, out Vector3 surface, out Quaternion rotation)

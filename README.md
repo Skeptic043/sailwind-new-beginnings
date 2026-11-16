@@ -16,9 +16,11 @@ Install New Beginnings through [Sailwind Mod Synchronizer](https://github.com/fo
 
 ## How it works
 
-Choose a port and boat, or randomize one or both, then press Continue to start a new game. Island and boat exclusions and the shipyard settings are in the `Spawn` tab under `Starting options`.
+Choose a port and boat or randomize either or both, then press `Continue` to start a new game. Island and boat exclusions and the shipyard settings are in the `Spawn` tab under `Starting options`. The `Sailwind menu` button switches to Sailwind's own new-game menu for that game, where the `New Beginnings` button returns you.
 
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
+
+In the `Equipment` tab, `Random loadout` replaces your chosen equipment and standard supplies with random equipment rolled when the game starts, spending up to your set budget at each item's base shop value. A barrel of water, a crate of food and, unless the roll already included one, a compass for your region are always added on top. The roll gives only one compass, chronocompass or chronometer of each kind until everything else has been picked once. Items can be excluded from the roll in the equipment list, and mod items and repeated items can be allowed or not.
 
 Ports added by other mods are discovered automatically. When added ports are detected, `Mod ports` includes them in Random Port, or you can select one manually.
 
@@ -29,15 +31,27 @@ Bone Isle, Chronos, Eleann Island and Saffron Island can be enabled in the `Spaw
 
 </details>
 
+## Scenarios
+
+`Scenarios` in the new-game menu offers preset starts with their own rules. Pick one and press `Continue` to review its port, boat and starting options, then press `Continue` again to set sail. Any changes you make are kept for that scenario only and never affect your normal New Beginnings settings.
+
+- **Shipwrecked:** a random island without a port, with a badly damaged boat and a bucket to bail it.
+- **Fisherman's Luck:** a small boat with a fishing rod, hooks, a barrel of water and a compass, but no food or money.
+- **Poor Drunk:** an empty rum barrel, a bottle of water, a compass, no money and a fuzzy head.
+- **Adrift:** out at sea, far from the nearest island, with a compass, water and a little food.
+- **Drunk at Sea:** at sea within sight of land, very drunk, with a hold full of rum and a single barrel of water somewhere among it.
+
+At-sea scenarios start you on deck with your supplies stowed aboard, low in the boat first, with smaller items packed into crates. Shipwreck recovery takes you to the nearest port.
+
 ## Starting supplies and mooring
 
 With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby, with larger supplies placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 
-Starting mooring lines receive up to 1 metre of extra slack on every boat, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage.
+Starting mooring lines receive up to 1 metre of extra slack on every boat, and large boats start 1 metre farther out from the dock to give them more space. [HMS Leopard](https://github.com/winterspices/HMSLeopard) gets 3 metres of extra distance to allow for its size. Every starting boat receives one hull repair about eight seconds after it is ready, including boats kept at their original berth, to clear any startup damage. Shipwrecked sets its damage at that moment instead.
 
 ## Configuration
 
-The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`. After launching once, settings can also be changed in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
+The new-game menu saves choices, exclusions and starting options in `BepInEx/config/com.skeptic043.sailwind.newbeginnings.cfg`, and each scenario's settings in its own file under `BepInEx/config/com.skeptic043.sailwind.newbeginnings.scenarios`. After launching once, you can also change settings in that file or in game using the BepInEx 5 version of [BepInEx Configuration Manager](https://github.com/BepInEx/BepInEx.ConfigurationManager).
 
 ## Compatibility and limitations
 
@@ -79,6 +93,7 @@ HMS Leopard is especially large and can struggle at ports that work for other la
 ## Known issues
 
 - HMS Leopard's starter sail can briefly flash fully deployed when unfurling, then return to its actual reefing position.
+- At-sea scenarios using the Jong can start you in the water instead of on deck.
 
 ## AI Use
 

@@ -10,7 +10,8 @@ namespace NewBeginnings
     // A scene-bound preflight, held in a live frame through origin/scenery movement.
     // It does not own or mutate boats, native recovery registrations or providers.
     // Preserved leaves a boat moored at its own authored berth untouched.
-    internal enum StartBerthMode { Moored, OffshoreHeld, ShipyardHeld, Preserved }
+    // AtSea floats free at an open-water point, with the player on deck.
+    internal enum StartBerthMode { Moored, OffshoreHeld, ShipyardHeld, Preserved, AtSea }
 
     internal sealed class StartBerthPlan
     {
@@ -124,6 +125,15 @@ namespace NewBeginnings
             if (destination.SiteIdentity == KnownSites.OracleKey)
                 return TryFixedBeachStart(destination, body, hull, height, survey, OracleLanding,
                     OracleOffshoreCenter, Vector3.left, out plan, out reason);
+            if (destination.SiteIdentity == KnownSites.ClearMindKey)
+                return TryFixedBeachStart(destination, body, hull, height, survey, ClearMindLanding,
+                    ClearMindOffshoreCenter, ClearMindForward, out plan, out reason);
+            if (destination.SiteIdentity == KnownSites.LionsFangKey)
+                return TryFixedBeachStart(destination, body, hull, height, survey, LionsFangLanding,
+                    LionsFangOffshoreCenter, LionsFangForward, out plan, out reason);
+            if (destination.SiteIdentity == KnownSites.PonderingPeakKey)
+                return TryFixedBeachStart(destination, body, hull, height, survey, PonderingPeakLanding,
+                    PonderingPeakOffshoreCenter, PonderingPeakForward, out plan, out reason);
 
             var cleats = destination.DockRoot.GetComponentsInChildren<GPButtonDockMooring>(true)
                 .Where(item => ValidCleat(destination, item, body, ropes)).Distinct().ToArray();
@@ -702,6 +712,26 @@ namespace NewBeginnings
         private static readonly Vector3 BoneIsleLanding = new Vector3(470f, .8f, 310f);
         private static readonly Vector3 OracleOffshoreCenter = new Vector3(140f, 0f, 64f);
         private static readonly Vector3 OracleLanding = new Vector3(156f, .7f, 100f);
+        // Clear Mind's island frame is turned -90 degrees and scaled by half,
+        // so these are island-local. In world axes from the island centre the
+        // landing is the west beach (37, 1.4, 1.7), 39 m from the obelisk, and
+        // the hold lies about 14 m deep at (6, 0, -22), 37.5 m off the beach,
+        // with the bow northwest, to the right as seen from the beach.
+        private static readonly Vector3 ClearMindOffshoreCenter = new Vector3(-44f, 0f, -12f);
+        private static readonly Vector3 ClearMindLanding = new Vector3(3.4f, 2.76f, -74f);
+        private static readonly Vector3 ClearMindForward = new Vector3(.7986f, 0f, .6018f);
+        // Lion's Fang's frame is turned and scaled like Clear Mind's. In world
+        // axes from the island centre the landing is the west beach
+        // (49, .84, -3) and the hold lies about 14 m deep at (6, 0, -1),
+        // 43 m off the beach, with the bow north, to the right as seen from the beach.
+        private static readonly Vector3 LionsFangOffshoreCenter = new Vector3(-2f, 0f, -12f);
+        private static readonly Vector3 LionsFangLanding = new Vector3(-6f, 1.68f, -98f);
+        private static readonly Vector3 LionsFangForward = new Vector3(1f, 0f, 0f);
+        // Pondering Peak's frame has no turn or scale. The landing is the beach just
+        // north of its dock, the hold in deep water 28 m off it, bow north-northwest.
+        private static readonly Vector3 PonderingPeakOffshoreCenter = new Vector3(-139f, 0f, -76.5f);
+        private static readonly Vector3 PonderingPeakLanding = new Vector3(-120.3f, 1.1f, -54.3f);
+        private static readonly Vector3 PonderingPeakForward = new Vector3(-.5f, 0f, .866f);
 
         // An island without usable docks: land the player on the chosen
         // beach and hold the boat at its fixed position. An explicitly
@@ -1090,7 +1120,7 @@ namespace NewBeginnings
 
         private static object Read(object owner, string field) => owner != null ? AccessTools.Field(owner.GetType(), field)?.GetValue(owner) : null;
 
-        private static bool TryHeight(Rigidbody body, out float height, out string reason)
+        internal static bool TryHeight(Rigidbody body, out float height, out string reason)
         {
             height = 0f; reason = null;
             var probes = body.GetComponent("BoatProbes");

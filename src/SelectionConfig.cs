@@ -10,6 +10,7 @@ namespace NewBeginnings
         private readonly ConfigEntry<string> lastDestination;
         private readonly ConfigEntry<bool> randomPort;
         private readonly ConfigEntry<bool> shipyardPortsOnly;
+        private readonly ConfigEntry<bool> noShipyardPorts;
         private readonly ConfigEntry<bool> useShipyardBerth;
         private readonly ConfigEntry<bool> includeModPorts;
         private readonly ConfigEntry<bool> enablePirateIsland;
@@ -37,11 +38,14 @@ namespace NewBeginnings
             new NewBeginnings.IndividualExclusions();
         internal SelectionOverrides Overrides { get; private set; }
 
-        internal SelectionConfig(ConfigFile file)
+        // A scenario file holds only that scenario's own choices. The menu
+        // switch, spoiler drawer and compatibility records stay in the main file.
+        internal SelectionConfig(ConfigFile file, bool scenario = false)
         {
             this.file = file;
-            replaceNewGameMenu = file.Bind("General", "ReplaceNewGameMenu", true,
-                "Use New Beginnings' port and boat selection for new games. Turn off to use Sailwind's regular new-game menu; your New Beginnings choices are kept.");
+            if (!scenario)
+                replaceNewGameMenu = file.Bind("General", "ReplaceNewGameMenu", true,
+                    "Use New Beginnings' port and boat selection for new games. Turn off to open Sailwind's regular new-game menu first; your New Beginnings choices are kept, and the menu can still switch between the two.");
             lastPort = file.Bind("Selection", "LastSelectedPort", 2,
                 "Last manually selected port index. Default: Neverdin.");
             lastDestination = file.Bind("Selection", "LastSelectedDestination", "",
@@ -49,7 +53,9 @@ namespace NewBeginnings
             randomPort = file.Bind("Selection", "RandomPort", false,
                 "Choose a random starting location from checked geographic pools and mod ports. Spoiler options filter locations inside those pools.");
             shipyardPortsOnly = file.Bind("Selection", "ShipyardPortsOnly", false,
-                "When Random Port is enabled, limit eligible locations to detected shipyards. Ignore individual island exclusions without changing them. Spoiler location options still apply.");
+                "When Random Port is enabled, limit eligible locations to detected shipyards. Ignore individual island exclusions without changing them. Spoiler location options still apply. Turning this on turns off NoShipyardPorts.");
+            noShipyardPorts = file.Bind("Selection", "NoShipyardPorts", false,
+                "When Random Port is enabled, never choose a location with a detected shipyard. Individual island exclusions and spoiler location options still apply. Turning this on turns off ShipyardPortsOnly.");
             useShipyardBerth = file.Bind("Selection", "UseShipyardBerth", false,
                 "Place the starting boat at the selected shipyard's release berth when available, with the player and supplies ashore. Applies to manual and random starts. Does not enter shipyard service automatically.");
             includeModPorts = file.Bind("Random Port Pools", "IncludeModPorts", false,
@@ -64,7 +70,8 @@ namespace NewBeginnings
             chronos = file.Bind("Random Port Pools", "Chronos", false,
                 Hidden("Enable this hidden location for manual starts and for random starts when Small Islands is checked. Its separate mod location follows IncludeModPorts."));
             var spoilerMenu = new SpoilerSettingsMenu(Settings, enablePirateIsland, enableSaffronIsland, enableBoneIsle, chronos);
-            file.Bind("Advanced", "SpoilerOptions", "",
+            if (!scenario)
+                file.Bind("Advanced", "SpoilerOptions", "",
                 new ConfigDescription("Reveal optional hidden starting locations.", null,
                     new ConfigurationManagerAttributes { CustomDrawer = spoilerMenu.Draw, Category = "Advanced",
                         DispName = "Spoiler options", HideSettingName = true, HideDefaultButton = true }));
@@ -87,13 +94,27 @@ namespace NewBeginnings
                 "Exact runtime port names or stable site identities excluded from random starts, encoded and separated by semicolons. Edit with the new-game menu.");
             excludedRandomBoats = file.Bind("Individual Random Exclusions", "Boats", "",
                 "Exact runtime names of boats excluded from random starts, encoded and separated by semicolons. Edit with the new-game menu.");
-            boatSizeOverrides = file.Bind("Compatibility", "BoatSizeOverrides", "",
-                "Semicolon-separated sceneIndex|exactGameObjectName|Small/Medium/Large records.");
-            portPoolOverrides = file.Bind("Compatibility", "PortPoolOverrides", "",
-                "Semicolon-separated portIndex|exactGameObjectName|AlAnkh/Emerald/Aestrin/FireFishLagoon/SmallIslands records. The legacy Chronos value is accepted only for its original exact port identity.");
+            if (!scenario)
+            {
+                boatSizeOverrides = file.Bind("Compatibility", "BoatSizeOverrides", "",
+                    "Semicolon-separated sceneIndex|exactGameObjectName|Small/Medium/Large records.");
+                portPoolOverrides = file.Bind("Compatibility", "PortPoolOverrides", "",
+                    "Semicolon-separated portIndex|exactGameObjectName|AlAnkh/Emerald/Aestrin/FireFishLagoon/SmallIslands records. The legacy Chronos value is accepted only for its original exact port identity.");
+            }
 
             Read();
             Save();
+        }
+
+        // Turning one shipyard filter on in Configuration Manager turns the
+        // other off, so the file and the menu never show both on. File rereads
+        // skip this and leave a conflicting pair to Read.
+        internal void KeepShipyardFiltersExclusive(ConfigEntryBase changed)
+        {
+            if (changed == shipyardPortsOnly && shipyardPortsOnly.Value)
+                noShipyardPorts.Value = false;
+            else if (changed == noShipyardPorts && noShipyardPorts.Value)
+                shipyardPortsOnly.Value = false;
         }
 
         private static ConfigDescription Hidden(string description) => new ConfigDescription(description, null,
@@ -105,12 +126,17 @@ namespace NewBeginnings
         internal void Read()
         {
             warnings.Begin();
-            // Read only: the menu never changes this entry, so Save leaves it alone.
-            Settings.ReplaceNewGameMenu = replaceNewGameMenu.Value;
+            // Read only: the menu's switch lasts for one opening and never saves it.
+            Settings.ReplaceNewGameMenu = replaceNewGameMenu?.Value ?? true;
             Settings.PortIndex = lastPort.Value;
             Settings.DestinationKey = lastDestination.Value ?? "";
             Settings.RandomPort = randomPort.Value;
+            // ShipyardPortsOnly is assigned last, so it wins if a hand-edited
+            // file has both filters on.
+            Settings.NoShipyardPorts = noShipyardPorts.Value;
             Settings.ShipyardPortsOnly = shipyardPortsOnly.Value;
+            if (shipyardPortsOnly.Value && noShipyardPorts.Value)
+                warnings.Warn("ShipyardPortsOnly and NoShipyardPorts were both on; NoShipyardPorts was turned off.");
             Settings.UseShipyardBerth = useShipyardBerth.Value;
             Settings.IncludeModPorts = includeModPorts.Value;
             Settings.EnablePirateIsland = enablePirateIsland.Value;
@@ -141,8 +167,8 @@ namespace NewBeginnings
                 Settings.BoatSizes.Add(BoatSize.Small);
                 warnings.Warn("Every random boat size was disabled; Small was restored.");
             }
-            Overrides = SelectionOverrides.Parse(boatSizeOverrides.Value,
-                portPoolOverrides.Value);
+            Overrides = SelectionOverrides.Parse(boatSizeOverrides?.Value ?? "",
+                portPoolOverrides?.Value ?? "");
             foreach (var error in Overrides.Errors)
                 warnings.Warn(error);
             warnings.End();
@@ -154,6 +180,7 @@ namespace NewBeginnings
             lastDestination.Value = Settings.DestinationKey ?? "";
             randomPort.Value = Settings.RandomPort;
             shipyardPortsOnly.Value = Settings.ShipyardPortsOnly;
+            noShipyardPorts.Value = Settings.NoShipyardPorts;
             useShipyardBerth.Value = Settings.UseShipyardBerth;
             includeModPorts.Value = Settings.IncludeModPorts;
             enablePirateIsland.Value = Settings.EnablePirateIsland;

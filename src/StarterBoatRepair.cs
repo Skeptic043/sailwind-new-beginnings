@@ -128,9 +128,11 @@ namespace NewBeginnings
                                 // Native Shipyard.ConfirmOrder repairs hullDamage
                                 // directly. Do only that write: no fee, bilge drain,
                                 // oakum, inventory, position or buoyancy changes.
+                                // A scenario can start the boat damaged instead.
                                 var previous = damage.hullDamage;
-                                damage.hullDamage = 0f;
-                                Plugin.Instance.Report($"Startup hull repair completed once for boat {selected.Saveable.sceneIndex}, eight seconds after settled ownership; hull damage {previous:F3} -> 0.");
+                                var next = selected.Scenario?.HullDamage ?? 0f;
+                                damage.hullDamage = next;
+                                Plugin.Instance.Report($"Startup hull {(next > 0f ? "damage set" : "repair completed")} once for boat {selected.Saveable.sceneIndex}, eight seconds after settled ownership; hull damage {previous:F3} -> {next:F3}.");
                                 stop = true;
                             }
                         }

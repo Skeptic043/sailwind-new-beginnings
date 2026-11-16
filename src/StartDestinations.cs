@@ -40,7 +40,10 @@ namespace NewBeginnings
         internal static bool IsCurrent(PortChoice site) => site != null && Loaded(site.Island) &&
             (site.Port == null ? site.Hidden == HiddenSite.Pirate && KnownSites.IsPirateHideout(site.Island) ||
                 site.Hidden == HiddenSite.BoneIsle && KnownSites.IsBoneIsle(site.Island) ||
-                site.SiteIdentity == KnownSites.OracleKey && KnownSites.IsOracle(site.Island) : ValidPort(site.Port) &&
+                site.SiteIdentity == KnownSites.OracleKey && KnownSites.IsOracle(site.Island) ||
+                site.SiteIdentity == KnownSites.ClearMindKey && KnownSites.IsClearMind(site.Island) ||
+                site.SiteIdentity == KnownSites.LionsFangKey && KnownSites.IsLionsFang(site.Island) ||
+                site.SiteIdentity == KnownSites.PonderingPeakKey && KnownSites.IsPonderingPeak(site.Island) : ValidPort(site.Port) &&
                 site.Port.GetComponentInParent<IslandHorizon>() == site.Island && (int)site.Port.region == site.Region) &&
             Loaded(site.DockRoot) && site.DockRoot.GetComponentInParent<IslandHorizon>() == site.Island &&
             OptionalCurrent(site.Marker, site.Island) && OptionalCurrent(site.ShoreMarker, site.Island) &&
@@ -117,8 +120,23 @@ namespace NewBeginnings
             foreach (var island in Resources.FindObjectsOfTypeAll<IslandHorizon>().Where(item => Loaded(item) &&
                 KnownSites.IsOracle(item)))
                 catalog.Ports.Add(new PortChoice { Key = KnownSites.OracleKey, SiteIdentity = KnownSites.OracleKey,
-                    Island = island, DockRoot = island.transform, Region = 2, Pool = PortPool.Aestrin,
+                    Island = island, DockRoot = island.transform, Region = 2, Pool = PortPool.SmallIslands,
                     DisplayName = "Oracle Island" });
+            foreach (var island in Resources.FindObjectsOfTypeAll<IslandHorizon>().Where(item => Loaded(item) &&
+                KnownSites.IsClearMind(item)))
+                catalog.Ports.Add(new PortChoice { Key = KnownSites.ClearMindKey, SiteIdentity = KnownSites.ClearMindKey,
+                    Island = island, DockRoot = island.transform, Region = 0, Pool = PortPool.SmallIslands,
+                    DisplayName = "Isle of Clear Mind" });
+            foreach (var island in Resources.FindObjectsOfTypeAll<IslandHorizon>().Where(item => Loaded(item) &&
+                KnownSites.IsLionsFang(item)))
+                catalog.Ports.Add(new PortChoice { Key = KnownSites.LionsFangKey, SiteIdentity = KnownSites.LionsFangKey,
+                    Island = island, DockRoot = island.transform, Region = 0, Pool = PortPool.SmallIslands,
+                    DisplayName = "Lion's Fang" });
+            foreach (var island in Resources.FindObjectsOfTypeAll<IslandHorizon>().Where(item => Loaded(item) &&
+                KnownSites.IsPonderingPeak(item)))
+                catalog.Ports.Add(new PortChoice { Key = KnownSites.PonderingPeakKey, SiteIdentity = KnownSites.PonderingPeakKey,
+                    Island = island, DockRoot = island.transform, Region = 1, Pool = PortPool.Emerald,
+                    DisplayName = "Pondering Peak" });
 
             var chronos = catalog.Ports.FirstOrDefault(KnownSites.IsChronos);
             if (chronos != null)

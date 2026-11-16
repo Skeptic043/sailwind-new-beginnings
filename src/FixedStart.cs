@@ -30,6 +30,8 @@ namespace NewBeginnings
         public BoatSize? Size;
         internal StartingOptionsSettings Options;
         internal NativeBerth.Plan NativeBerth;
+        // The scenario this start was launched from, or null.
+        internal Scenario Scenario;
     }
 
     internal static partial class FixedStart
@@ -63,6 +65,7 @@ namespace NewBeginnings
         private static StartPair pending;
         private static StartMenu pendingMenu;
         private static StartingOptionsSettings pendingOptions;
+        private static Scenario pendingScenario;
         private static StartPair acceptedButtonPair;
         private static StartMenu acceptedButtonMenu;
         private static GameObject nativeTweenObserver;
@@ -76,7 +79,7 @@ namespace NewBeginnings
             PlayerControllerField != null && ScrambledSeasIntegration.CanSelect;
         // The one switch for New Beginnings' new-game flow: supported here and
         // wanted by the player. Everything after BeginPatch acts only on its pending start.
-        internal static bool Active => CanSelect && Plugin.Instance?.Settings.ReplaceNewGameMenu == true;
+        internal static bool Active => CanSelect && Plugin.Instance != null && !Plugin.Instance.NativeMenu;
 
         private static void ClearAcceptedButtonChoice()
         {
@@ -124,7 +127,7 @@ namespace NewBeginnings
                     // The menu lists every structurally usable pair. Check an
                     // ordinary port's recovery berth here, so a problem shows
                     // its reason before the start begins.
-                    if (!pair.Port.NeedsPlannedBerth && !pair.UseShipyardBerth &&
+                    if (plugin.ActiveScenario?.AtSea != true && !pair.Port.NeedsPlannedBerth && !pair.UseShipyardBerth &&
                         !TryResolve(pair.Port, pair.Boat.Index, pair.Boat.Size, out _, out reason))
                     {
                         activeUi.ShowBlockedStart(reason);
@@ -170,7 +173,7 @@ namespace NewBeginnings
                 ClearAcceptedButtonChoice();
                 pending = null;
                 pendingMenu = null;
-                pendingOptions = null;
+                pendingOptions = null; pendingScenario = null;
                 CancelStartWork();
                 nativeTweenObserver = null;
                 nativeTweenTarget = null;
@@ -203,6 +206,15 @@ namespace NewBeginnings
                     pending = pair;
                     pendingMenu = __instance;
                     pendingOptions = plugin.StartOptions.Copy();
+                    pendingScenario = plugin.ActiveScenario;
+                    // The random roll and the scenario's guaranteed items are
+                    // decided once, here, for the confirmed copy only.
+                    StartLoadout.Apply(pendingOptions, pair.Port.Region, pendingScenario,
+                        AdditionalEquipment.RandomCatalog, new System.Random());
+                    if (pendingOptions.RandomLoadout || pendingScenario != null)
+                        plugin.Report("Starting equipment: " + (pendingOptions.EquipmentQuantities.Count == 0 ? "none" :
+                            string.Join(", ", pendingOptions.EquipmentQuantities.Select(item => item.Value + " x " + item.Key).ToArray())) +
+                            (pendingScenario != null ? " (scenario " + pendingScenario.Name + ")" : "") + ".");
                     if (!pendingOptions.TryValidate(out var optionsReason))
                         throw new InvalidOperationException(optionsReason);
                     pendingSnapshot = new StartSnapshot(__instance, (int)previousRegion);
@@ -215,7 +227,7 @@ namespace NewBeginnings
                     ClearStartTiming();
                     pending = null;
                     pendingMenu = null;
-                    pendingOptions = null;
+                    pendingOptions = null; pendingScenario = null;
                     if (regionUpdated)
                     {
                         try { CurrentRegionField.SetValue(__instance, previousRegion); }
@@ -245,7 +257,7 @@ namespace NewBeginnings
                     CancelStartWork();
                     pending = null;
                     pendingMenu = null;
-                    pendingOptions = null;
+                    pendingOptions = null; pendingScenario = null;
                 }
                 return __exception;
             }
@@ -262,7 +274,7 @@ namespace NewBeginnings
                 CancelStart();
                 pending = null;
                 pendingMenu = null;
-                pendingOptions = null;
+                pendingOptions = null; pendingScenario = null;
                 Plugin.Instance?.Warn("New Beginnings selection was cleared because no player-start coroutine was created.");
             }
         }
@@ -485,15 +497,15 @@ namespace NewBeginnings
         }
 
         private static bool TryResolve(PortChoice destination, int boatSceneIndex, BoatSize? size, out ResolvedStart result, out string reason,
-            bool useShipyardBerth = false)
+            bool useShipyardBerth = false, bool atSea = false)
         {
             result = null;
             reason = null;
             if (destination == null || !StartDestinations.IsCurrent(destination))
             { reason = "The selected starting location is no longer loaded."; return false; }
             var portIndex = destination.Index;
-            var yardStart = useShipyardBerth && ShipyardStart.Available(destination);
-            var skipsNativeBerth = destination.NeedsPlannedBerth || yardStart;
+            var yardStart = !atSea && useShipyardBerth && ShipyardStart.Available(destination);
+            var skipsNativeBerth = destination.NeedsPlannedBerth || yardStart || atSea;
             var ports = Port.ports;
             if (!skipsNativeBerth && (ports == null || portIndex < 0 || portIndex >= ports.Length || ports[portIndex] == null ||
                 ports[portIndex].portIndex != portIndex))
@@ -543,7 +555,7 @@ namespace NewBeginnings
             var relocation = new ResolvedStart { Port = port, Recovery = recovery,
                 Destination = destination, Boat = boat, Saveable = saveable, Body = body, Ropes = ropes, Size = size,
                 UseShipyardBerth = yardStart };
-            if (nativeBerth == null && !TryResolveRelocation(relocation, out reason)) return false;
+            if (!atSea && nativeBerth == null && !TryResolveRelocation(relocation, out reason)) return false;
             frontMooring = nativeBerth != null ? nativeBerth.Front : relocation.FrontMooring;
             backMooring = nativeBerth != null ? nativeBerth.Back : relocation.BackMooring;
             var region = destination.Region;

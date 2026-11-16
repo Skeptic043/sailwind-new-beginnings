@@ -23,6 +23,7 @@ markers = [
     'private static bool TryStackBounds(',
     'private static float StackBaseArea(',
     'private static CrateColumn NewCrateColumn(',
+    'private static void AddToColumn(',
     'private static bool TryStackCrate(',
     'private static bool OverlapsEmbarkVolume(',
     'private static Vector3 BestEffortGround(',

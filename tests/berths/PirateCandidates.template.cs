@@ -968,6 +968,23 @@ static class PirateCandidateChecks
         Reset();
         Plugin.Instance.Fails = true;
         Check(TryFixedBeachStart(oracle, new Rigidbody(), new Hull(), 2, new Survey(), OracleLanding, OracleOffshoreCenter, Vector3.left, out plan, out oracleReason) && Near(plan.ShorePosition, new Vector3(156, .7f, 100)) && plan.OffshoreDiagnostics.StartsWith("Best-effort landing: Oracle Island's dry landing"), "unverified Oracle Island landing did not start at the chosen beach point");
+        // The Isle of Clear Mind island frame is turned -90 degrees and scaled by half,
+        // so its island-local landing and hold must still reach the measured west beach
+        // and southwest hold in world axes, with the bow toward open water.
+        var clearMind = new PortChoice { Hidden = HiddenSite.None, DisplayName = "Isle of Clear Mind" };
+        clearMind.DockRoot.rotation = new Quaternion(0, -.70710677f, 0, .70710677f);
+        clearMind.DockRoot.lossyScale = new(.5f, .5f, .5f);
+        Reset();
+        Check(TryFixedBeachStart(clearMind, new Rigidbody(), new Hull(), 2, new Survey(), ClearMindLanding, ClearMindOffshoreCenter, ClearMindForward, out plan, out var clearMindReason) && clearMindReason == null && plan.Mode == StartBerthMode.OffshoreHeld && plan.Front == null && (plan.Position - new Vector3(6, 2, -22)).magnitude < .02f && (plan.Frame.rotation * plan.LocalRotation * Vector3.forward - new Vector3(-.6018f, 0, .7986f)).magnitude < .01f && (Plugin.Instance.Seed - new Vector3(37, 1.38f, 1.7f)).magnitude < .02f && plan.ShorePosition == Plugin.Instance.Shore, "Isle of Clear Mind start lost its boat pose, bow or beach landing in the rotated island frame");
+        // Lion's Fang shares Clear Mind's turned, half-scale frame.
+        var lionsFang = new PortChoice { Hidden = HiddenSite.None, DisplayName = "Lion's Fang" };
+        lionsFang.DockRoot.rotation = new Quaternion(0, -.70710677f, 0, .70710677f);
+        lionsFang.DockRoot.lossyScale = new(.5f, .5f, .5f);
+        Reset();
+        Check(TryFixedBeachStart(lionsFang, new Rigidbody(), new Hull(), 2, new Survey(), LionsFangLanding, LionsFangOffshoreCenter, LionsFangForward, out plan, out var lionsFangReason) && lionsFangReason == null && plan.Mode == StartBerthMode.OffshoreHeld && (plan.Position - new Vector3(6, 2, -1)).magnitude < .02f && (plan.Frame.rotation * plan.LocalRotation * Vector3.forward - Vector3.forward).magnitude < .01f && (Plugin.Instance.Seed - new Vector3(49, .84f, -3)).magnitude < .02f, "Lion's Fang start lost its boat pose, bow or west-beach landing in the rotated island frame");
+        var peak = new PortChoice { Hidden = HiddenSite.None, DisplayName = "Pondering Peak" };
+        Reset();
+        Check(TryFixedBeachStart(peak, new Rigidbody(), new Hull(), 2, new Survey(), PonderingPeakLanding, PonderingPeakOffshoreCenter, PonderingPeakForward, out plan, out var peakReason) && peakReason == null && plan.Mode == StartBerthMode.OffshoreHeld && (plan.Position - new Vector3(-139, 2, -76.5f)).magnitude < .02f && (plan.Frame.rotation * plan.LocalRotation * Vector3.forward - new Vector3(-.5f, 0, .866f)).magnitude < .01f && (Plugin.Instance.Seed - new Vector3(-120.3f, 1.1f, -54.3f)).magnitude < .02f, "Pondering Peak start lost its boat pose, bow or dockside landing");
         front.transform.position = new(0, 1, 0);
         back.transform.position = new(4, 1, 0);
         Reset();

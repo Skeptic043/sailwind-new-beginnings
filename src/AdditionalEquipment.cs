@@ -45,6 +45,14 @@ namespace NewBeginnings
         }
     }
 
+    // A catalog entry offered to the random loadout roll, priced at its base shop value.
+    internal sealed class RandomCandidate
+    {
+        internal string Key;
+        internal int Price;
+        internal bool IsModded;
+    }
+
     // Adds ordinary native prefabs to the regional startup roster. The native
     // starter coroutine initializes ownership; native crates own their contents.
     internal static class AdditionalEquipment
@@ -52,12 +60,14 @@ namespace NewBeginnings
         internal const string WallHooksKey = "bundle:wallhooks";
         internal const string LargeWaterBottleKey = "fill:40:water";
         internal const string SmallEmptyBottleKey = "fill:55:empty";
+        internal const string EmptyRumBarrelKey = "fill:11:empty";
         private const int WallHooksPerBox = 12;
         private const float HookRowOffset = -4.5f;
         private static readonly EquipmentEntry[] Definitions = {
             new EquipmentEntry(1, "1 crate salmon (E)", "ShipItemCrate", "Box of salmon"),
             new EquipmentEntry(10, "10 barrel water", "ShipItemBottle", "Barrel of water"),
             new EquipmentEntry(11, "11 barrel rum", "ShipItemBottle", "Barrel of rum"),
+            new EquipmentEntry(11, "11 barrel rum", "ShipItemBottle", "Barrel of rum (empty)", EmptyRumBarrelKey, water: false),
             new EquipmentEntry(52, "52 cheese", "ShipItemFood", "Single cheese"),
             // Each bottle size comes empty or full of water; the native key keeps its authored contents.
             new EquipmentEntry(40, "40 empty bottle", "ShipItemBottle", "Bottle (large, empty)"),
@@ -154,6 +164,25 @@ namespace NewBeginnings
             return Definitions.Where(entry => Resolve(directory, entry) != null)
                 .OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .Concat(ModEquipment.Discover(directory)).ToArray();
+        }
+
+        // Random loadout candidates priced by native base shop value. The wall
+        // hook bundle is a set of separate items, so it is left out.
+        internal static RandomCandidate[] RandomCatalog()
+        {
+            var directory = Directory;
+            return GetCatalog().Where(entry => entry.Key != WallHooksKey).Select(entry => new RandomCandidate
+            {
+                Key = entry.Key, IsModded = entry.IsModded,
+                Price = Resolve(directory, entry)?.GetComponent<ShipItem>()?.value ?? 0
+            }).ToArray();
+        }
+
+        // The prefab and catalog entry for a selected key, or null when unavailable.
+        internal static GameObject ResolveKey(string key, out EquipmentEntry entry)
+        {
+            entry = GetCatalog().FirstOrDefault(candidate => candidate.Key == key);
+            return entry == null ? null : Resolve(Directory, entry);
         }
 
         private static GameObject Resolve(PrefabsDirectory directory, EquipmentEntry entry)
@@ -396,6 +425,17 @@ namespace NewBeginnings
             bottle.amount = full ? 1f : 0f;
             bottle.health = full ? bottle.GetCapacity() : 0f;
         }
+
+        // The empty crate that packs loose starter items, and how many it holds.
+        internal static GameObject CarrierPrefab(out int capacity)
+        {
+            var prefab = Resolve(Directory, new EquipmentEntry(104, "104 crate of fishing hooks", "ShipItemCrate", ""));
+            capacity = CarrierCapacity(prefab);
+            return prefab;
+        }
+
+        internal static bool CanPackPrefab(GameObject prefab, EquipmentEntry entry) =>
+            prefab != null && CanPack(prefab.GetComponent<ShipItem>(), entry.AllowScaledPacking);
 
         private static int CarrierCapacity(GameObject prefab)
         {

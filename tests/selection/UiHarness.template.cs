@@ -67,10 +67,11 @@ class UiHarness
         internal UiHarness owner;
         internal bool IsOpen;
         internal StartingOptionsSettings draft;
-        internal GameObject gameObject = new(), contentRoot = new(), moneyPage = new(), reputationPage = new(), equipmentPage = new(), spawnPage = new();
+        internal GameObject gameObject = new(), contentRoot = new(), moneyPage = new(), reputationPage = new(), equipmentPage = new(), spawnPage = new(), randomPage = new();
         internal int tab;
+        internal bool showingRandom;
         internal readonly string[] amounts = new string[4];
-        MenuUiButton moneyTab = new(), reputationTab = new(), equipmentTab = new(), spawnTab = new();
+        MenuUiButton moneyTab = new(), reputationTab = new(), equipmentTab = new(), spawnTab = new(), randomTab = new();
         TextMesh message = new();
         EquipmentEntry[] equipment = new EquipmentEntry[0];
         internal int vanillaEquipmentCount, page, focusedCurrency = -1, focusedEquipment = -1;
@@ -85,6 +86,10 @@ class UiHarness
         }
 
         void RefreshEquipment()
+        {
+        }
+
+        void RefreshRandom()
         {
         }
     // PRODUCTION_PANEL_MEMBERS
@@ -103,6 +108,18 @@ class UiHarness
     Transform confirm = new(), back = new();
     TextMesh titleTemplate = new();
     PanelHarness startingOptions = new();
+    // The scenario picker and panel switch are covered in game.
+    bool picking;
+    bool? lastReplaceSetting;
+    MenuUiButton scenariosButton = new(), menuSwitchButton = new();
+    void ClosePicker() => picking = false;
+    void PlaceNativeButtons(bool visible)
+    {
+    }
+
+    void OnProfileChanged()
+    {
+    }
     readonly List<GameObject> mainControls = new();
     // The recorded objects are covered in game; here only when the record is taken and put back.
     class NativeMenuState
@@ -133,9 +150,9 @@ class UiHarness
     TextMesh portValue = new(), boatValue = new(), status = new();
     GameObject portValuePanel = new();
     TextMesh editorTitle = new(), editorSummary = new();
-    MenuUiButton editorIslands = new(), editorBoats = new(), editorPrevious = new(), editorNext = new();
+    MenuUiButton editorIslands = new(), editorBoats = new(), editorPrevious = new(), editorNext = new(), editorClear = new();
     MenuUiButton[] editorRows = Enumerable.Range(0, 4).Select(_ => new MenuUiButton()).ToArray();
-    MenuUiButton portPrevious = new(), portNext = new(), boatPrevious = new(), boatNext = new(), shipyardPortsOnly = new(), useShipyardBerth = new(), secretIslands = new(), includeModPorts = new(), randomPort = new(), randomBoat = new(), portExclusions = new(), boatExclusions = new();
+    MenuUiButton portPrevious = new(), portNext = new(), boatPrevious = new(), boatNext = new(), shipyardPortsOnly = new(), noShipyardPorts = new(), useShipyardBerth = new(), secretIslands = new(), includeModPorts = new(), randomPort = new(), randomBoat = new(), portExclusions = new(), boatExclusions = new();
     MenuUiButton[] portPools = Enumerable.Range(0, PoolOrder.Length).Select(_ => new MenuUiButton()).ToArray(), boatSizes = Enumerable.Range(0, 3).Select(_ => new MenuUiButton()).ToArray();
     static PortPool[] PoolOrder =
     {
@@ -222,6 +239,7 @@ class UiHarness
         ReplacementToggle(check);
         SubmenuNavigation(check);
         ConfigureBeforeRandom(check);
+        ShipyardFiltersAndClear(check);
         var ordered = new UiHarness();
         ordered.catalog.Ports.AddRange(new[] { new PortChoice { Index = 101, Key = "mod:region", DisplayName = "A mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 21, Key = "native:chronos", IdentityName = "port 21 M chronos", DisplayName = "Chronos", Pool = PortPool.SmallIslands }, new PortChoice { Index = 102, Key = "mod:site", DisplayName = "Fort Juniper", IsModded = true }, new PortChoice { Index = 9, Key = "native:emerald", DisplayName = "Dragon Cliffs", Pool = PortPool.Emerald }, new PortChoice { Index = 1, Key = "native:zulu", DisplayName = "Zulu", Pool = PortPool.AlAnkh }, new PortChoice { Index = 103, Key = "mod:second", DisplayName = "Z mod island", Pool = PortPool.AlAnkh, IsModded = true }, new PortChoice { Index = 32, Key = "native:pirate", DisplayName = "Eleann Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate }, new PortChoice { Index = 2, Key = "native:alpha", DisplayName = "Alpha", Pool = PortPool.AlAnkh }, new PortChoice { Index = 40, Key = "native:unclassified", DisplayName = "Unclassified" } });
         ordered.catalog.SortPorts();
@@ -461,6 +479,41 @@ class UiHarness
         check(ui.catalog.TryChoose(ui.settings, ui.individualExclusions, new Random(1), out chosen, out _) && chosen.Port == port && chosen.Boat == alternative, "enabling Random later must apply saved boat exclusions and retain shipyard-only island exclusion policy");
         ui.ToggleShipyardPortsOnly();
         check(!ui.catalog.TryChoose(ui.settings, ui.individualExclusions, new Random(1), out _, out _) && ui.individualExclusions.IsPortExcluded(port), "disabling shipyard-only later must apply the saved island exclusion");
+        ui.startingOptions.Close(false);
+    }
+
+    private static void ShipyardFiltersAndClear(Action<bool, string> check)
+    {
+        var ui = new UiHarness();
+        var yard = new PortChoice { Index = 2, Key = "native:2", IdentityName = "yard", DisplayName = "Yard", Pool = PortPool.AlAnkh, HasShipyard = true };
+        var plain = new PortChoice { Index = 3, Key = "native:3", IdentityName = "plain", DisplayName = "Plain", Pool = PortPool.AlAnkh };
+        var hidden = new PortChoice { Index = 32, Key = "native:pirate", IdentityName = "pirate", DisplayName = "Eleann Island", Pool = PortPool.SmallIslands, Hidden = HiddenSite.Pirate };
+        var boat = new BoatChoice { Index = 10, IdentityName = "boat10", DisplayName = "Boat", Size = BoatSize.Small };
+        ui.catalog.Ports.AddRange(new[] { yard, plain, hidden });
+        ui.catalog.Boats.Add(boat);
+        ui.settings.RandomPort = true;
+        ui.settings.BoatSceneIndex = boat.Index;
+        ui.startingOptions.Open();
+        ui.startingOptions.ShowTab(3);
+        ui.ToggleShipyardPortsOnly();
+        ui.ToggleNoShipyardPorts();
+        check(ui.settings.NoShipyardPorts && !ui.settings.ShipyardPortsOnly && ui.noShipyardPorts.text.text == "[x] No shipyard ports" && ui.shipyardPortsOnly.text.text == "[ ] Shipyard ports only" && ui.saves == 2, "No shipyard ports must turn off Shipyard ports only and save");
+        check(ui.noShipyardPorts.transform.parent.gameObject.active, "No shipyard ports must show on the Spawn tab");
+        check(ui.catalog.TryChoose(ui.settings, ui.individualExclusions, new Random(1), out var pair, out var reason) && pair.Port == plain, "No shipyard ports must skip the shipyard: " + reason + " " + pair?.Port?.Key);
+        ui.ToggleShipyardPortsOnly();
+        check(ui.settings.ShipyardPortsOnly && !ui.settings.NoShipyardPorts && ui.noShipyardPorts.text.text == "[ ] No shipyard ports", "Shipyard ports only must turn off No shipyard ports");
+        foreach (var port in new[] { yard, plain, hidden })
+            ui.individualExclusions.SetPortExcluded(port, true);
+        ui.individualExclusions.SetBoatExcluded(boat, true);
+        ui.OpenEditor(false);
+        check(!ui.editorClear.unclickable, "Clear must be available when the tab has exclusions");
+        ui.ClearEditorExclusions();
+        check(!ui.editorDraft.IsPortExcluded(yard) && !ui.editorDraft.IsPortExcluded(plain) && ui.editorDraft.IsPortExcluded(hidden) && ui.editorDraft.IsBoatExcluded(boat) && ui.individualExclusions.IsPortExcluded(plain) && ui.editorClear.unclickable, "Clear must empty only the listed islands in the draft, keeping hidden entries and the boats tab");
+        ui.ShowEditorTab(true);
+        check(!ui.editorClear.unclickable, "Clear must re-enable on a tab with exclusions");
+        ui.ClearEditorExclusions();
+        ui.CloseEditor();
+        check(!ui.individualExclusions.IsBoatExcluded(boat) && !ui.individualExclusions.IsPortExcluded(plain) && ui.individualExclusions.IsPortExcluded(hidden), "Done must save cleared exclusions from both tabs");
         ui.startingOptions.Close(false);
     }
 

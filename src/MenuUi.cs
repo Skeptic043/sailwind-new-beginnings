@@ -66,6 +66,7 @@ namespace NewBeginnings
         private TextMesh status;
         private MenuUiButton randomPort;
         private MenuUiButton shipyardPortsOnly;
+        private MenuUiButton noShipyardPorts;
         private MenuUiButton useShipyardBerth;
         private MenuUiButton secretIslands;
         private MenuUiButton includeModPorts;
@@ -87,8 +88,23 @@ namespace NewBeginnings
         private MenuUiButton[] editorRows;
         private MenuUiButton editorPrevious;
         private MenuUiButton editorNext;
+        private MenuUiButton editorClear;
         private StartingOptionsUi startingOptions;
-        private bool EditingAny => editing || startingOptions != null && startingOptions.IsOpen;
+        private MenuUiButton scenariosButton;
+        private MenuUiButton menuSwitchButton;
+        private MenuUiButton nativeScenarios;
+        private MenuUiButton nativeSwitch;
+        private GameObject pickerRoot;
+        private TextMesh pickerName;
+        private TextMesh pickerDescription;
+        private bool picking;
+        private bool pickerFromNative;
+        private bool? lastReplaceSetting;
+        // Toward the camera from Sailwind's parchment, in this panel's local Z.
+        private float frontSign = -1f;
+        private float parchmentDepth;
+        private static int pickerIndex;
+        private bool EditingAny => editing || picking || startingOptions != null && startingOptions.IsOpen;
         private bool editing;
         private bool editingBoats;
         private bool confirmWasActive;
@@ -170,11 +186,19 @@ namespace NewBeginnings
                 this.confirm = confirm;
                 back = choiceRoot.Find("button back");
                 panel = choiceRoot.Find("bg");
+                if (panel != null)
+                {
+                    parchmentDepth = panel.localPosition.z;
+                    var textDepth = titleTemplate.transform.localPosition.z;
+                    if (Math.Abs(textDepth - parchmentDepth) > .0001f) frontSign = Math.Sign(textDepth - parchmentDepth);
+                }
                 Build(choiceRoot);
                 foreach (Transform child in choiceRoot)
                     if (child.name.StartsWith("New Beginnings ", StringComparison.Ordinal))
                         mainControls.Add(child.gameObject);
                 BuildEditor(choiceRoot);
+                BuildPicker(choiceRoot);
+                BuildNativeButtons(choiceRoot);
                 startingOptions = StartingOptionsUi.Create(this, choiceRoot);
                 built = true;
             }
@@ -196,6 +220,7 @@ namespace NewBeginnings
             else
             {
                 if (editing) CloseEditor();
+                if (picking) ClosePicker();
                 startingOptions?.Close(false);
             }
             foreach (var control in mainControls) control.SetActive(replace);
@@ -204,7 +229,26 @@ namespace NewBeginnings
                 nativeMenu?.Restore();
                 nativeMenu = null;
             }
+            PlaceNativeButtons(!replace);
             return replace;
+        }
+
+        // Applies a change of panel or profile made from this menu.
+        private void ApplyMenuMode()
+        {
+            if (!built || settings == null) return;
+            if (!UpdateReplacement()) return;
+            HideNativeRegionChoice();
+            RefreshCatalog();
+        }
+
+        private void OnProfileChanged()
+        {
+            var plugin = Plugin.Instance;
+            if (plugin == null) return;
+            settings = plugin.Settings;
+            individualExclusions = plugin.Exclusions;
+            ApplyMenuMode();
         }
 
         private void OnEnable()
@@ -212,11 +256,19 @@ namespace NewBeginnings
             var plugin = Plugin.Instance;
             if (plugin != null)
             {
+                // Each opening starts from the player's own choices and panel.
+                plugin.DeactivateScenario();
+                settings = plugin.Settings;
+                individualExclusions = plugin.Exclusions;
                 // Pick up hand edits to the file; Configuration Manager changes
                 // arrive through SettingsReloaded while the menu is shown.
                 plugin.ReloadConfigFile();
+                plugin.NativeMenu = !plugin.MainSettings.ReplaceNewGameMenu;
+                lastReplaceSetting = plugin.MainSettings.ReplaceNewGameMenu;
                 plugin.SettingsReloaded -= OnSettingsReloaded;
                 plugin.SettingsReloaded += OnSettingsReloaded;
+                plugin.ProfileChanged -= OnProfileChanged;
+                plugin.ProfileChanged += OnProfileChanged;
                 reloadSource = plugin;
             }
             if (built && settings != null && UpdateReplacement())
@@ -228,9 +280,14 @@ namespace NewBeginnings
 
         private void OnDisable()
         {
-            if (reloadSource != null) reloadSource.SettingsReloaded -= OnSettingsReloaded;
+            if (reloadSource != null)
+            {
+                reloadSource.SettingsReloaded -= OnSettingsReloaded;
+                reloadSource.ProfileChanged -= OnProfileChanged;
+            }
             reloadSource = null;
             if (editing) CloseEditor();
+            if (picking) ClosePicker();
             startingOptions?.Close(false);
         }
 
@@ -239,6 +296,14 @@ namespace NewBeginnings
         private void OnSettingsReloaded()
         {
             if (!built || settings == null) return;
+            // A changed ReplaceNewGameMenu entry switches the panel now.
+            var plugin = Plugin.Instance;
+            if (plugin != null && lastReplaceSetting != plugin.MainSettings.ReplaceNewGameMenu)
+            {
+                lastReplaceSetting = plugin.MainSettings.ReplaceNewGameMenu;
+                plugin.NativeMenu = !plugin.MainSettings.ReplaceNewGameMenu;
+                if (plugin.NativeMenu) plugin.DeactivateScenario();
+            }
             if (editing && individualExclusions != null) editorDraft = individualExclusions.Copy();
             if (!UpdateReplacement()) return;
             HideNativeRegionChoice();
@@ -439,7 +504,7 @@ namespace NewBeginnings
             if (titleTemplate != null)
             {
                 UseNativeButtonFont(titleTemplate, buttonFont);
-                titleTemplate.text = "New Beginnings";
+                titleTemplate.text = Plugin.Instance?.ActiveScenario?.Name ?? "New Beginnings";
                 var position = titleTemplate.transform.localPosition;
                 titleTemplate.transform.localPosition = new Vector3(
                     MenuX(0f),
@@ -515,6 +580,22 @@ namespace NewBeginnings
                 () => startingOptions?.Open());
             SetButtonText(options, "Starting options...");
             options.description = "Starting money, reputation, equipment and spawn settings.";
+            scenariosButton = MakeButton(root, "Scenarios", -1.40f, -.40f, .90f, .52f, () =>
+            {
+                var plugin = Plugin.Instance;
+                if (plugin?.ActiveScenario == null) { OpenPicker(); return; }
+                // Leave the scenario for your own New Beginnings start.
+                plugin.DeactivateScenario();
+            });
+            menuSwitchButton = MakeButton(root, "Sailwind menu", 1.40f, -.40f, .90f, .52f, () =>
+            {
+                var plugin = Plugin.Instance;
+                if (plugin == null) return;
+                plugin.NativeMenu = true;
+                plugin.DeactivateScenario();
+                ApplyMenuMode();
+            });
+            menuSwitchButton.description = "Use Sailwind's regular new-game menu this time. New Beginnings opens again next time.";
             // Shown above the title, clear of the lower controls.
             status = MakeLabel(root, "Selection status", "", 0f, .88f, .009f);
             status.color = WarningInk;
@@ -534,7 +615,10 @@ namespace NewBeginnings
             useShipyardBerth = MakeButton(page, "Use shipyard berth", .90f, -.31f, 1.55f, .44f,
                 () => { settings.UseShipyardBerth = !settings.UseShipyardBerth; Changed(); }, textScale: .011f);
             useShipyardBerth.description = "Start at the selected shipyard's berth when one is available.";
-            secretIslands = MakeButton(page, "Secret islands", 0f, -.57f, 1.55f, .44f,
+            noShipyardPorts = MakeButton(page, "No shipyard ports", -.90f, -.57f, 1.55f, .44f,
+                ToggleNoShipyardPorts, textScale: .011f);
+            noShipyardPorts.description = "Random Port never chooses a location with a detected shipyard. Individual island exclusions and secret island settings still apply.";
+            secretIslands = MakeButton(page, "Secret islands", .90f, -.57f, 1.55f, .44f,
                 ToggleSecretIslands, textScale: .011f);
             secretIslands.description = "Include secret islands in manual and random starting locations.";
         }
@@ -564,10 +648,161 @@ namespace NewBeginnings
                 -.51f, .45f, .45f, () => ChangeEditorPage(-1));
             editorNext = MakeButton(page, "Next exclusions page", 1.18f,
                 -.51f, .45f, .45f, () => ChangeEditorPage(1));
+            editorClear = MakeButton(page, "Clear exclusions", 0f, -.51f,
+                1.40f, .45f, ClearEditorExclusions, textScale: .011f);
+            editorClear.description = "Allow every listed entry on this tab in random starts.";
             var done = MakeButton(page, "Done editing exclusions", 0f, -.76f,
                 .82f, .64f, CloseEditor);
             SetButtonText(done, "Done");
             done.description = "Save individual island and boat exclusions.";
+        }
+
+        // Shown with Sailwind's own panel, beside its Continue button.
+        private void BuildNativeButtons(Transform root)
+        {
+            nativeScenarios = MakeButton(root, "Native scenarios", 0f, 0f, .90f, .52f, () => OpenPicker(fromNative: true));
+            nativeScenarios.description = "Preset starts with their own rules. Each keeps its own settings.";
+            nativeSwitch = MakeButton(root, "Native switch", 0f, 0f, .90f, .52f, () =>
+            {
+                if (Plugin.Instance != null) Plugin.Instance.NativeMenu = false;
+                ApplyMenuMode();
+            });
+            // Other mods and Sailwind lay parchment over this panel; keep these on top.
+            foreach (var renderer in nativeScenarios.transform.parent.GetComponentsInChildren<Renderer>(true)
+                .Concat(nativeSwitch.transform.parent.GetComponentsInChildren<Renderer>(true)))
+                renderer.sortingOrder = 50;
+            nativeSwitch.description = "Choose your starting port, boat and options with New Beginnings.";
+            SetButtonText(nativeScenarios, "Scenarios");
+            SetButtonText(nativeSwitch, "New Beginnings");
+            PlaceNativeButtons(false);
+        }
+
+        private void PlaceNativeButtons(bool visible)
+        {
+            PlaceNativeButton(nativeScenarios, -1.25f, visible);
+            PlaceNativeButton(nativeSwitch, 1.25f, visible);
+        }
+
+        private void PlaceNativeButton(MenuUiButton button, float offset, bool visible)
+        {
+            if (button == null) return;
+            var visual = button.transform.parent;
+            visual.gameObject.SetActive(visible && confirm != null);
+            if (!visible || confirm == null) return;
+            var native = confirm.localPosition;
+            visual.localPosition = new Vector3(native.x + offset, native.y, NativeFrontDepth(visual.parent, native.z));
+        }
+
+        // In front of every Sailwind sheet on this panel, such as the region
+        // description scroll beside Continue, within a short distance so the
+        // buttons keep their size.
+        private float NativeFrontDepth(Transform root, float nativeDepth)
+        {
+            var front = 0f;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer.GetComponent<TextMesh>() != null || OwnControl(root, renderer.transform)) continue;
+                var ahead = (root.InverseTransformPoint(renderer.transform.position).z - nativeDepth) * frontSign;
+                if (ahead > front) front = ahead;
+            }
+            return nativeDepth + frontSign * Mathf.Clamp(front + .08f, .15f, .6f);
+        }
+
+        private static bool OwnControl(Transform root, Transform item)
+        {
+            for (; item != null && item != root; item = item.parent)
+                if (item.parent == root) return item.name.StartsWith("New Beginnings", StringComparison.Ordinal);
+            return false;
+        }
+
+        private void BuildPicker(Transform root)
+        {
+            pickerRoot = new GameObject("New Beginnings scenario picker");
+            pickerRoot.transform.SetParent(root, false);
+            pickerRoot.transform.localPosition = Vector3.up * StartingOptionsOffsetY;
+            pickerRoot.SetActive(false);
+            var page = pickerRoot.transform;
+            MakeLabel(page, "Scenario picker title", "Scenarios", 0f, .78f, .016f);
+            // Beside Continue and Back, so choosing and confirming stay together.
+            var previous = MakeButton(page, "Previous scenario", -1.45f, -.62f, .45f, .45f, () => ChangeScenario(-1));
+            var next = MakeButton(page, "Next scenario", 1.45f, -.62f, .45f, .45f, () => ChangeScenario(1));
+            SetButtonText(previous, "<");
+            SetButtonText(next, ">");
+            pickerName = MakeLabel(page, "Scenario name", "", 0f, .45f, .014f);
+            pickerDescription = MakeLabel(page, "Scenario description", "", 0f, .10f, .0095f);
+            var choose = MakeButton(page, "Choose scenario", -.55f, -.62f, .95f, .58f, () =>
+            {
+                var chosen = Scenarios.All[pickerIndex];
+                ClosePicker();
+                Plugin.Instance?.ActivateScenario(chosen);
+            });
+            SetButtonText(choose, "Continue");
+            choose.description = "Review and change this scenario's start. Your changes are kept for this scenario only.";
+            var back = MakeButton(page, "Leave scenario picker", .55f, -.62f, .82f, .58f, () =>
+            {
+                ClosePicker();
+                var plugin = Plugin.Instance;
+                if (plugin == null || plugin.ActiveScenario != null || !pickerFromNative) return;
+                // Opened from Sailwind's own panel: go back to it.
+                plugin.NativeMenu = true;
+                ApplyMenuMode();
+            });
+            SetButtonText(back, "Back");
+        }
+
+        private void OpenPicker() => OpenPicker(false);
+
+        private void OpenPicker(bool fromNative)
+        {
+            var plugin = Plugin.Instance;
+            if (plugin == null || pickerRoot == null || picking || editing ||
+                startingOptions != null && startingOptions.IsOpen) return;
+            pickerFromNative = fromNative;
+            plugin.NativeMenu = false;
+            if (!UpdateReplacement()) return;
+            HideNativeRegionChoice();
+            picking = true;
+            var active = plugin.ActiveScenario;
+            if (active != null) pickerIndex = Math.Max(0, Array.IndexOf(Scenarios.All, active));
+            ShowStartingOptions(true);
+            pickerRoot.SetActive(true);
+            RefreshPicker();
+        }
+
+        private void ClosePicker()
+        {
+            if (!picking) return;
+            picking = false;
+            pickerRoot.SetActive(false);
+            ShowStartingOptions(false);
+        }
+
+        private void ChangeScenario(int direction)
+        {
+            var count = Scenarios.All.Length;
+            pickerIndex = ((pickerIndex + direction) % count + count) % count;
+            RefreshPicker();
+        }
+
+        private void RefreshPicker()
+        {
+            var scenario = Scenarios.All[pickerIndex];
+            pickerName.text = scenario.Name;
+            pickerDescription.text = Wrap(scenario.Description, 46);
+        }
+
+        // TextMesh has no word wrap.
+        internal static string Wrap(string text, int width)
+        {
+            var lines = new List<string>();
+            var line = "";
+            foreach (var word in (text ?? "").Split(' '))
+            {
+                if (line.Length > 0 && line.Length + 1 + word.Length > width) { lines.Add(line); line = word; }
+                else line = line.Length == 0 ? word : line + " " + word;
+            }
+            if (line.Length > 0) lines.Add(line);
+            return string.Join("\n", lines.ToArray());
         }
 
         internal void ShowStartingOptions(bool visible)
@@ -664,6 +899,18 @@ namespace NewBeginnings
             RefreshEditor();
         }
 
+        // Clears only the listed entries. Saved exclusions for hidden secret
+        // islands or missing mods stay, matching the allowed count shown.
+        private void ClearEditorExclusions()
+        {
+            if (!editing || editorDraft == null) return;
+            if (editingBoats)
+                foreach (var boat in EditorBoats()) editorDraft.SetBoatExcluded(boat, false);
+            else
+                foreach (var port in EditorPorts()) editorDraft.SetPortExcluded(port, false);
+            RefreshEditor();
+        }
+
         private void RefreshEditor()
         {
             if (!editing || catalog == null || editorDraft == null) return;
@@ -716,6 +963,8 @@ namespace NewBeginnings
             SetButtonText(editorNext, ">");
             SetEnabled(editorPrevious, pages > 1);
             SetEnabled(editorNext, pages > 1);
+            SetButtonText(editorClear, "Clear exclusions");
+            SetEnabled(editorClear, excluded > 0);
         }
 
         internal MenuUiButton MakeButton(Transform root, string name, float x, float y,
@@ -897,6 +1146,12 @@ namespace NewBeginnings
             Changed();
         }
 
+        private void ToggleNoShipyardPorts()
+        {
+            settings.NoShipyardPorts = !settings.NoShipyardPorts;
+            Changed();
+        }
+
         private void Changed()
         {
             changed?.Invoke();
@@ -922,6 +1177,8 @@ namespace NewBeginnings
             SetButtonVisible(shipyardPortsOnly, showSpawnOptions);
             SetEnabled(shipyardPortsOnly, true);
             SetButtonText(shipyardPortsOnly, (settings.ShipyardPortsOnly ? "[x] " : "[ ] ") + "Shipyard ports only");
+            SetButtonVisible(noShipyardPorts, showSpawnOptions);
+            SetButtonText(noShipyardPorts, (settings.NoShipyardPorts ? "[x] " : "[ ] ") + "No shipyard ports");
             SetButtonVisible(useShipyardBerth, showSpawnOptions);
             SetEnabled(useShipyardBerth, true);
             SetButtonText(useShipyardBerth, (settings.UseShipyardBerth ? "[x] " : "[ ] ") + "Use shipyard berth");
@@ -941,6 +1198,13 @@ namespace NewBeginnings
             SetButtonText(boatPrevious, "<");
             SetButtonText(boatNext, ">");
             SetButtonText(randomPort, settings.RandomPort ? "Random Port: ON" : "Random Port: OFF");
+            var scenario = Plugin.Instance?.ActiveScenario;
+            SetButtonText(scenariosButton, scenario != null ? "Leave scenario" : "Scenarios");
+            scenariosButton.description = scenario != null ? "Return to your own New Beginnings start. This scenario's settings are kept." :
+                "Preset starts with their own rules. Each keeps its own settings.";
+            SetButtonText(menuSwitchButton, "Sailwind menu");
+            // A scenario is left with its own button; the switch belongs to your own start.
+            SetButtonVisible(menuSwitchButton, !EditingAny && scenario == null);
             SetButtonText(randomBoat, settings.RandomBoat ? "Random Boat: ON" : "Random Boat: OFF");
 
             for (var i = 0; i < portPools.Length; ++i)

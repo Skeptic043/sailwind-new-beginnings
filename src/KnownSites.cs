@@ -22,6 +22,9 @@ namespace NewBeginnings
         internal const string PirateHideoutKey = "vanilla:pirate-hideout";
         internal const string BoneIsleKey = "vanilla:bone-isle";
         internal const string OracleKey = "vanilla:oracle";
+        internal const string ClearMindKey = "vanilla:clear-mind";
+        internal const string LionsFangKey = "vanilla:lions-fang";
+        internal const string PonderingPeakKey = "vanilla:pondering-peak";
         internal const string FortJuniperKey = "site:oldchronian|fort-juniper";
 
         internal static bool IsTestPort(Port port) => port != null && port.portIndex == 7 &&
@@ -43,6 +46,18 @@ namespace NewBeginnings
         // Oracle Island has no Port either; an ordinary Aestrin start beside the abbey.
         internal static bool IsOracle(IslandHorizon island) => island.islandIndex == 23 &&
             island.name == "island 23 M oracle";
+
+        // The Isle of Clear Mind has no Port; an ordinary Al'Ankh start by the obelisk.
+        internal static bool IsClearMind(IslandHorizon island) => island.islandIndex == 5 &&
+            island.name == "island 5 A (clear mind)";
+
+        // Lion's Fang has no Port; an ordinary Al'Ankh start on its west beach.
+        internal static bool IsLionsFang(IslandHorizon island) => island.islandIndex == 6 &&
+            island.name == "island 6 A  (lion fang)";
+
+        // Pondering Peak (scene name onsen) has dock cleats but no Port; an ordinary Emerald start beside its little dock.
+        internal static bool IsPonderingPeak(IslandHorizon island) => island.islandIndex == 39 &&
+            island.name == "island 39 E (onsen)";
 
         internal static bool IsChronos(PortChoice site) => site.Index == 21 && site.SiteIdentity == null &&
             string.Equals(site.IdentityName, "port 21 M chronos", StringComparison.Ordinal);

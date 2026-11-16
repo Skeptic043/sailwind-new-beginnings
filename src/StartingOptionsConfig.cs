@@ -15,6 +15,11 @@ namespace NewBeginnings
         private readonly ConfigEntry<int>[] factions = new ConfigEntry<int>[3];
         private readonly ConfigEntry<string> equipment;
         private readonly ConfigEntry<bool> standardSupplies;
+        private readonly ConfigEntry<bool> randomLoadout;
+        private readonly ConfigEntry<int> randomBudget;
+        private readonly ConfigEntry<bool> randomModItems;
+        private readonly ConfigEntry<bool> randomMultiples;
+        private readonly ConfigEntry<string> randomExclusions;
         private readonly ConfigWarnings warnings = new ConfigWarnings();
         private static readonly string[] Keys = { "AlAnkh", "Emerald", "Aestrin", "Gold" };
 
@@ -37,6 +42,17 @@ namespace NewBeginnings
                 "Encoded equipment IDs with =quantity, separated by semicolons. Legacy IDs without a quantity mean one. Whole-number range 0 to 2147483647; zero removes a selection. Edit with the new-game menu.");
             standardSupplies = file.Bind("Starting Options", "StandardSupplies", true,
                 "Include the normal regional starter supplies. Disable to start with only the equipment quantities chosen here.");
+            randomLoadout = file.Bind("Random Loadout", "Enabled", false,
+                "Replace the chosen equipment and standard supplies with random equipment rolled when the game starts. A compass, a barrel of water and a crate of food are always included.");
+            randomBudget = file.Bind("Random Loadout", "Budget", StartingOptionsSettings.DefaultRandomBudget,
+                new ConfigDescription("Total base shop value of the random equipment, on top of the guaranteed items.",
+                    new AcceptableValueRange<int>(0, StartingOptionsSettings.MaximumRandomBudget)));
+            randomModItems = file.Bind("Random Loadout", "IncludeModItems", false,
+                "Allow equipment added by other mods in the random roll.");
+            randomMultiples = file.Bind("Random Loadout", "AllowMultiples", true,
+                "Allow the random roll to pick the same item more than once.");
+            randomExclusions = file.Bind("Random Loadout", "Exclusions", "",
+                "Encoded equipment IDs the random roll never picks, separated by semicolons. Edit with the new-game menu.");
             Read();
         }
 
@@ -56,6 +72,14 @@ namespace NewBeginnings
             for (var i = 0; i < factions.Length; i++)
                 Settings.FactionReputation[i] = ValidLevel(factions[i].Value, Keys[i]);
             Settings.StandardSupplies = standardSupplies.Value;
+            Settings.RandomLoadout = randomLoadout.Value;
+            Settings.RandomBudget = Math.Max(0, Math.Min(StartingOptionsSettings.MaximumRandomBudget, randomBudget.Value));
+            Settings.RandomModItems = randomModItems.Value;
+            Settings.RandomMultiples = randomMultiples.Value;
+            Settings.RandomExclusions.Clear();
+            foreach (var token in (randomExclusions.Value ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                try { Settings.RandomExclusions.Add(Uri.UnescapeDataString(token)); }
+                catch (UriFormatException) { warnings.Warn("Ignored malformed random loadout exclusion."); }
             ReadEquipment(equipment.Value, Settings, warnings.Warn);
             Settings.CurrencyMultiplier = multiplier.Value;
             if (float.IsNaN(multiplier.Value) || float.IsInfinity(multiplier.Value) ||
@@ -132,6 +156,12 @@ namespace NewBeginnings
             for (var i = 0; i < factions.Length; i++) factions[i].Value = Settings.FactionReputation[i];
             equipment.Value = WriteEquipment(Settings);
             standardSupplies.Value = Settings.StandardSupplies;
+            randomLoadout.Value = Settings.RandomLoadout;
+            randomBudget.Value = Settings.RandomBudget;
+            randomModItems.Value = Settings.RandomModItems;
+            randomMultiples.Value = Settings.RandomMultiples;
+            randomExclusions.Value = string.Join(";", Settings.RandomExclusions.OrderBy(key => key, StringComparer.Ordinal)
+                .Select(Uri.EscapeDataString).ToArray());
             file.Save();
         }
     }

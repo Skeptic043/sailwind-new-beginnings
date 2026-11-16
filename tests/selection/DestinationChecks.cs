@@ -144,7 +144,25 @@ namespace Lifetime
             oracle.SiteIdentity = KnownSites.OracleKey;
             oracleIsland.name = "island 23 M oracle copy";
             check(!StartDestinations.IsCurrent(oracle), "null-Port identity requires exact Oracle island name");
-            Console.WriteLine("PASS 23 actual-source destination-lifetime checks using shared API boundary doubles.");
+            var clearMindIsland = new CapturedIsland { islandIndex = 5, name = "island 5 A (clear mind)" };
+            var clearMind = new PortChoice { Island = clearMindIsland, DockRoot = clearMindIsland.transform, SiteIdentity = KnownSites.ClearMindKey, Region = 0 };
+            check(StartDestinations.IsCurrent(clearMind), "correct Isle of Clear Mind destination works without a native Port");
+            clearMind.SiteIdentity = KnownSites.OracleKey;
+            check(!StartDestinations.IsCurrent(clearMind), "Isle of Clear Mind accepted as Oracle Island");
+            clearMind.SiteIdentity = KnownSites.ClearMindKey;
+            clearMindIsland.name = "island 5 A (clear mind) copy";
+            check(!StartDestinations.IsCurrent(clearMind), "null-Port identity requires exact Isle of Clear Mind island name");
+            var lionsFangIsland = new CapturedIsland { islandIndex = 6, name = "island 6 A  (lion fang)" };
+            var lionsFang = new PortChoice { Island = lionsFangIsland, DockRoot = lionsFangIsland.transform, SiteIdentity = KnownSites.LionsFangKey, Region = 0 };
+            check(StartDestinations.IsCurrent(lionsFang), "correct Lion's Fang destination works without a native Port");
+            lionsFangIsland.name = "island 6 A (lion fang)";
+            check(!StartDestinations.IsCurrent(lionsFang), "null-Port identity requires exact Lion's Fang island name");
+            var peakIsland = new CapturedIsland { islandIndex = 39, name = "island 39 E (onsen)" };
+            var peak = new PortChoice { Island = peakIsland, DockRoot = peakIsland.transform, SiteIdentity = KnownSites.PonderingPeakKey, Region = 1 };
+            check(StartDestinations.IsCurrent(peak), "correct Pondering Peak destination works without a native Port");
+            peak.SiteIdentity = KnownSites.LionsFangKey;
+            check(!StartDestinations.IsCurrent(peak), "Pondering Peak accepted as Lion's Fang");
+            Console.WriteLine("PASS 30 actual-source destination-lifetime checks using shared API boundary doubles.");
         }
     }
 }

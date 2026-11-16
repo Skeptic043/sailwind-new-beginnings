@@ -216,6 +216,7 @@ public class ShipItem : MonoBehaviour
     public TransactionCategory category;
     public bool sold, big;
     public float amount, health;
+    public int value;
     public Transform held;
     public ItemRigidbody body = new();
     public ItemRigidbody GetItemRigidbody() => body;

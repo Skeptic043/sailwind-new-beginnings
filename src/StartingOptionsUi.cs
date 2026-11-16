@@ -138,6 +138,15 @@ namespace NewBeginnings
         private GameObject reputationPage;
         private GameObject equipmentPage;
         private GameObject spawnPage;
+        private GameObject randomPage;
+        private MenuUiButton randomOpen;
+        private MenuUiButton randomToggle;
+        // The random loadout settings replace the item list within the Equipment tab.
+        private bool showingRandom;
+        private MenuUiButton randomModItems;
+        private MenuUiButton randomMultiples;
+        private StartingOptionsSlider randomBudget;
+        private TextMesh randomBudgetLabel;
         private TextMesh message;
         private TextMesh multiplierLabel;
         private TextMesh equipmentSummary;
@@ -209,10 +218,15 @@ namespace NewBeginnings
             owner.MakeLabel(content, "Starting options title", "Starting Options", 0f, .96f, .016f);
             moneyTab = Button(content, "Money tab", "Money", -1.50f, .75f, .80f, .47f, () => ShowTab(0));
             reputationTab = Button(content, "Reputation tab", "Reputation", -.50f, .75f, .94f, .47f, () => ShowTab(1));
-            equipmentTab = Button(content, "Equipment tab", "Equipment", .50f, .75f, .94f, .47f, () => ShowTab(2));
+            equipmentTab = Button(content, "Equipment tab", "Equipment", .50f, .75f, .94f, .47f, () => { showingRandom = false; ShowTab(2); });
             spawnTab = Button(content, "Spawn tab", "Spawn", 1.50f, .75f, .80f, .47f, () => ShowTab(3));
             message = owner.MakeLabel(content, "Starting options message", "", 0f, -.78f, .009f);
-            Button(content, "Save starting options", "Done", 0f, -.97f, .82f, .64f, () => Close(true));
+            // On the random loadout page, Done returns to the equipment list.
+            Button(content, "Save starting options", "Done", 0f, -.97f, .82f, .64f, () =>
+            {
+                if (tab == 2 && showingRandom) { showingRandom = false; ShowTab(2); }
+                else Close(true);
+            });
             spawnPage = Page("Spawn");
             owner.BuildSpawnOptions(spawnPage.transform);
 
@@ -250,9 +264,31 @@ namespace NewBeginnings
             owner.MakeLabel(reputationPage.transform, "Reputation explanation",
                 "Regional levels override the starting region level", 0f, -.69f, .009f);
 
+            randomPage = Page("Random Loadout");
+            randomToggle = Button(randomPage.transform, "Random loadout", "", 0f, .36f, 2.4f, .40f,
+                () => { draft.RandomLoadout = !draft.RandomLoadout; RefreshRandom(); });
+            randomToggle.description = "Replace your chosen equipment and standard supplies with random equipment rolled when the game starts.";
+            randomBudgetLabel = owner.MakeLabel(randomPage.transform, "Random budget value", "", 0f, .17f, .012f);
+            randomBudget = Slider(randomPage.transform, "Random loadout budget", 0f, -.02f, 2.7f,
+                StartingOptionsSettings.MaximumRandomBudget, 100f,
+                value => { draft.RandomBudget = Mathf.RoundToInt(value); RefreshRandom(); });
+            randomModItems = Button(randomPage.transform, "Random mod items", "", -.78f, -.27f, 1.45f, .38f,
+                () => { draft.RandomModItems = !draft.RandomModItems; RefreshRandom(); });
+            randomModItems.description = "Allow equipment added by other mods in the roll.";
+            randomMultiples = Button(randomPage.transform, "Random multiples", "", .78f, -.27f, 1.45f, .38f,
+                () => { draft.RandomMultiples = !draft.RandomMultiples; RefreshRandom(); });
+            randomMultiples.description = "Allow the roll to pick the same item more than once.";
+            owner.MakeLabel(randomPage.transform, "Random loadout guarantees",
+                "A compass, a barrel of water and a food crate are always included.", 0f, -.50f, .009f);
+            owner.MakeLabel(randomPage.transform, "Random loadout exclusions",
+                "Exclude items from the roll in the equipment list.", 0f, -.61f, .009f);
+
             equipmentPage = Page("Additional Equipment");
-            standardSupplies = Button(equipmentPage.transform, "Standard starter supplies", "", 0f, .34f, 2.9f, .32f,
+            standardSupplies = Button(equipmentPage.transform, "Standard starter supplies", "", -.74f, .34f, 1.42f, .32f,
                 () => { draft.StandardSupplies = !draft.StandardSupplies; RefreshEquipment(); });
+            randomOpen = Button(equipmentPage.transform, "Random loadout settings", "", .74f, .34f, 1.42f, .32f,
+                () => { showingRandom = true; ShowTab(2); });
+            randomOpen.description = "Roll random equipment within a budget instead of choosing it.";
             standardSupplies.description = "Include the normal regional supplies, or start with only your chosen equipment.";
             equipmentSummary = owner.MakeLabel(equipmentPage.transform, "Additional equipment count", "", 0f, .23f, .009f);
             for (var i = 0; i < EquipmentRows; i++)
@@ -264,7 +300,7 @@ namespace NewBeginnings
                 equipmentMinus[i] = Button(equipmentPage.transform, "Equipment decrease " + i, "-",
                     x - .50f, y - .095f, .28f, .28f, () => BeginEquipmentRepeat(row, -1));
                 equipmentCounts[i] = owner.MakeButton(equipmentPage.transform, "Equipment quantity " + i,
-                    x, y - .095f, .62f, .28f, () => FocusEquipment(row));
+                    x, y - .095f, .62f, .28f, () => EquipmentQuantityClicked(row));
                 equipmentCounts[i].description = "Enter a whole quantity. Zero removes this item from your loadout.";
                 equipmentPlus[i] = Button(equipmentPage.transform, "Equipment increase " + i, "+",
                     x + .50f, y - .095f, .28f, .28f, () => BeginEquipmentRepeat(row, 1));
@@ -310,6 +346,7 @@ namespace NewBeginnings
             focusedCurrency = -1;
             focusedEquipment = -1;
             equipmentRepeat.Stop();
+            showingRandom = false;
             owner.ShowStartingOptions(true);
             contentRoot.SetActive(true);
             gameObject.SetActive(true);
@@ -372,17 +409,43 @@ namespace NewBeginnings
             tab = index;
             moneyPage.SetActive(tab == 0);
             reputationPage.SetActive(tab == 1);
-            equipmentPage.SetActive(tab == 2);
             spawnPage.SetActive(tab == 3);
+            equipmentPage.SetActive(tab == 2 && !showingRandom);
+            randomPage.SetActive(tab == 2 && showingRandom);
             MenuUi.SetEnabled(moneyTab, tab != 0);
             MenuUi.SetEnabled(reputationTab, tab != 1);
-            MenuUi.SetEnabled(equipmentTab, tab != 2);
+            MenuUi.SetEnabled(equipmentTab, tab != 2 || showingRandom);
             MenuUi.SetEnabled(spawnTab, tab != 3);
             message.text = "";
             RefreshMoney();
             RefreshReputation();
             RefreshEquipment();
+            RefreshRandom();
             owner.RefreshSpawnOptions();
+        }
+
+        private void RefreshRandom()
+        {
+            if (draft == null) return;
+            MenuUi.SetButtonText(randomToggle, "Random loadout: " + (draft.RandomLoadout ? "On" : "Off"));
+            MenuUi.ButtonText(randomToggle).transform.localScale = Vector3.one * .011f;
+            randomBudget.Set(draft.RandomBudget);
+            randomBudgetLabel.text = "Budget: " + draft.RandomBudget.ToString(CultureInfo.InvariantCulture);
+            randomBudgetLabel.color = draft.RandomLoadout ? new Color(.06f, .035f, .02f, 1f) : new Color(.30f, .23f, .19f, 1f);
+            MenuUi.SetButtonText(randomModItems, (draft.RandomModItems ? "[x] " : "[ ] ") + "Mod items");
+            MenuUi.SetButtonText(randomMultiples, (draft.RandomMultiples ? "[x] " : "[ ] ") + "Multiples");
+            MenuUi.SetEnabled(randomModItems, draft.RandomLoadout);
+            MenuUi.SetEnabled(randomMultiples, draft.RandomLoadout);
+        }
+
+        private void EquipmentQuantityClicked(int row)
+        {
+            if (draft == null || !draft.RandomLoadout) { FocusEquipment(row); return; }
+            var index = EquipmentPageStart + row;
+            if (index < 0 || index >= EquipmentPageEnd) return;
+            var key = equipment[index].Key;
+            if (!draft.RandomExclusions.Remove(key)) draft.RandomExclusions.Add(key);
+            RefreshEquipment();
         }
 
         internal void ShowExclusionEditor(bool visible)
@@ -429,10 +492,17 @@ namespace NewBeginnings
             var pages = EquipmentPageCount;
             page = (page % pages + pages) % pages;
             var modSection = page >= VanillaPages;
+            var random = draft.RandomLoadout;
             equipmentSummary.text = (modSection ? "Mod items" : "Vanilla items") +
-                " - page " + (page + 1) + "/" + pages + " - " +
-                draft.EquipmentTotal + " chosen items";
-            MenuUi.SetButtonText(standardSupplies, "Standard supplies: " + (draft.StandardSupplies ? "On" : "Off"));
+                " - page " + (page + 1) + "/" + pages + " - " + (random
+                    ? "random loadout, " + draft.RandomExclusions.Count + " excluded"
+                    : draft.EquipmentTotal + " chosen items");
+            var atSea = Plugin.Instance?.ActiveScenario?.AtSea == true;
+            MenuUi.SetButtonText(standardSupplies, atSea || random ? "Standard supplies: unavailable" :
+                "Standard supplies: " + (draft.StandardSupplies ? "On" : "Off"));
+            MenuUi.SetButtonText(randomOpen, "Random loadout: " + (random ? "On" : "Off") + " >");
+            MenuUi.ButtonText(randomOpen).transform.localScale = Vector3.one * .010f;
+            MenuUi.SetEnabled(standardSupplies, !atSea && !random);
             MenuUi.ButtonText(standardSupplies).transform.localScale = Vector3.one * .010f;
             for (var row = 0; row < EquipmentRows; row++)
             {
@@ -446,6 +516,21 @@ namespace NewBeginnings
                 var entry = equipment[index];
                 draft.EquipmentQuantities.TryGetValue(entry.Key, out var quantity);
                 equipmentRows[row].text = entry.DisplayName;
+                equipmentMinus[row].transform.parent.gameObject.SetActive(visible && !random);
+                equipmentPlus[row].transform.parent.gameObject.SetActive(visible && !random);
+                if (random)
+                {
+                    var excluded = draft.RandomExclusions.Contains(entry.Key);
+                    MenuUi.SetButtonText(equipmentCounts[row], excluded ? "Excluded" : "Allowed");
+                    MenuUi.ButtonText(equipmentCounts[row]).transform.localScale = Vector3.one * .0085f;
+                    MenuUi.ButtonText(equipmentCounts[row]).color = excluded ? new Color(.30f, .23f, .19f, 1f) : new Color(.06f, .035f, .02f, 1f);
+                    equipmentCounts[row].description = (excluded ? "Allow " : "Exclude ") + entry.DisplayName + " in the random roll.";
+                    equipmentRows[row].transform.localScale = Vector3.one *
+                        (.010f * Mathf.Min(1f, 26f / Math.Max(26, entry.DisplayName.Length)));
+                    continue;
+                }
+                equipmentCounts[row].description = "Enter a whole quantity. Zero removes this item from your loadout.";
+                MenuUi.ButtonText(equipmentCounts[row]).color = new Color(.06f, .035f, .02f, 1f);
                 equipmentRows[row].transform.localScale = Vector3.one *
                     (.010f * Mathf.Min(1f, 26f / Math.Max(26, entry.DisplayName.Length)));
                 var countText = focusedEquipment == row ?
@@ -466,8 +551,8 @@ namespace NewBeginnings
             MenuUi.SetEnabled(next, pages > 1);
             if (equipment.Length == 0) equipmentSummary.text = "No additional equipment is available yet.";
             var unavailable = UnavailableEquipmentKeys();
-            MenuUi.SetButtonText(clearEquipment, unavailable.Length > 0 ? "Clear unavailable" : "Clear selection");
-            clearEquipment.description = unavailable.Length > 0
+            MenuUi.SetButtonText(clearEquipment, random ? "Clear exclusions" : unavailable.Length > 0 ? "Clear unavailable" : "Clear selection");
+            clearEquipment.description = random ? "Allow every item in the random roll." : unavailable.Length > 0
                 ? "Remove unavailable equipment selections and keep the rest."
                 : "Remove all additional equipment selections.";
             if (tab == 2)
@@ -481,6 +566,7 @@ namespace NewBeginnings
 
         private void ClearEquipmentSelection()
         {
+            if (draft.RandomLoadout) { draft.RandomExclusions.Clear(); RefreshEquipment(); return; }
             var unavailable = UnavailableEquipmentKeys();
             if (unavailable.Length == 0) draft.EquipmentQuantities.Clear();
             else foreach (var key in unavailable) draft.EquipmentQuantities.Remove(key);

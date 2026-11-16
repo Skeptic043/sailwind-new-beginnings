@@ -22,6 +22,17 @@ namespace NewBeginnings
         internal readonly List<string> Warnings = new List<string>();
         internal readonly List<string> Errors = new List<string>();
         internal int ReloadEvents;
+        // Scenario profiles live in game; this boundary always edits the main profile.
+        private sealed class ProfileStub { internal SelectionConfig Selection = null; internal StartingOptionsConfig Options = null; }
+        private ProfileStub activeProfile = null;
+        internal sealed class ScenarioStub { internal string Name; internal bool AtSea; }
+        internal ScenarioStub ActiveScenario => null;
+        internal bool NativeMenu;
+        internal void DeactivateScenario() { }
+#pragma warning disable CS0067
+        internal event Action ProfileChanged;
+#pragma warning restore CS0067
+        internal SelectionSettings MainSettings => selection.Settings;
         internal SelectionSettings Settings => selection.Settings;
         internal SelectionOverrides Overrides => selection.Overrides;
         internal StartingOptionsSettings StartOptions => startingOptions.Settings;
@@ -166,6 +177,26 @@ internal static class Checks
         p.Settings.IncludeModPorts = false;
         p.Settings.DestinationKey = ordinary.Key;
         Check(!catalog.TryChoose(p.Settings, p.Exclusions, new Random(1), out selected, out _), "disabled Chronos remained available manually");
+
+        // A portless scenario's random port is only ever a site without a native Port.
+        var portless = new SelectionCatalog();
+        var harbour = new PortChoice { Index = 2, Key = "native:2", IdentityName = "harbour", Pool = PortPool.AlAnkh, Port = new Port() };
+        var beach = new PortChoice { Index = -1, Key = "vanilla:beach", SiteIdentity = "vanilla:beach", IdentityName = "site:beach", Pool = PortPool.AlAnkh };
+        portless.Ports.AddRange(new[] { harbour, beach });
+        portless.Boats.Add(new BoatChoice { Index = p.Settings.BoatSceneIndex, Size = BoatSize.Small });
+        p.Settings.RandomPort = true;
+        p.Settings.PortPools.Clear();
+        p.Settings.PortPools.Add(PortPool.AlAnkh);
+        p.Settings.PortlessOnly = true;
+        for (var seed = 0; seed < 20; seed++)
+            Check(portless.TryChoose(p.Settings, p.Exclusions, new Random(seed), out selected, out _) && selected.Port == beach,
+                "a portless random start chose a port");
+        portless.Ports.Remove(beach);
+        Check(!portless.TryChoose(p.Settings, p.Exclusions, new Random(1), out selected, out var portlessReason) &&
+            portlessReason.Contains("without a port"), "a portless random start fell back to a port");
+        p.Settings.PortlessOnly = false;
+        Check(portless.TryChoose(p.Settings, p.Exclusions, new Random(1), out selected, out _) && selected.Port == harbour,
+            "an ordinary random start refused a port");
     }
 
     private static void SpoilerDrawer()
@@ -181,6 +212,27 @@ internal static class Checks
         Check(!p.Settings.UseShipyardBerth && !(bool)Get(p, "Selection", "UseShipyardBerth"), "shipyard berth must default off");
         Cm(p, "Selection", "UseShipyardBerth", true);
         Check(p.Settings.UseShipyardBerth && !p.Settings.RandomPort && !p.Settings.ShipyardPortsOnly, "CM berth toggle must apply independently of random and shipyard-only filters");
+        Check(!p.Settings.NoShipyardPorts && !(bool)Get(p, "Selection", "NoShipyardPorts"), "no-shipyard filter must default off");
+        Cm(p, "Selection", "ShipyardPortsOnly", true);
+        Cm(p, "Selection", "NoShipyardPorts", true);
+        Check(p.Settings.NoShipyardPorts && !p.Settings.ShipyardPortsOnly && !(bool)Get(p, "Selection", "ShipyardPortsOnly"), "CM no-shipyard toggle must turn off shipyard-only in settings and config");
+        Cm(p, "Selection", "ShipyardPortsOnly", true);
+        Check(p.Settings.ShipyardPortsOnly && !p.Settings.NoShipyardPorts && !(bool)Get(p, "Selection", "NoShipyardPorts"), "CM shipyard-only toggle must turn off no-shipyard in settings and config");
+        p.Settings.NoShipyardPorts = true;
+        p.MenuSave();
+        Check(!(bool)Get(p, "Selection", "ShipyardPortsOnly") && (bool)Get(p, "Selection", "NoShipyardPorts") && p.Settings.NoShipyardPorts, "menu save must write the switched shipyard filter");
+        Cm(p, "Selection", "NoShipyardPorts", false);
+        p.Warnings.Clear();
+        File.WriteAllText(path, SetLine(SetLine(File.ReadAllText(path), "Selection", "ShipyardPortsOnly", "true"), "Selection", "NoShipyardPorts", "true"));
+        var both = Plugin.Start(path);
+        Check(both.Settings.ShipyardPortsOnly && !both.Settings.NoShipyardPorts && !(bool)Get(both, "Selection", "NoShipyardPorts") && both.Warnings.Any(w => w.Contains("NoShipyardPorts")), "hand-edited file with both shipyard filters must keep shipyard-only and warn");
+        Cm(both, "Selection", "ShipyardPortsOnly", false);
+        File.WriteAllText(path, SetLine(SetLine(File.ReadAllText(path), "Selection", "ShipyardPortsOnly", "true"), "Selection", "NoShipyardPorts", "true"));
+        both.ReloadConfigFile();
+        Check(both.Settings.ShipyardPortsOnly && !both.Settings.NoShipyardPorts, "live reread of a file with both shipyard filters must keep shipyard-only");
+        Cm(both, "Selection", "ShipyardPortsOnly", false);
+        Cm(both, "Selection", "NoShipyardPorts", false);
+        p = Plugin.Start(path);
         var port = new PortChoice
         {
             Index = 3,
@@ -551,6 +603,16 @@ internal static class Checks
         Check(!c.TryChoose(s, e, new Random(1), out chosen, out reason), "shipyard filter bypassed spoiler gate");
         s.EnablePirateIsland = true;
         Check(c.TryChoose(s, e, new Random(1), out chosen, out reason) && chosen.Port == pirate, "opted-in hidden shipyard did not become eligible");
+        s.NoShipyardPorts = true;
+        Check(!s.ShipyardPortsOnly && !c.TryChoose(s, e, new Random(1), out chosen, out reason) && reason.Contains("non-shipyard"), "no-shipyard filter admitted a shipyard, kept shipyard-only on or gave the wrong reason: " + reason);
+        s.PortPools.Add(PortPool.AlAnkh);
+        Check(c.TryChoose(s, e, new Random(1), out chosen, out reason) && chosen.Port == neverdin, "no-shipyard filter lost an ordinary port");
+        e.SetPortExcluded(neverdin, true);
+        Check(!c.TryChoose(s, e, new Random(1), out chosen, out reason), "no-shipyard filter ignored individual island exclusions");
+        e.SetPortExcluded(neverdin, false);
+        s.PortPools.Remove(PortPool.AlAnkh);
+        s.ShipyardPortsOnly = true;
+        Check(!s.NoShipyardPorts && c.TryChoose(s, e, new Random(1), out chosen, out reason) && chosen.Port == pirate, "enabling shipyard-only did not turn off no-shipyard");
         s.ShipyardPortsOnly = false;
         s.EnablePirateIsland = false;
         s.EnableSaffronIsland = true;

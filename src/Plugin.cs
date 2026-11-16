@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace NewBeginnings
 {
-    [BepInPlugin(Id, "New Beginnings", "1.5.11")]
+    [BepInPlugin(Id, "New Beginnings", "1.6.4")]
     [BepInDependency(ScrambledSeasIntegration.Id, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("com.nandbrew.sailwinddifficulty", BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
@@ -17,12 +17,26 @@ namespace NewBeginnings
         private SelectionConfig selection;
         private StartingOptionsConfig startingOptions;
         private readonly System.Random random = new System.Random();
+        // Scenario profiles are created on first use. While one is active, the
+        // menu edits and the next start use its own saved choices; the main
+        // file keeps the menu switch, spoiler drawer and compatibility records.
+        private readonly System.Collections.Generic.Dictionary<string, ScenarioProfile> profiles =
+            new System.Collections.Generic.Dictionary<string, ScenarioProfile>(StringComparer.Ordinal);
+        private ScenarioProfile activeProfile;
 
         internal static Plugin Instance { get; private set; }
-        internal SelectionSettings Settings => selection.Settings;
+        internal SelectionSettings MainSettings => selection.Settings;
+        internal SelectionSettings Settings => (activeProfile?.Selection ?? selection).Settings;
+        internal IndividualExclusions Exclusions => (activeProfile?.Selection ?? selection).IndividualExclusions;
         internal SelectionOverrides Overrides => selection.Overrides;
-        internal StartingOptionsSettings StartOptions => startingOptions.Settings;
+        internal StartingOptionsSettings StartOptions => (activeProfile?.Options ?? startingOptions).Settings;
+        internal Scenario ActiveScenario => activeProfile?.Scenario;
+        // Sailwind's own panel is shown for this opening of the new-game menu.
+        // Each opening starts from ReplaceNewGameMenu; the menu's buttons
+        // switch it for that opening only.
+        internal bool NativeMenu { get; set; }
         internal event Action SettingsReloaded;
+        internal event Action ProfileChanged;
         private int configWrites;
 
         private void Awake()
@@ -74,7 +88,7 @@ namespace NewBeginnings
                 try
                 {
                     if (MenuUi.Attach(__instance, plugin.Settings, () => plugin.Overrides,
-                        plugin.selection.IndividualExclusions,
+                        plugin.Exclusions,
                         plugin.SaveSelection) == null)
                         plugin.Warn("Start menu controls could not be attached; saved settings remain available.");
                 }
@@ -85,8 +99,34 @@ namespace NewBeginnings
             }
         }
 
-        private void SaveSelection() => WriteConfig(selection.Save);
-        internal void SaveStartingOptions() => WriteConfig(startingOptions.Save);
+        private void SaveSelection() => WriteConfig((activeProfile?.Selection ?? selection).Save);
+        internal void SaveStartingOptions() => WriteConfig((activeProfile?.Options ?? startingOptions).Save);
+
+        // Rereads the scenario's own file, so hand edits made while the game
+        // runs are picked up, then makes it the profile the menu edits.
+        internal void ActivateScenario(Scenario scenario)
+        {
+            try
+            {
+                if (!profiles.TryGetValue(scenario.Id, out var profile))
+                    profiles[scenario.Id] = profile = new ScenarioProfile(scenario, selection.Settings);
+                else profile.Reload(selection.Settings);
+                activeProfile = profile;
+            }
+            catch (Exception exception)
+            {
+                Error("The " + scenario.Name + " scenario settings could not be loaded.", exception);
+                return;
+            }
+            ProfileChanged?.Invoke();
+        }
+
+        internal void DeactivateScenario()
+        {
+            if (activeProfile == null) return;
+            activeProfile = null;
+            ProfileChanged?.Invoke();
+        }
 
         // Each entry assignment raises SettingChanged synchronously. Our own
         // saves assign entries one by one from settings already in memory, so
@@ -103,7 +143,9 @@ namespace NewBeginnings
         // and a later menu save writes it back instead of the startup value.
         private void OnConfigSettingChanged(object sender, SettingChangedEventArgs args)
         {
-            if (configWrites == 0) ReloadSettings();
+            if (configWrites != 0) return;
+            WriteConfig(() => selection.KeepShipyardFiltersExclusive(args.ChangedSetting));
+            ReloadSettings();
         }
 
         private void ReloadSettings()
@@ -153,8 +195,7 @@ namespace NewBeginnings
             reason = null;
             // Overrides are current: every entry change and file reload rereads them.
             var catalog = SelectionCatalog.Discover(selection.Overrides);
-            if (catalog.TryChoose(selection.Settings,
-                selection.IndividualExclusions, random, out pair, out reason))
+            if (catalog.TryChoose(Settings, Exclusions, random, out pair, out reason))
                 return true;
             if (catalog.Rejections.Count > 0)
                 reason += " " + catalog.Rejections[0];
@@ -175,6 +216,7 @@ namespace NewBeginnings
             }
             StartArrival.Tick();
             StarterCargo.Tick();
+            ScenarioAlcohol.Tick();
         }
 
         internal void Report(string message) => Logger.LogInfo(message);
