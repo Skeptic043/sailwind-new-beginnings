@@ -133,6 +133,8 @@ namespace NewBeginnings
                                 var next = selected.Scenario?.HullDamage ?? 0f;
                                 damage.hullDamage = next;
                                 Plugin.Instance.Report($"Startup hull {(next > 0f ? "damage set" : "repair completed")} once for boat {selected.Saveable.sceneIndex}, eight seconds after settled ownership; hull damage {previous:F3} -> {next:F3}.");
+                                ModIntegrations.ApplySailDamage(selected);
+                                ModIntegrations.ApplyFurstMatePets(selected);
                                 stop = true;
                             }
                         }

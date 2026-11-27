@@ -19,12 +19,30 @@ namespace NewBeginnings
         internal bool RandomModItems { get; set; }
         internal bool RandomMultiples { get; set; } = true;
         internal HashSet<string> RandomExclusions { get; } = new HashSet<string>(StringComparer.Ordinal);
+        internal Dictionary<string, int> RandomGuaranteed { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
+        internal long RandomGuaranteedTotal => System.Linq.Enumerable.Sum(RandomGuaranteed.Values, value => (long)value);
+        // Optional mod integrations (ignored when the corresponding mod is absent).
+        // StartingSeason: 0 = Default, 1 = Winter, 2 = Spring, 3 = Summer, 4 = Autumn.
+        internal int StartingSeason { get; set; }
+        // StartingSailDamage: 0, 25, 50 or 75 percent (never 100%).
+        internal int StartingSailDamage { get; set; }
+        internal bool StartWithShepherd { get; set; }
+        internal bool StartWithCat { get; set; }
+        internal bool StartWithBooby { get; set; }
         internal const int DefaultRandomBudget = 1000, MaximumRandomBudget = 100000;
+        internal static readonly int[] ValidSailDamageLevels = { 0, 25, 50, 75 };
+        internal static readonly string[] SeasonNames = { "Default", "Winter", "Spring", "Summer", "Autumn" };
 
         internal void NormalizeEquipment()
         {
+            NormalizeQuantities(EquipmentQuantities);
+            NormalizeQuantities(RandomGuaranteed);
+        }
+
+        private static void NormalizeQuantities(Dictionary<string, int> quantities)
+        {
             var normalized = new Dictionary<string, int>(StringComparer.Ordinal);
-            foreach (var pair in EquipmentQuantities)
+            foreach (var pair in quantities)
             {
                 if (pair.Value == 0) continue;
                 var keys = new HashSet<string>(StringComparer.Ordinal) { pair.Key };
@@ -38,8 +56,8 @@ namespace NewBeginnings
                     normalized[key] = (int)quantity;
                 }
             }
-            EquipmentQuantities.Clear();
-            foreach (var pair in normalized) EquipmentQuantities.Add(pair.Key, pair.Value);
+            quantities.Clear();
+            foreach (var pair in normalized) quantities.Add(pair.Key, pair.Value);
         }
 
         internal StartingOptionsSettings Copy()
@@ -66,6 +84,13 @@ namespace NewBeginnings
             RandomMultiples = other.RandomMultiples;
             RandomExclusions.Clear();
             RandomExclusions.UnionWith(other.RandomExclusions);
+            RandomGuaranteed.Clear();
+            foreach (var pair in other.RandomGuaranteed) RandomGuaranteed.Add(pair.Key, pair.Value);
+            StartingSeason = other.StartingSeason;
+            StartingSailDamage = other.StartingSailDamage;
+            StartWithShepherd = other.StartWithShepherd;
+            StartWithCat = other.StartWithCat;
+            StartWithBooby = other.StartWithBooby;
         }
 
         internal bool TryValidate(out string reason)
@@ -78,6 +103,10 @@ namespace NewBeginnings
                 reason = "Starting faction reputation must be between 0 and 10.";
             else if (RandomBudget < 0 || RandomBudget > MaximumRandomBudget)
                 reason = "Random loadout budget must be between 0 and " + MaximumRandomBudget + ".";
+            else if (StartingSeason < 0 || StartingSeason >= SeasonNames.Length)
+                reason = "Starting season must be Default, Winter, Spring, Summer or Autumn.";
+            else if (Array.IndexOf(ValidSailDamageLevels, StartingSailDamage) < 0)
+                reason = "Starting sail damage must be 0, 25, 50 or 75.";
             foreach (var amount in CurrencyOverrides)
                 if (amount.HasValue && amount.Value < 0)
                     reason = "Currency overrides must be whole numbers from 0 to 2147483647, or blank.";
@@ -88,6 +117,11 @@ namespace NewBeginnings
             {
                 if (string.IsNullOrEmpty(pair.Key) || pair.Value < 0)
                     reason = "Equipment quantities must be whole numbers from 0 to " + int.MaxValue + ". Zero removes the selection.";
+            }
+            foreach (var pair in RandomGuaranteed)
+            {
+                if (string.IsNullOrEmpty(pair.Key) || pair.Value < 0)
+                    reason = "Guaranteed equipment quantities must be whole numbers from 0 to " + int.MaxValue + ". Zero removes the selection.";
             }
             if (reason == null)
                 try { Copy().NormalizeEquipment(); }

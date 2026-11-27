@@ -19,7 +19,6 @@ namespace NewBeginnings
         private const string NavigationProvider = "com.larsonlogistics.sailwind.navsuite";
         private const string FurnitureProvider = "com.kemy.kemyfurniture";
         private const string RadioProvider = "local.sailwind.radio";
-        private static readonly string[] RadioTitles = { "Radio", "Small Speaker" };
         // Title and variant pairs whose authored prefab name only restates the item.
         private static readonly string[][] RedundantVariants =
         {
@@ -100,6 +99,7 @@ namespace NewBeginnings
                 return Reject("furniture", out rejection);
             var itemAssembly = item.GetType().Assembly;
             var modItemType = itemAssembly != typeof(ShipItem).Assembly;
+            var radioItem = owners.Length == 1 && owners[0].Id == RadioProvider;
             if (modItemType && !EquipmentCategory(item, true)) return Reject("shop category " + item.category, out rejection);
             if (modItemType && (owners.Length != 1 || owners[0].Assembly != itemAssembly))
                 return Reject("item type not owned by exactly one plugin", out rejection);
@@ -117,18 +117,20 @@ namespace NewBeginnings
             }
             if (!knownEquipment)
             {
-                if (!EquipmentCategory(item, modItemType)) return Reject("shop category " + item.category, out rejection);
+                if (!EquipmentCategory(item, modItemType || radioItem)) return Reject("shop category " + item.category, out rejection);
                 if (owners.Length > 1) return Reject("more than one possible owner", out rejection);
                 owner = owners.Length == 1 ? owners[0] : Unattributed;
             }
             if (owner == null || owner.Id == FurnitureProvider) return Reject("ambiguous known-equipment owner", out rejection);
             // Exact Kemy tool references may use authored scale. The compass
             // and inclinometer opt into native crate scale/withdrawal; the
-            // native-big binnacle stays loose. Other mods keep the original gate.
+            // native-big binnacle stays loose. Sailwind Radio floor speakers and
+            // woofers also stay loose. Other mods keep the original gate.
             var looseNavigation = knownEquipment && owner.Id == NavigationProvider &&
                 !modItemType && owners.Length <= 1 &&
                 (owners.Length == 0 || owners[0] == owner) && ValidScale(prefab.transform.localScale);
-            if (!AdditionalEquipment.CanPack(item, allowScaledPacking: false) && !looseNavigation)
+            var looseRadio = radioItem && ValidScale(prefab.transform.localScale);
+            if (!AdditionalEquipment.CanPack(item, allowScaledPacking: false) && !looseNavigation && !looseRadio)
                 return Reject("too big or scaled to pack in a crate", out rejection);
             var scaledPacking = looseNavigation && !item.big &&
                 (MatchesField(owner.Assembly.GetType("KemyNavTools.PreloadDirectoryPatch", false), "compassPrefab", prefab) ||
@@ -157,11 +159,8 @@ namespace NewBeginnings
         private static string DisplayName(string providerId, string title, string variant)
         {
             if (providerId == NavigationProvider && variant == "BearingCompass") return "Bearing Compass";
-            if (providerId == RadioProvider)
-            {
-                var label = RadioTitles.FirstOrDefault(value => SameName(title, value));
-                if (label != null) return label;
-            }
+            if (providerId == RadioProvider && !string.IsNullOrWhiteSpace(title))
+                return title;
             if (SameName(title, variant) ||
                 RedundantVariants.Any(pair => SameName(title, pair[0]) && SameName(variant, pair[1]))) return title;
             return title + " (" + variant + ")";
@@ -202,8 +201,7 @@ namespace NewBeginnings
         private static bool ExcludedName(string name)
         {
             var compact = new string(CanonicalName(name ?? "").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-            return compact == "speaker" || compact.Contains("weathervane") || compact.Contains("largespeaker") ||
-                compact.Contains("speakerlarge") || compact.Contains("turbowolfer") || compact.Contains("turbowoofer");
+            return compact.Contains("weathervane");
         }
 
         private static bool IsFurniture(GameObject prefab, Provider[] providers)

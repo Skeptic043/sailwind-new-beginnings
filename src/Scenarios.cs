@@ -19,6 +19,8 @@ namespace NewBeginnings
         internal ScenarioPlace Place;
         // Hull damage set once after the start settles; zero keeps the normal one-time repair.
         internal float HullDamage;
+        // Default sail damage percentage when Sail Damage is installed and the player leaves it at Off/None.
+        internal int DefaultSailDamage;
         // Drunkenness set once when play begins; zero leaves it alone.
         internal float Alcohol;
         internal bool RegionalCompass;
@@ -26,6 +28,8 @@ namespace NewBeginnings
         internal bool Portless;
         // Fill the free deck space with rum barrels (at-sea starts only).
         internal bool FillWithRum;
+        // Allow Bone Isle even when the player has secret islands off in main settings.
+        internal bool AllowBoneIsle;
         internal readonly Dictionary<string, int> Guaranteed = new Dictionary<string, int>(StringComparer.Ordinal);
         internal Action<SelectionSettings, StartingOptionsSettings> Defaults = (selection, options) => { };
         internal bool AtSea => Place != ScenarioPlace.Port;
@@ -39,7 +43,7 @@ namespace NewBeginnings
             {
                 Id = "shipwrecked", Name = "Shipwrecked",
                 Description = "Stranded on an island without a port. Your boat is badly damaged, but you have a bucket.",
-                HullDamage = .8f, Portless = true, Guaranteed = { { StartLoadout.BucketKey, 1 } },
+                HullDamage = .8f, DefaultSailDamage = 50, Portless = true, Guaranteed = { { StartLoadout.BucketKey, 1 } },
                 Defaults = (selection, options) =>
                 {
                     selection.RandomPort = true;
@@ -107,6 +111,23 @@ namespace NewBeginnings
                     options.StandardSupplies = false;
                 }
             },
+            new Scenario
+            {
+                Id = "boned", Name = "Boned",
+                Description = "Stranded on Bone Isle with a small boat, one bottle of water, one uncooked eel and no money.",
+                AllowBoneIsle = true,
+                Guaranteed = { { AdditionalEquipment.LargeWaterBottleKey, 1 }, { StartLoadout.EelKey, 1 } },
+                Defaults = (selection, options) =>
+                {
+                    selection.RandomPort = false;
+                    selection.DestinationKey = KnownSites.BoneIsleKey;
+                    selection.RandomBoat = true;
+                    selection.BoatSizes.Clear();
+                    selection.BoatSizes.Add(BoatSize.Small);
+                    options.StandardSupplies = false;
+                    NoMoney(options);
+                }
+            },
         };
 
         private static void NoMoney(StartingOptionsSettings options)
@@ -155,7 +176,7 @@ namespace NewBeginnings
             var selection = Selection.Settings;
             selection.EnablePirateIsland = main.EnablePirateIsland;
             selection.EnableSaffronIsland = main.EnableSaffronIsland;
-            selection.EnableBoneIsle = main.EnableBoneIsle;
+            selection.EnableBoneIsle = main.EnableBoneIsle || Scenario.AllowBoneIsle;
             selection.EnableChronos = main.EnableChronos;
             selection.PortlessOnly = Scenario.Portless;
         }

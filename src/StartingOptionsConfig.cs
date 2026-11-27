@@ -20,6 +20,12 @@ namespace NewBeginnings
         private readonly ConfigEntry<bool> randomModItems;
         private readonly ConfigEntry<bool> randomMultiples;
         private readonly ConfigEntry<string> randomExclusions;
+        private readonly ConfigEntry<string> randomGuaranteed;
+        private readonly ConfigEntry<string> startingSeason;
+        private readonly ConfigEntry<int> startingSailDamage;
+        private readonly ConfigEntry<bool> startWithShepherd;
+        private readonly ConfigEntry<bool> startWithCat;
+        private readonly ConfigEntry<bool> startWithBooby;
         private readonly ConfigWarnings warnings = new ConfigWarnings();
         private static readonly string[] Keys = { "AlAnkh", "Emerald", "Aestrin", "Gold" };
 
@@ -53,6 +59,20 @@ namespace NewBeginnings
                 "Allow the random roll to pick the same item more than once.");
             randomExclusions = file.Bind("Random Loadout", "Exclusions", "",
                 "Encoded equipment IDs the random roll never picks, separated by semicolons. Edit with the new-game menu.");
+            randomGuaranteed = file.Bind("Random Loadout", "Guaranteed", "",
+                "Encoded equipment IDs with =quantity that always spawn with Random Loadout, separated by semicolons. Edit with the new-game menu.");
+            startingSeason = file.Bind("Mod Integrations", "StartingSeason", "Default",
+                new ConfigDescription("Starting season when Climate is installed. Advances the starting day to match the chosen season.",
+                    new AcceptableValueList<string>(StartingOptionsSettings.SeasonNames)));
+            startingSailDamage = file.Bind("Mod Integrations", "StartingSailDamage", 0,
+                new ConfigDescription("Starting sail damage percentage when Sail Damage is installed (0, 25, 50 or 75).",
+                    new AcceptableValueList<int>(StartingOptionsSettings.ValidSailDamageLevels)));
+            startWithShepherd = file.Bind("Mod Integrations", "StartWithShepherd", false,
+                "Start with an Aestrin Shepherd aboard when FurstMate is installed.");
+            startWithCat = file.Bind("Mod Integrations", "StartWithCat", false,
+                "Start with a Tavern Cat aboard when FurstMate is installed.");
+            startWithBooby = file.Bind("Mod Integrations", "StartWithBooby", false,
+                "Start with a tamed Wild Booby aboard when FurstMate is installed.");
             Read();
         }
 
@@ -81,6 +101,30 @@ namespace NewBeginnings
                 try { Settings.RandomExclusions.Add(Uri.UnescapeDataString(token)); }
                 catch (UriFormatException) { warnings.Warn("Ignored malformed random loadout exclusion."); }
             ReadEquipment(equipment.Value, Settings, warnings.Warn);
+            ReadQuantities(randomGuaranteed.Value, Settings.RandomGuaranteed, warnings.Warn, normalize: false);
+            try { Settings.NormalizeEquipment(); }
+            catch (InvalidOperationException exception)
+            {
+                warnings.Warn(exception.Message + ". Correct these equipment entries before starting.");
+            }
+            var seasonIndex = Array.FindIndex(StartingOptionsSettings.SeasonNames,
+                name => string.Equals(name, startingSeason.Value, StringComparison.OrdinalIgnoreCase));
+            if (seasonIndex >= 0) Settings.StartingSeason = seasonIndex;
+            else
+            {
+                Settings.StartingSeason = 0;
+                warnings.Warn("Invalid starting season; using Default.");
+            }
+            if (Array.IndexOf(StartingOptionsSettings.ValidSailDamageLevels, startingSailDamage.Value) >= 0)
+                Settings.StartingSailDamage = startingSailDamage.Value;
+            else
+            {
+                Settings.StartingSailDamage = 0;
+                warnings.Warn("Invalid starting sail damage; using 0.");
+            }
+            Settings.StartWithShepherd = startWithShepherd.Value;
+            Settings.StartWithCat = startWithCat.Value;
+            Settings.StartWithBooby = startWithBooby.Value;
             Settings.CurrencyMultiplier = multiplier.Value;
             if (float.IsNaN(multiplier.Value) || float.IsInfinity(multiplier.Value) ||
                 multiplier.Value < 0f || multiplier.Value > 100f)
@@ -102,8 +146,20 @@ namespace NewBeginnings
         internal static void ReadEquipment(string value, StartingOptionsSettings settings,
             Action<string> warn = null)
         {
+            ReadQuantities(value, settings.EquipmentQuantities, warn, normalize: false);
+            try { settings.NormalizeEquipment(); }
+            catch (InvalidOperationException exception)
+            {
+                // Keep the original entries visible for correction, rather than clipping quantities.
+                (warn ?? (message => Plugin.Instance?.Warn(message)))(exception.Message + ". Correct these equipment entries before starting.");
+            }
+        }
+
+        private static void ReadQuantities(string value, Dictionary<string, int> target,
+            Action<string> warn, bool normalize)
+        {
             warn = warn ?? (message => Plugin.Instance?.Warn(message));
-            settings.EquipmentQuantities.Clear();
+            target.Clear();
             foreach (var token in (value ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 var separator = token.LastIndexOf('=');
@@ -127,21 +183,17 @@ namespace NewBeginnings
                     var id = Uri.UnescapeDataString(encoded);
                     if (id.Length == 0) continue;
                     // Duplicate legacy checkbox IDs still mean one selected item.
-                    settings.EquipmentQuantities[id] = Math.Max(count,
-                        settings.EquipmentQuantities.TryGetValue(id, out var prior) ? prior : 0);
+                    target[id] = Math.Max(count, target.TryGetValue(id, out var prior) ? prior : 0);
                 }
                 catch (UriFormatException) { warn("Ignored malformed additional equipment ID."); }
-            }
-            try { settings.NormalizeEquipment(); }
-            catch (InvalidOperationException exception)
-            {
-                // Keep the original entries visible for correction, rather than clipping quantities.
-                warn(exception.Message + ". Correct these equipment entries before starting.");
             }
         }
 
         internal static string WriteEquipment(StartingOptionsSettings settings) =>
-            string.Join(";", settings.EquipmentQuantities.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            WriteQuantities(settings.EquipmentQuantities);
+
+        private static string WriteQuantities(Dictionary<string, int> quantities) =>
+            string.Join(";", quantities.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .Select(pair => Uri.EscapeDataString(pair.Key) + "=" + pair.Value.ToString(CultureInfo.InvariantCulture)).ToArray());
 
         internal void Save()
@@ -162,6 +214,12 @@ namespace NewBeginnings
             randomMultiples.Value = Settings.RandomMultiples;
             randomExclusions.Value = string.Join(";", Settings.RandomExclusions.OrderBy(key => key, StringComparer.Ordinal)
                 .Select(Uri.EscapeDataString).ToArray());
+            randomGuaranteed.Value = WriteQuantities(Settings.RandomGuaranteed);
+            startingSeason.Value = StartingOptionsSettings.SeasonNames[Settings.StartingSeason];
+            startingSailDamage.Value = Settings.StartingSailDamage;
+            startWithShepherd.Value = Settings.StartWithShepherd;
+            startWithCat.Value = Settings.StartWithCat;
+            startWithBooby.Value = Settings.StartWithBooby;
             file.Save();
         }
     }

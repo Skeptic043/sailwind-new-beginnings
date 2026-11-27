@@ -268,17 +268,17 @@ static class ModChecks
         tool.GetComponent<SaveablePrefab>().currentCrateId = 42;
         check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "ownerless crated item offered");
         tool.GetComponent<SaveablePrefab>().currentCrateId = 0;
-        foreach (var name in new[] { "large speaker", "SPEAKER_LARGE", "899 Speaker", "turbo wolfer", "Turbo-Woofer", "WEATHER VANE M small" })
+        tool.name = "WEATHER VANE M small";
+        tool.GetComponent<ShipItem>().name = "tool";
+        check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "explicit exclusion bypassed: WEATHER VANE M small");
+
+        foreach (var name in new[] { "899 Small Speaker", "large speaker", "SPEAKER_LARGE", "899 Speaker", "Turbo-Woofer" })
         {
             tool.name = name;
-            tool.GetComponent<ShipItem>().name = "tool";
-            check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "explicit exclusion bypassed: " + name);
+            check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 1, "radio speaker or woofer excluded: " + name);
         }
-
-        tool.name = "899 Small Speaker";
-        check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 1, "small speaker excluded with large variant");
         tool.name = "tool";
-        tool.GetComponent<ShipItem>().name = "large speaker";
+        tool.GetComponent<ShipItem>().name = "WEATHER VANE M small";
         check(ModEquipment.Discover(PrefabsDirectory.instance).Length == 0, "explicit display-name exclusion bypassed");
         tool.GetComponent<ShipItem>().name = "tool";
         tool.GetComponent<ShipItem>().category = TransactionCategory.furniture;

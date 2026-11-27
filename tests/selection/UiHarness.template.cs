@@ -67,11 +67,11 @@ class UiHarness
         internal UiHarness owner;
         internal bool IsOpen;
         internal StartingOptionsSettings draft;
-        internal GameObject gameObject = new(), contentRoot = new(), moneyPage = new(), reputationPage = new(), equipmentPage = new(), spawnPage = new(), randomPage = new();
+        internal GameObject gameObject = new(), contentRoot = new(), moneyPage = new(), reputationPage = new(), equipmentPage = new(), spawnPage = new(), randomPage = new(), modsPage = new();
         internal int tab;
-        internal bool showingRandom;
+        internal bool showingRandom, showingGuaranteed;
         internal readonly string[] amounts = new string[4];
-        MenuUiButton moneyTab = new(), reputationTab = new(), equipmentTab = new(), spawnTab = new(), randomTab = new();
+        MenuUiButton moneyTab = new(), reputationTab = new(), equipmentTab = new(), spawnTab = new(), randomTab = new(), modsTab = new();
         TextMesh message = new();
         EquipmentEntry[] equipment = new EquipmentEntry[0];
         internal int vanillaEquipmentCount, page, focusedCurrency = -1, focusedEquipment = -1;
@@ -90,6 +90,10 @@ class UiHarness
         }
 
         void RefreshRandom()
+        {
+        }
+
+        void RefreshMods()
         {
         }
     // PRODUCTION_PANEL_MEMBERS

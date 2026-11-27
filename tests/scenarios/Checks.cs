@@ -31,9 +31,11 @@ static class ScenarioChecks
             RollStaysInBudget();
             RollHonoursPoolRules();
             RandomLoadoutApply();
+            RandomLoadoutGuaranteed();
             NavigationSetsStaySingle();
             ScenarioGuarantees();
             ScenarioDefaults();
+            ModIntegrationValidation();
             OpenWater();
             Console.WriteLine($"PASS {checks} scenario and random loadout checks.");
             return 0;
@@ -92,6 +94,33 @@ static class ScenarioChecks
         Check(manual.EquipmentQuantities["chosen"] == 2 && manual.StandardSupplies, "a manual start changed without a scenario");
     }
 
+    static void RandomLoadoutGuaranteed()
+    {
+        var options = new StartingOptionsSettings { RandomLoadout = true, RandomBudget = 0, RandomModItems = false, RandomMultiples = false };
+        options.RandomExclusions.Add("dear");
+        options.RandomGuaranteed["dear"] = 3;
+        options.RandomGuaranteed["mod"] = 2;
+        options.RandomGuaranteed[StartLoadout.CompassKey(2)] = 1;
+        StartLoadout.Apply(options, 0, null, () => Catalog, new System.Random(1));
+        Check(options.EquipmentQuantities["dear"] == 3, "guaranteed excluded item did not spawn with requested quantity");
+        Check(options.EquipmentQuantities["mod"] == 2, "guaranteed mod item was blocked by RandomModItems=false");
+        Check(Compasses.Count(options.EquipmentQuantities.ContainsKey) == 1 && options.EquipmentQuantities[StartLoadout.CompassKey(2)] == 1,
+            "guaranteed compass did not satisfy the default compass check");
+    }
+
+    static void ModIntegrationValidation()
+    {
+        var valid = new StartingOptionsSettings { StartingSeason = 3, StartingSailDamage = 75, StartWithShepherd = true, StartWithCat = true, StartWithBooby = true };
+        Check(valid.TryValidate(out _), "valid mod integration settings failed validation");
+        var copy = valid.Copy();
+        Check(copy.StartingSeason == 3 && copy.StartingSailDamage == 75 && copy.StartWithShepherd && copy.StartWithCat && copy.StartWithBooby,
+            "Copy did not preserve mod integration settings");
+        var fullDamage = new StartingOptionsSettings { StartingSailDamage = 100 };
+        Check(!fullDamage.TryValidate(out _), "100% starting sail damage should be rejected");
+        var badSeason = new StartingOptionsSettings { StartingSeason = 5 };
+        Check(!badSeason.TryValidate(out _), "out-of-range season should be rejected");
+    }
+
     static readonly string[] Compasses = { "native:80:80 compass A", "native:81:81 compass E", "native:82:82 compass M" };
     static readonly string[] Chronocompasses = { "native:83:83 chronometer A", "native:84:84 chronometer E", "native:85:85 chronometer M" };
     static readonly string[] Chronometers = { "native:170:170 clock A", "native:171:171 clock E", "native:172:172 clock M" };
@@ -142,6 +171,11 @@ static class ScenarioChecks
         var wreck = new StartingOptionsSettings();
         StartLoadout.Apply(wreck, 0, Find("shipwrecked"), () => Catalog, new System.Random(1));
         Check(wreck.StandardSupplies && wreck.EquipmentQuantities[StartLoadout.BucketKey] == 1, "Shipwrecked lost its supplies or bucket");
+        var boned = new StartingOptionsSettings();
+        StartLoadout.Apply(boned, 2, Find("boned"), () => Catalog, new System.Random(1));
+        Check(boned.EquipmentQuantities[AdditionalEquipment.LargeWaterBottleKey] == 1 &&
+            boned.EquipmentQuantities[StartLoadout.EelKey] == 1,
+            "Boned lacks its large water bottle or uncooked eel");
     }
 
     static void ScenarioDefaults()
@@ -157,8 +191,16 @@ static class ScenarioChecks
         options = new StartingOptionsSettings();
         var wreck = Find("shipwrecked");
         wreck.Defaults(selection, options);
-        Check(selection.RandomPort && wreck.Portless && wreck.HullDamage > .7f && !wreck.AtSea,
+        Check(selection.RandomPort && wreck.Portless && wreck.HullDamage > .7f && !wreck.AtSea && wreck.DefaultSailDamage == 50,
             "Shipwrecked is not a damaged random start on an island without a port");
+        selection = new SelectionSettings();
+        options = new StartingOptionsSettings();
+        var boned = Find("boned");
+        boned.Defaults(selection, options);
+        Check(!selection.RandomPort && selection.DestinationKey == KnownSites.BoneIsleKey && boned.AllowBoneIsle &&
+            selection.RandomBoat && selection.BoatSizes.SetEquals(new[] { BoatSize.Small }) &&
+            !options.StandardSupplies && options.CurrencyOverrides.All(amount => amount == 0),
+            "Boned defaults do not match Bone Isle small-boat survival start");
         Check(Find("poor-drunk").Alcohol == 50f && Find("drunk-and-lost").Alcohol == 80f, "scenario drunkenness changed");
         Check(Find("lost-at-sea").Place == ScenarioPlace.FarAtSea && Find("drunk-and-lost").Place == ScenarioPlace.NearLand &&
             Find("drunk-and-lost").FillWithRum, "at-sea scenarios lost their place or rum");

@@ -16,18 +16,22 @@ Install New Beginnings through [Sailwind Mod Synchronizer](https://github.com/fo
 
 ## How it works
 
+![New Beginnings new-game menu](https://raw.githubusercontent.com/Skeptic043/sailwind-new-beginnings/main/assets/new-game-menu.jpg)
+
 Choose a port and boat or randomize either or both, then press `Continue` to start a new game. Island and boat exclusions and the shipyard settings are in the `Spawn` tab under `Starting options`. The `Sailwind menu` button switches to Sailwind's own new-game menu for that game, where the `New Beginnings` button returns you.
 
 The starting options menu allows you to adjust your money, reputation, and equipment. The money menu allows you to multiply your starting cash, with overrides to set a specific amount of each currency as well. For reputation, you can select your starting region reputation level, or set specific levels for each region. Items that fit are packed into crates near your spawn instead of being placed directly on the ground.
 
-In the `Equipment` tab, `Random loadout` replaces your chosen equipment and standard supplies with random equipment rolled when the game starts, spending up to your set budget at each item's base shop value. A barrel of water, a crate of food and, unless the roll already included one, a compass for your region are always added on top. The roll gives only one compass, chronocompass or chronometer of each kind until everything else has been picked once. Items can be excluded from the roll in the equipment list, and mod items and repeated items can be allowed or not.
+In the `Equipment` tab, `Random loadout` replaces your chosen equipment and standard supplies with random equipment rolled when the game starts, spending up to your set budget at each item's base shop value. A barrel of water, a crate of food and, unless the roll already included one, a compass for your region are always added on top. The roll gives only one compass, chronocompass or chronometer of each kind until everything else has been picked once. Items can be excluded from the roll or guaranteed with custom quantities in the equipment list using the `List: Exclusions` / `List: Guaranteed` toggle, and mod items and repeated items can be allowed or not.
+
+When [Climate](https://github.com/bryon82/SailwindClimate), [Sail Damage](https://github.com/FluffyJesus/Sail-Damage) or [FurstMate](https://github.com/Dixiecapt/FurstMate) is installed, a `Mods` tab appears in `Starting options` with optional `Climate starting season`, `Starting Sail Damage` and starting-pet settings. Choosing a Climate starting season advances the starting day to match.
 
 Ports added by other mods are discovered automatically. When added ports are detected, `Mod ports` includes them in Random Port, or you can select one manually.
 
 <details>
 <summary>Spoilers: additional starting locations</summary>
 
-Bone Isle, Chronos, Eleann Island and Saffron Island can be enabled in the `Spawn` tab. When enabled, they are available for manual selection and join `Small Islands` randomization.
+Bone Isle, Chronos, Eleann Island and Saffron Island can be enabled in the `Spawn` tab. When enabled, they are available for manual selection and join `Small Islands` randomization. The `Boned` scenario starts on Bone Isle even when secret islands are disabled in normal settings.
 
 </details>
 
@@ -40,10 +44,13 @@ Bone Isle, Chronos, Eleann Island and Saffron Island can be enabled in the `Spaw
 - **Poor Drunk:** an empty rum barrel, a bottle of water, a compass, no money and a fuzzy head.
 - **Adrift:** out at sea, far from the nearest island, with a compass, water and a little food.
 - **Drunk at Sea:** at sea within sight of land, very drunk, with a hold full of rum and a single barrel of water somewhere among it.
+- **Boned:** a survival start with a small boat, one large bottle of water, one uncooked eel and no money.
 
 At-sea scenarios start you on deck with your supplies stowed aboard, low in the boat first, with smaller items packed into crates. Shipwreck recovery takes you to the nearest port.
 
 ## Starting supplies and mooring
+
+![Starting supplies on shore with the starting boat offshore](https://raw.githubusercontent.com/Skeptic043/sailwind-new-beginnings/main/assets/starting-supplies.jpg)
 
 With standard supplies enabled, your starting port determines the regional supplies, which are packed into crates on the ground nearby, with larger supplies placed beside them. If [Sailwind Difficulty](https://github.com/NANDbrew/SailwindDifficulty) is installed, its selected difficulty determines those supplies.
 

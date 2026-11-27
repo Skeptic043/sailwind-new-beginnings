@@ -23,7 +23,7 @@ namespace NewBeginnings
         internal readonly bool? Water;
 
         internal EquipmentEntry(int index, string prefabName, string itemType, string displayName, string key = null,
-            bool? water = null)
+            bool? water = null, bool allowScaledPacking = false)
         {
             Index = index;
             PrefabName = prefabName;
@@ -31,6 +31,7 @@ namespace NewBeginnings
             DisplayName = displayName;
             Key = key ?? "native:" + index + ":" + prefabName;
             Water = water;
+            AllowScaledPacking = allowScaledPacking;
         }
 
         internal EquipmentEntry(int index, string prefabName, string itemType, string displayName,
@@ -68,6 +69,7 @@ namespace NewBeginnings
             new EquipmentEntry(10, "10 barrel water", "ShipItemBottle", "Barrel of water"),
             new EquipmentEntry(11, "11 barrel rum", "ShipItemBottle", "Barrel of rum"),
             new EquipmentEntry(11, "11 barrel rum", "ShipItemBottle", "Barrel of rum (empty)", EmptyRumBarrelKey, water: false),
+            new EquipmentEntry(34, "34 eel (E)", "ShipItemFood", "Uncooked eel"),
             new EquipmentEntry(52, "52 cheese", "ShipItemFood", "Single cheese"),
             // Each bottle size comes empty or full of water; the native key keeps its authored contents.
             new EquipmentEntry(40, "40 empty bottle", "ShipItemBottle", "Bottle (large, empty)"),
@@ -99,11 +101,11 @@ namespace NewBeginnings
             new EquipmentEntry(112, "112 lantern E red", "ShipItemLight", "Lantern (red)"),
             new EquipmentEntry(113, "113 lantern E green", "ShipItemLight", "Lantern (green)"),
             new EquipmentEntry(114, "114 lantern M", "ShipItemLight", "Lantern (Aestrin)"),
-            new EquipmentEntry(115, "115 map ocean", "ShipItemFoldable", "Ocean map"),
-            new EquipmentEntry(116, "116 map A", "ShipItemFoldable", "Al'Ankh map"),
-            new EquipmentEntry(117, "117 map E", "ShipItemFoldable", "Emerald Archipelago map"),
-            new EquipmentEntry(118, "118 map M", "ShipItemFoldable", "Aestrin map"),
-            new EquipmentEntry(119, "119 map L", "ShipItemFoldable", "Fire Fish Lagoon map"),
+            new EquipmentEntry(115, "115 map ocean", "ShipItemFoldable", "Ocean map", allowScaledPacking: true),
+            new EquipmentEntry(116, "116 map A", "ShipItemFoldable", "Al'Ankh map", allowScaledPacking: true),
+            new EquipmentEntry(117, "117 map E", "ShipItemFoldable", "Emerald Archipelago map", allowScaledPacking: true),
+            new EquipmentEntry(118, "118 map M", "ShipItemFoldable", "Aestrin map", allowScaledPacking: true),
+            new EquipmentEntry(119, "119 map L", "ShipItemFoldable", "Fire Fish Lagoon map", allowScaledPacking: true),
             new EquipmentEntry(131, "131 lantern candle crate", "ShipItemCrate", "Box of candles"),
             new EquipmentEntry(132, "132 lantern oil bottle", "ShipItemLanternFuel", "Lamp oil"),
             new EquipmentEntry(133, "133 lantern M big", "ShipItemLight", "Lantern (large Aestrin)"),
@@ -114,7 +116,7 @@ namespace NewBeginnings
             new EquipmentEntry(160, "160 spyglass big", "ShipItemSpyglass", "Spyglass (large)"),
             new EquipmentEntry(161, "161 spyglass small", "ShipItemSpyglass", "Spyglass (small)"),
             new EquipmentEntry(162, "162 spyglass tiny", "ShipItemSpyglass", "Spyglass (tiny)"),
-            new EquipmentEntry(165, "165 map mirage mountain", "ShipItemFoldable", "Mirage Mountain map"),
+            new EquipmentEntry(165, "165 map mirage mountain", "ShipItemFoldable", "Mirage Mountain map", allowScaledPacking: true),
             new EquipmentEntry(166, "166 oakum", "ShipItemOakum", "Oakum"),
             new EquipmentEntry(167, "167 ink set", "ShipItemInkSet", "Charting kit"),
             new EquipmentEntry(168, "168 oar", "ShipItemOar", "Oar"),

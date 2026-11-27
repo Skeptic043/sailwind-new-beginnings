@@ -29,6 +29,7 @@ scenarios = (SRC / "Scenarios.cs").read_text(encoding="utf-8-sig")
 catalog = (SRC / "SelectionCatalog.cs").read_text(encoding="utf-8-sig")
 sea = (SRC / "AtSeaStart.cs").read_text(encoding="utf-8-sig")
 equipment = (SRC / "AdditionalEquipment.cs").read_text(encoding="utf-8-sig")
+sites = (SRC / "KnownSites.cs").read_text(encoding="utf-8-sig")
 parts = [
     enum(scenarios, "internal enum ScenarioPlace"),
     block(scenarios, "internal sealed class Scenario\n"),
@@ -37,6 +38,7 @@ parts = [
     enum(catalog, "internal enum PortPool"),
     block(catalog, "internal sealed class SelectionSettings"),
     block(sea, "internal static class OpenWaterPicker"),
+    "internal static class KnownSites {\n" + statement(sites, "internal const string BoneIsleKey") + "\n}",
     "internal static class AdditionalEquipment {\n" + statement(equipment, "internal const string EmptyRumBarrelKey") + "\n" +
     statement(equipment, "internal const string LargeWaterBottleKey") + "\n" +
     block(equipment, "internal static void NormalizeSelection(") + "\n}",

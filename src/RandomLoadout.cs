@@ -15,6 +15,7 @@ namespace NewBeginnings
         internal const string FishingHooksKey = "native:104:104 crate of fishing hooks";
         internal const string SalmonKey = "native:1:1 crate salmon (E)";
         internal const string OrangesKey = "native:213:213 (43) crate oranges";
+        internal const string EelKey = "native:34:34 eel (E)";
         private static readonly string[] CompassKeys =
             { "native:80:80 compass A", "native:81:81 compass E", "native:82:82 compass M" };
         private static readonly string[] FoodCrateKeys = { SalmonKey, OrangesKey };
@@ -70,8 +71,10 @@ namespace NewBeginnings
                 var rolled = Roll(Eligible(catalog(), options), options.RandomBudget, options.RandomMultiples, random);
                 options.EquipmentQuantities.Clear();
                 foreach (var pair in rolled) options.EquipmentQuantities.Add(pair.Key, pair.Value);
+                foreach (var pair in options.RandomGuaranteed)
+                    if (pair.Value > 0) Ensure(options, pair.Key, pair.Value);
                 options.StandardSupplies = false;
-                // Any rolled compass already covers the guaranteed one.
+                // Any rolled or guaranteed compass already covers the default one.
                 if (!HasCompass(options)) Add(options, CompassKey(region));
                 Add(options, WaterBarrelKey);
                 Add(options, FoodCrateKeys[random.Next(FoodCrateKeys.Length)]);

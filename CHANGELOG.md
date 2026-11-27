@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.7.2
+
+### Added
+
+- `Uncooked eel` in the `Equipment` menu
+- Guaranteed items with custom quantities for `Random loadout` (toggle between `List: Exclusions` and `List: Guaranteed` in the `Equipment` tab)
+- `Mods` tab in `Starting options` when [Climate](https://github.com/bryon82/SailwindClimate), [Sail Damage](https://github.com/FluffyJesus/Sail-Damage) or [FurstMate](https://github.com/Dixiecapt/FurstMate) is installed
+- Optional `Climate starting season` selector for [Climate](https://github.com/bryon82/SailwindClimate), advancing the starting day to match (credit to hydro on Discord for the suggestion)
+- Optional `Starting Sail Damage` setting (Off, 25%, 50% or 75%) for [Sail Damage](https://github.com/FluffyJesus/Sail-Damage), with `Shipwrecked` defaulting to 50% (credit to HerpDerp on Discord for the suggestion)
+- Optional starting pets (`Shepherd`, `Cat`, `Booby`) for [FurstMate](https://github.com/Dixiecapt/FurstMate) (credit to HerpDerp on Discord for the suggestion)
+- Large speakers and woofers from [Sailwind-Radio](https://github.com/Skeptic043/Sailwind-Radio) in the `Equipment` menu
+- `Boned` scenario in `Scenarios`: survival start with a small boat, one large bottle of water, one uncooked eel and no money
+
+### Fixed
+
+- Selected and random-loadout maps now pack into starter crates instead of spawning loose on the ground
+
 ## 1.6.4
 
 ### Added

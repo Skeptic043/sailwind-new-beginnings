@@ -63,6 +63,7 @@ namespace NewBeginnings
             for (var i = 0; i < reputationChanges.Length; i++)
                 if (reputationChanges[i].HasValue) reputation[i] = reputationChanges[i].Value;
             if (changedReputation) PlayerReputation.UpdateReputation();
+            ModIntegrations.ApplyClimateSeason(options);
         }
 
         // Both native and Scrambled Seas starts reach this factory after their
